@@ -1,6 +1,6 @@
 #ifndef UNITY_DECLARE_DEPTH_TEXTURE_INCLUDED
 #define UNITY_DECLARE_DEPTH_TEXTURE_INCLUDED
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
 TEXTURE2D_X_FLOAT(_CameraDepthTexture);
 SAMPLER(sampler_CameraDepthTexture);

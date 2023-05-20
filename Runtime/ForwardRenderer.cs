@@ -101,7 +101,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
 
             m_BlitMaterial = CoreUtils.CreateEngineMaterial(data.shaders.blitPS);
-            m_CopyDepthMaterial = CoreUtils.CreateEngineMaterial(data.shaders.copyDepthPS);
+            m_CopyDepthMaterial = CoreUtils.CreateEngineMaterial(data.shaders.copyDepthPS);Debug.Log(data.shaders.copyDepthPS+"??");
             m_SamplingMaterial = CoreUtils.CreateEngineMaterial(data.shaders.samplingPS);
             m_ScreenspaceShadowsMaterial = CoreUtils.CreateEngineMaterial(data.shaders.screenSpaceShadowPS);
             //m_TileDepthInfoMaterial = CoreUtils.CreateEngineMaterial(data.shaders.tileDepthInfoPS);

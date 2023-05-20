@@ -1,7 +1,7 @@
 #ifndef UNIVERSAL_COPY_DEPTH_PASS_INCLUDED
 #define UNIVERSAL_COPY_DEPTH_PASS_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
 #if defined(_DEPTH_MSAA_2)
     #define MSAA_SAMPLES 2

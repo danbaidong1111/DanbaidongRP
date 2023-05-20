@@ -38,9 +38,9 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
     #define _ADDITIONAL_LIGHT_SHADOWS 1
     #endif
 
-    #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
-    #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Deferred.hlsl"
-    #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Shadows.hlsl"
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+    #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Deferred.hlsl"
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
 
     struct Attributes
     {

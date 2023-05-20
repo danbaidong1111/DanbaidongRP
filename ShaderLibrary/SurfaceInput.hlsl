@@ -1,8 +1,8 @@
 #ifndef UNIVERSAL_INPUT_SURFACE_INCLUDED
 #define UNIVERSAL_INPUT_SURFACE_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceData.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SurfaceData.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
 

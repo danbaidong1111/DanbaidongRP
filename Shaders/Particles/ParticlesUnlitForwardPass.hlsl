@@ -1,8 +1,8 @@
 #ifndef UNIVERSAL_PARTICLES_UNLIT_FORWARD_PASS_INCLUDED
 #define UNIVERSAL_PARTICLES_UNLIT_FORWARD_PASS_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Particles.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Particles.hlsl"
 
 void InitializeInputData(VaryingsParticle input, half3 normalTS, out InputData output)
 {

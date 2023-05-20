@@ -94,8 +94,8 @@ Shader "Universal Render Pipeline/Particles/Unlit"
             #pragma vertex vertParticleUnlit
             #pragma fragment fragParticleUnlit
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesUnlitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesUnlitForwardPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Particles/ParticlesUnlitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Particles/ParticlesUnlitForwardPass.hlsl"
 
             ENDHLSL
         }
@@ -128,8 +128,8 @@ Shader "Universal Render Pipeline/Particles/Unlit"
             #pragma vertex vertParticleEditor
             #pragma fragment fragParticleSceneHighlight
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesUnlitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesEditorPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Particles/ParticlesUnlitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Particles/ParticlesEditorPass.hlsl"
 
             ENDHLSL
         }
@@ -162,8 +162,8 @@ Shader "Universal Render Pipeline/Particles/Unlit"
             #pragma vertex vertParticleEditor
             #pragma fragment fragParticleScenePicking
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesUnlitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesEditorPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Particles/ParticlesUnlitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Particles/ParticlesEditorPass.hlsl"
 
             ENDHLSL
         }

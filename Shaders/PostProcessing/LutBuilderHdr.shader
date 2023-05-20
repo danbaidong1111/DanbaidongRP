@@ -5,8 +5,8 @@ Shader "Hidden/Universal Render Pipeline/LutBuilderHdr"
         #pragma exclude_renderers gles
         #pragma multi_compile_local _ _TONEMAP_ACES _TONEMAP_NEUTRAL
         
-        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
-        #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.universal/Shaders/PostProcessing/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ACES.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 

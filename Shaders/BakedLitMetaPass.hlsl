@@ -1,7 +1,7 @@
 #ifndef UNIVERSAL_BAKEDLIT_META_PASS_INCLUDED
 #define UNIVERSAL_BAKEDLIT_META_PASS_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/MetaInput.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/MetaInput.hlsl"
 
 struct Attributes
 {

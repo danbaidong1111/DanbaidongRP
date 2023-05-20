@@ -4,7 +4,7 @@ Shader "Hidden/Universal Render Pipeline/ScreenSpaceAmbientOcclusion"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl"
-        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
         struct Attributes
         {
@@ -67,7 +67,7 @@ Shader "Hidden/Universal Render Pipeline/ScreenSpaceAmbientOcclusion"
                 #pragma multi_compile_local _SOURCE_DEPTH _SOURCE_DEPTH_NORMALS _SOURCE_GBUFFER
                 #pragma multi_compile_local _RECONSTRUCT_NORMAL_LOW _RECONSTRUCT_NORMAL_MEDIUM _RECONSTRUCT_NORMAL_HIGH
                 #pragma multi_compile_local _ _ORTHOGRAPHIC
-                #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SSAO.hlsl"
+                #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SSAO.hlsl"
             ENDHLSL
         }
 
@@ -82,7 +82,7 @@ Shader "Hidden/Universal Render Pipeline/ScreenSpaceAmbientOcclusion"
                 #define BLUR_SAMPLE_CENTER_NORMAL
                 #pragma multi_compile_local _ _ORTHOGRAPHIC
                 #pragma multi_compile_local _SOURCE_DEPTH _SOURCE_DEPTH_NORMALS _SOURCE_GBUFFER
-                #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SSAO.hlsl"
+                #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SSAO.hlsl"
             ENDHLSL
         }
 
@@ -94,7 +94,7 @@ Shader "Hidden/Universal Render Pipeline/ScreenSpaceAmbientOcclusion"
             HLSLPROGRAM
                 #pragma vertex VertDefault
                 #pragma fragment VerticalBlur
-                #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SSAO.hlsl"
+                #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SSAO.hlsl"
             ENDHLSL
         }
 
@@ -106,7 +106,7 @@ Shader "Hidden/Universal Render Pipeline/ScreenSpaceAmbientOcclusion"
             HLSLPROGRAM
                 #pragma vertex VertDefault
                 #pragma fragment FinalBlur
-                #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SSAO.hlsl"
+                #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SSAO.hlsl"
             ENDHLSL
         }
     }

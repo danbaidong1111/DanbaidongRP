@@ -73,7 +73,7 @@ namespace UnityEngine.Rendering.Universal
         public XRSystemData xrSystemData = null;
 #endif
 
-        public ShaderResources shaders = null;
+        public ShaderResources shaders = new ShaderResources();
 
         [SerializeField] LayerMask m_OpaqueLayerMask = -1;
         [SerializeField] LayerMask m_TransparentLayerMask = -1;

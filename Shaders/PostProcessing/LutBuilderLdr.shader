@@ -4,8 +4,8 @@ Shader "Hidden/Universal Render Pipeline/LutBuilderLdr"
 
         #pragma exclude_renderers gles
         
-        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
-        #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
+        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.universal/Shaders/PostProcessing/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 
         float4 _Lut_Params;         // x: lut_height, y: 0.5 / lut_width, z: 0.5 / lut_height, w: lut_height / lut_height - 1

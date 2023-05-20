@@ -66,8 +66,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
             // Lighting include is needed because of GI
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             struct Attributes
             {
@@ -182,8 +182,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma multi_compile_instancing
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthOnlyPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
         }
 
@@ -217,8 +217,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma multi_compile_instancing
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthNormalsPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthNormalsPass.hlsl"
             ENDHLSL
         }
 
@@ -237,8 +237,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma vertex UniversalVertexMeta
             #pragma fragment UniversalFragmentMetaBakedLit
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitMetaPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitMetaPass.hlsl"
 
             ENDHLSL
         }
@@ -260,8 +260,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Universal2D.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Universal2D.hlsl"
             ENDHLSL
         }
     }
@@ -308,8 +308,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma multi_compile_instancing
 
             // Lighting include is needed because of GI
-            #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
 
             struct Attributes
             {
@@ -423,8 +423,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             // Material Keywords
             #pragma shader_feature_local_fragment _ALPHATEST_ON
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthOnlyPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
         }
 
@@ -457,8 +457,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             // GPU Instancing
             #pragma multi_compile_instancing
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthNormalsPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthNormalsPass.hlsl"
             ENDHLSL
         }
 
@@ -477,8 +477,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma vertex UniversalVertexMeta
             #pragma fragment UniversalFragmentMetaBakedLit
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitMetaPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitMetaPass.hlsl"
 
             ENDHLSL
         }
@@ -500,8 +500,8 @@ Shader "Universal Render Pipeline/Baked Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/BakedLitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Universal2D.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/BakedLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Universal2D.hlsl"
             ENDHLSL
         }
     }

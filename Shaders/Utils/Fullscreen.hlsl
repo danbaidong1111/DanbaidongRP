@@ -1,7 +1,7 @@
 #ifndef UNIVERSAL_FULLSCREEN_INCLUDED
 #define UNIVERSAL_FULLSCREEN_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
 #if _USE_DRAW_PROCEDURAL
 void GetProceduralQuad(in uint vertexID, out float4 positionCS, out float2 uv)

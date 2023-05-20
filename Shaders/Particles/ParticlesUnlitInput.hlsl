@@ -1,8 +1,8 @@
 #ifndef UNIVERSAL_PARTICLES_UNLIT_INPUT_INCLUDED
 #define UNIVERSAL_PARTICLES_UNLIT_INPUT_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
-#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesInput.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/Shaders/Particles/ParticlesInput.hlsl"
 
 // NOTE: Do not ifdef the properties here as SRP batcher can not handle different layouts.
 CBUFFER_START(UnityPerMaterial)
@@ -18,7 +18,7 @@ CBUFFER_START(UnityPerMaterial)
     half _Surface;
 CBUFFER_END
 
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Particles.hlsl"
+#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Particles.hlsl"
 
 #define SOFT_PARTICLE_NEAR_FADE _SoftParticleFadeParams.x
 #define SOFT_PARTICLE_INV_FADE_DISTANCE _SoftParticleFadeParams.y
