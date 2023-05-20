@@ -2,8 +2,8 @@
 #define UNIVERSAL_POSTPROCESSING_SMAA_BRIDGE
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
-#include "Assets/MyRenderPipeline/Shaders/PostProcessing/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
 
 #define SMAA_HLSL_4_1
 
@@ -34,7 +34,7 @@ float4 _Metrics;
     #define GAMMA_FOR_EDGE_DETECTION (1/2.2)
 #endif
 
-#include "Assets/MyRenderPipeline/Shaders/PostProcessing/SubpixelMorphologicalAntialiasing.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/SubpixelMorphologicalAntialiasing.hlsl"
 
 // ----------------------------------------------------------------------------------------
 // Edge Detection

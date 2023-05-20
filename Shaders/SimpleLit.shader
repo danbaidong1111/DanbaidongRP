@@ -103,8 +103,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma fragment LitPassFragmentSimple
             #define BUMP_SCALE_NOT_SUPPORTED 1
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitForwardPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitForwardPass.hlsl"
             ENDHLSL
         }
 
@@ -135,8 +135,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma vertex ShadowPassVertex
             #pragma fragment ShadowPassFragment
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/ShadowCasterPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ShadowCasterPass.hlsl"
             ENDHLSL
         }
 
@@ -188,8 +188,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma fragment LitPassFragmentSimple
             #define BUMP_SCALE_NOT_SUPPORTED 1
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitGBufferPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitGBufferPass.hlsl"
             ENDHLSL
         }
 
@@ -219,8 +219,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma multi_compile_instancing
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/DepthOnlyPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
         }
 
@@ -251,8 +251,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma multi_compile_instancing
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/DepthNormalsPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthNormalsPass.hlsl"
             ENDHLSL
         }
 
@@ -274,8 +274,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma shader_feature_local_fragment _EMISSION
             #pragma shader_feature_local_fragment _SPECGLOSSMAP
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitMetaPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitMetaPass.hlsl"
 
             ENDHLSL
         }
@@ -294,8 +294,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/Utils/Universal2D.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Universal2D.hlsl"
             ENDHLSL
         }
     }
@@ -352,8 +352,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma fragment LitPassFragmentSimple
             #define BUMP_SCALE_NOT_SUPPORTED 1
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitForwardPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitForwardPass.hlsl"
             ENDHLSL
         }
 
@@ -379,8 +379,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma vertex ShadowPassVertex
             #pragma fragment ShadowPassFragment
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/ShadowCasterPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ShadowCasterPass.hlsl"
             ENDHLSL
         }
 
@@ -404,8 +404,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _GLOSSINESS_FROM_BASE_ALPHA
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/DepthOnlyPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
         }
 
@@ -435,8 +435,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             // GPU Instancing
             #pragma multi_compile_instancing
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/DepthNormalsPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthNormalsPass.hlsl"
             ENDHLSL
         }
 
@@ -458,8 +458,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma shader_feature_local_fragment _EMISSION
             #pragma shader_feature_local_fragment _SPECGLOSSMAP
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitMetaPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitMetaPass.hlsl"
 
             ENDHLSL
         }
@@ -478,8 +478,8 @@ Shader "Universal Render Pipeline/Simple Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 
-            #include "Assets/MyRenderPipeline/Shaders/SimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/Utils/Universal2D.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/SimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Universal2D.hlsl"
             ENDHLSL
         }
     }

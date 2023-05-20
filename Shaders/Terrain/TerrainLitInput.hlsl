@@ -1,9 +1,9 @@
 #ifndef UNIVERSAL_TERRAIN_LIT_INPUT_INCLUDED
 #define UNIVERSAL_TERRAIN_LIT_INPUT_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/SurfaceInput.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceInput.hlsl"
 
 CBUFFER_START(UnityPerMaterial)
     float4 _MainTex_ST;

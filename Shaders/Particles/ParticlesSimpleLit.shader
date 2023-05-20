@@ -124,8 +124,8 @@ Shader "Universal Render Pipeline/Particles/Simple Lit"
             #pragma fragment ParticlesLitFragment
             #define BUMP_SCALE_NOT_SUPPORTED 1
 
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesSimpleLitForwardPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesSimpleLitForwardPass.hlsl"
             ENDHLSL
         }
         // ------------------------------------------------------------------
@@ -181,8 +181,8 @@ Shader "Universal Render Pipeline/Particles/Simple Lit"
             #pragma fragment ParticlesLitGBufferFragment
             #define BUMP_SCALE_NOT_SUPPORTED 1
 
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesSimpleLitGBufferPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesSimpleLitGBufferPass.hlsl"
             ENDHLSL
         }
         // ------------------------------------------------------------------
@@ -214,8 +214,8 @@ Shader "Universal Render Pipeline/Particles/Simple Lit"
             #pragma vertex vertParticleEditor
             #pragma fragment fragParticleSceneHighlight
 
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesEditorPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesEditorPass.hlsl"
 
             ENDHLSL
         }
@@ -248,8 +248,8 @@ Shader "Universal Render Pipeline/Particles/Simple Lit"
             #pragma vertex vertParticleEditor
             #pragma fragment fragParticleScenePicking
 
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesEditorPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesSimpleLitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesEditorPass.hlsl"
 
             ENDHLSL
         }
@@ -270,8 +270,8 @@ Shader "Universal Render Pipeline/Particles/Simple Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 
-            #include "Assets/MyRenderPipeline/Shaders/UnlitInput.hlsl"
-            #include "Assets/MyRenderPipeline/Shaders/Utils/Universal2D.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/UnlitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Universal2D.hlsl"
             ENDHLSL
         }
     }

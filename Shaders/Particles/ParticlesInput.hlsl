@@ -1,7 +1,7 @@
 #ifndef UNIVERSAL_PARTICLES_INPUT_INCLUDED
 #define UNIVERSAL_PARTICLES_INPUT_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
 
 struct AttributesParticle
 {

@@ -1,7 +1,7 @@
 #ifndef UNIVERSAL_SIMPLE_LIT_PASS_INCLUDED
 #define UNIVERSAL_SIMPLE_LIT_PASS_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
 
 struct Attributes
 {

@@ -1,7 +1,7 @@
 #ifndef UNIVERSAL_UNLIT_META_PASS_INCLUDED
 #define UNIVERSAL_UNLIT_META_PASS_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/MetaInput.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/MetaInput.hlsl"
 
 struct Attributes
 {

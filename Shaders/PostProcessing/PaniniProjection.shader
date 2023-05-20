@@ -7,8 +7,8 @@ Shader "Hidden/Universal Render Pipeline/PaniniProjection"
         #pragma multi_compile_local _GENERIC _UNIT_DISTANCE
         #pragma multi_compile _ _USE_DRAW_PROCEDURAL
 
-        #include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
-        #include "Assets/MyRenderPipeline/Shaders/PostProcessing/Common.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
 
         TEXTURE2D_X(_SourceTex);
 

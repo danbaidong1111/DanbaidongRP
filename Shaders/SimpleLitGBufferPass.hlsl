@@ -1,8 +1,8 @@
 #ifndef UNIVERSAL_SIMPLELIT_GBUFFER_PASS_INCLUDED
 #define UNIVERSAL_SIMPLELIT_GBUFFER_PASS_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Lighting.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/UnityGBuffer.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
 
 // keep this file in sync with LitForwardPass.hlsl
 

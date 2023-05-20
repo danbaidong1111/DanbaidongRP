@@ -1,9 +1,9 @@
 #ifndef UNIVERSAL_DEFERRED_INCLUDED
 #define UNIVERSAL_DEFERRED_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Lighting.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/SurfaceInput.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/UnityGBuffer.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceInput.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
 
 #define PREFERRED_CBUFFER_SIZE (64 * 1024)
 #define SIZEOF_VEC4_TILEDATA 1 // uint4

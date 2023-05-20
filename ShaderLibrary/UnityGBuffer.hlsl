@@ -1,8 +1,8 @@
 #ifndef UNIVERSAL_GBUFFERUTIL_INCLUDED
 #define UNIVERSAL_GBUFFERUTIL_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/SurfaceData.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceData.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
 
 // inspired from [builtin_shaders]/CGIncludes/UnityGBuffer.cginc
 

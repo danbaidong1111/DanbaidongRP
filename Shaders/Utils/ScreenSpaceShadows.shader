@@ -14,9 +14,9 @@ Shader "Hidden/Universal Render Pipeline/ScreenSpaceShadows"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/EntityLighting.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ImageBasedLighting.hlsl"
-        #include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
-        #include "Assets/MyRenderPipeline/ShaderLibrary/Shadows.hlsl"
-        #include "Assets/MyRenderPipeline/ShaderLibrary/DeclareDepthTexture.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Shadows.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
 
         struct Attributes
         {

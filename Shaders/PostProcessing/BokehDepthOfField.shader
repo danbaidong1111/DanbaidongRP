@@ -6,9 +6,9 @@ Shader "Hidden/Universal Render Pipeline/BokehDepthOfField"
 
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
-        #include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
-        #include "Assets/MyRenderPipeline/Shaders/PostProcessing/Common.hlsl"
-        #include "Assets/MyRenderPipeline/ShaderLibrary/DeclareDepthTexture.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
 
         // Do not change this without changing PostProcessPass.PrepareBokehKernel()
         #define SAMPLE_COUNT            42

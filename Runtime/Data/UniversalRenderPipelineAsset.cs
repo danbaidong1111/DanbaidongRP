@@ -189,7 +189,7 @@ namespace UnityEngine.Rendering.Universal
         [NonSerialized]
         internal UniversalRenderPipelineEditorResources m_EditorResourcesAsset;
 
-        public static readonly string packagePath = "Assets/MyRenderPipeline";
+        public static readonly string packagePath = "Packages/com.unity.render-pipelines.danbaidong";
         public static readonly string editorResourcesGUID = "a3d8d823eedde654bb4c11a1cfaf1abb";
 
         public static UniversalRenderPipelineAsset Create(ScriptableRendererData rendererData = null)

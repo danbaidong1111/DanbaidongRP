@@ -13,8 +13,8 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
 
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Filtering.hlsl"
-        #include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
-        #include "Assets/MyRenderPipeline/Shaders/PostProcessing/Common.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
 
         // Hardcoded dependencies to reduce the number of variants
         #if _BLOOM_LQ || _BLOOM_HQ || _BLOOM_LQ_DIRT || _BLOOM_HQ_DIRT

@@ -1,9 +1,9 @@
 #ifndef UNIVERSAL_WAVING_GRASS_PASSES_INCLUDED
 #define UNIVERSAL_WAVING_GRASS_PASSES_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Lighting.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/UnityGBuffer.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/ShaderVariablesFunctions.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/ShaderVariablesFunctions.hlsl"
 
 struct GrassVertexInput
 {

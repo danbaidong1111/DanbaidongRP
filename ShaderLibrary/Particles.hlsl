@@ -1,12 +1,12 @@
 #ifndef UNIVERSAL_PARTICLES_INCLUDED
 #define UNIVERSAL_PARTICLES_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/SurfaceInput.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/DeclareDepthTexture.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/DeclareOpaqueTexture.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/ParticlesInstancing.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceInput.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareOpaqueTexture.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/ParticlesInstancing.hlsl"
 
 struct ParticleParams
 {

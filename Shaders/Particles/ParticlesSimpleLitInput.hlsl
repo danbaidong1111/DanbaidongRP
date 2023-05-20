@@ -1,8 +1,8 @@
 #ifndef UNIVERSAL_PARTICLES_SIMPLE_LIT_INPUT_INCLUDED
 #define UNIVERSAL_PARTICLES_SIMPLE_LIT_INPUT_INCLUDED
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Core.hlsl"
-#include "Assets/MyRenderPipeline/Shaders/Particles/ParticlesInput.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Particles/ParticlesInput.hlsl"
 
 // NOTE: Do not ifdef the properties here as SRP batcher can not handle different layouts.
 CBUFFER_START(UnityPerMaterial)
@@ -20,7 +20,7 @@ CBUFFER_START(UnityPerMaterial)
     half _Surface;
 CBUFFER_END
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/Particles.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Particles.hlsl"
 
 TEXTURE2D(_SpecGlossMap);       SAMPLER(sampler_SpecGlossMap);
 

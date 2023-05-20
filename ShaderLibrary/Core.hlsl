@@ -8,7 +8,7 @@
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Version.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/Input.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Input.hlsl"
 
 #if !defined(SHADER_HINT_NICE_QUALITY)
     #if defined(SHADER_API_MOBILE) || defined(SHADER_API_SWITCH)
@@ -110,7 +110,7 @@ struct VertexNormalInputs
     float3 normalWS;
 };
 
-#include "Assets/MyRenderPipeline/ShaderLibrary/ShaderVariablesFunctions.hlsl"
-#include "Assets/MyRenderPipeline/ShaderLibrary/Deprecated.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/ShaderVariablesFunctions.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Deprecated.hlsl"
 
 #endif
