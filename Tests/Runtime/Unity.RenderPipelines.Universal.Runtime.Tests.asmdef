@@ -2,10 +2,9 @@
     "name": "Unity.RenderPipelines.Universal.Runtime.Tests",
     "rootNamespace": "",
     "references": [
-        "GUID:15fc0a57446b3144c949da3e2b9737a9",
+        "GUID:59351aba2a194b943a2a15d2efcecfec",
         "GUID:27619889b8ba8c24980f49ee34dbb44a",
-        "GUID:0acc523941302664db1f4e527237feb3",
-        "GUID:24c5059a8bfa9ad42863a601585a10e1"
+        "GUID:0acc523941302664db1f4e527237feb3"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

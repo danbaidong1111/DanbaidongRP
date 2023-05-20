@@ -2,13 +2,11 @@
     "name": "Unity.RenderPipelines.Universal.Editor.Tests",
     "rootNamespace": "",
     "references": [
-        "GUID:15fc0a57446b3144c949da3e2b9737a9",
-        "GUID:c579267770062bf448e75eb160330b7f",
+        "GUID:59351aba2a194b943a2a15d2efcecfec",
+        "GUID:34622eb34743a4b47aa16d0e6fbdab6d",
         "GUID:df380645f10b7bc4b97d4f5eb6303d95",
         "GUID:27619889b8ba8c24980f49ee34dbb44a",
-        "GUID:0acc523941302664db1f4e527237feb3",
-        "GUID:80f6bc6e784eda34884a7603df8b5e1b",
-        "GUID:24c5059a8bfa9ad42863a601585a10e1"
+        "GUID:0acc523941302664db1f4e527237feb3"
     ],
     "includePlatforms": [
         "Editor"
