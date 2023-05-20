@@ -1,7 +1,7 @@
 #ifndef UNIVERSAL_UNLIT_INPUT_INCLUDED
 #define UNIVERSAL_UNLIT_INPUT_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/SurfaceInput.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceInput.hlsl"
 
 CBUFFER_START(UnityPerMaterial)
     float4 _BaseMap_ST;

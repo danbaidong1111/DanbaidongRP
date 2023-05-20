@@ -11,7 +11,7 @@ namespace UnityEngine.Experimental.Rendering.Universal
     [AddComponentMenu("Rendering/2D/Pixel Perfect Camera (Experimental)")]
     [RequireComponent(typeof(Camera))]
     [MovedFrom("UnityEngine.Experimental.Rendering.LWRP")]
-    [HelpURL("https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@latest/index.html?subfolder=/manual/2d-pixelperfect.html%23properties")]
+    [HelpURL("https://docs.unity3d.com/Packages/com.unity.render-pipelines.danbaidong@latest/index.html?subfolder=/manual/2d-pixelperfect.html%23properties")]
     public class PixelPerfectCamera : MonoBehaviour, IPixelPerfectCamera
     {
         /// <summary>

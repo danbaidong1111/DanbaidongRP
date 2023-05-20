@@ -1,7 +1,7 @@
 Shader "Hidden/Universal Render Pipeline/XR/XROcclusionMesh"
 {
     HLSLINCLUDE
-        #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 
         #pragma exclude_renderers d3d11_9x gles
         #pragma multi_compile _ XR_OCCLUSION_MESH_COMBINED

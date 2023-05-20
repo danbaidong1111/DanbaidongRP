@@ -135,8 +135,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma vertex LitPassVertex
             #pragma fragment LitPassFragment
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitForwardPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitForwardPass.hlsl"
             ENDHLSL
         }
 
@@ -167,8 +167,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma vertex ShadowPassVertex
             #pragma fragment ShadowPassFragment
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/ShadowCasterPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ShadowCasterPass.hlsl"
             ENDHLSL
         }
 
@@ -198,8 +198,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma multi_compile_instancing
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthOnlyPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
         }
 
@@ -230,8 +230,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma multi_compile_instancing
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthNormalsPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthNormalsPass.hlsl"
             ENDHLSL
         }
 
@@ -259,8 +259,8 @@ Shader "Universal Render Pipeline/Complex Lit"
 
             #pragma shader_feature_local_fragment _SPECGLOSSMAP
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitMetaPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitMetaPass.hlsl"
 
             ENDHLSL
         }
@@ -282,8 +282,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Universal2D.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Universal2D.hlsl"
             ENDHLSL
         }
     }
@@ -352,8 +352,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma vertex LitPassVertex
             #pragma fragment LitPassFragment
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitForwardPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitForwardPass.hlsl"
             ENDHLSL
         }
         Pass
@@ -382,8 +382,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma vertex ShadowPassVertex
             #pragma fragment ShadowPassFragment
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/ShadowCasterPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ShadowCasterPass.hlsl"
             ENDHLSL
         }
 
@@ -412,8 +412,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthOnlyPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthOnlyPass.hlsl"
             ENDHLSL
         }
 
@@ -443,8 +443,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             // GPU Instancing
             #pragma multi_compile_instancing
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/DepthNormalsPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/DepthNormalsPass.hlsl"
             ENDHLSL
         }
 
@@ -472,8 +472,8 @@ Shader "Universal Render Pipeline/Complex Lit"
 
             #pragma shader_feature_local_fragment _SPECGLOSSMAP
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitMetaPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitMetaPass.hlsl"
 
             ENDHLSL
         }
@@ -495,8 +495,8 @@ Shader "Universal Render Pipeline/Complex Lit"
             #pragma shader_feature_local_fragment _ALPHATEST_ON
             #pragma shader_feature_local_fragment _ALPHAPREMULTIPLY_ON
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Universal2D.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/LitInput.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Universal2D.hlsl"
             ENDHLSL
         }
     }

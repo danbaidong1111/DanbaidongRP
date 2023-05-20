@@ -32,7 +32,7 @@ Shader "Example/URPUnlitShaderBasic"
             // The Core.hlsl file contains definitions of frequently used HLSL
             // macros and functions, and also contains #include references to other
             // HLSL files (for example, Common.hlsl, SpaceTransforms.hlsl, etc.).
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 
             // The structure definition defines which variables it contains.
             // This example uses the Attributes structure as an input structure in
@@ -152,7 +152,7 @@ This block contains the HLSL program code.
 This block contains the `#include` declaration with the reference to the `Core.hlsl` file.
 
 ```c++
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 ```
 
 The `Core.hlsl` file contains definitions of frequently used HLSL macros and functions, and also contains #include references to other HLSL files (for example, `Common.hlsl` and  `SpaceTransforms.hlsl`).

@@ -14,7 +14,7 @@ namespace UnityEngine.Experimental.Rendering.Universal
 {
     [Serializable, ReloadGroup, ExcludeFromPreset]
     [MovedFrom("UnityEngine.Experimental.Rendering.LWRP")]
-    [HelpURL("https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@latest/index.html?subfolder=/manual/2DRendererData_overview.html")]
+    [HelpURL("https://docs.unity3d.com/Packages/com.unity.render-pipelines.danbaidong@latest/index.html?subfolder=/manual/2DRendererData_overview.html")]
     public partial class Renderer2DData : ScriptableRendererData
     {
         public enum Renderer2DDefaultMaterialType

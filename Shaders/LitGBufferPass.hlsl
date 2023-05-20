@@ -1,8 +1,8 @@
 #ifndef UNIVERSAL_LIT_GBUFFER_PASS_INCLUDED
 #define UNIVERSAL_LIT_GBUFFER_PASS_INCLUDED
 
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/UnityGBuffer.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
 
 // TODO: Currently we support viewDirTS caclulated in vertex shader and in fragments shader.
 // As both solutions have their advantages and disadvantages (etc. shader target 2.0 has only 8 interpolators).

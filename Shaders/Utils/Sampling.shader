@@ -19,7 +19,7 @@ Shader "Hidden/Universal Render Pipeline/Sampling"
 
             #pragma multi_compile _ _USE_DRAW_PROCEDURAL
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Fullscreen.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Fullscreen.hlsl"
 
             TEXTURE2D_X(_SourceTex);
             SAMPLER(sampler_SourceTex);

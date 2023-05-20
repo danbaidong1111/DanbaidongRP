@@ -2,7 +2,7 @@
 #define UNIVERSAL_POSTPROCESSING_COMMON_INCLUDED
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
-#include "Packages/com.unity.render-pipelines.universal/Shaders/Utils/Fullscreen.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Fullscreen.hlsl"
 
 // ----------------------------------------------------------------------------------
 // Render fullscreen mesh by using a matrix set directly by the pipeline instead of

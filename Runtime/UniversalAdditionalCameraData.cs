@@ -413,7 +413,7 @@ namespace UnityEngine.Rendering.Universal
 
         public void OnDrawGizmos()
         {
-            string path = "Packages/com.unity.render-pipelines.universal/Editor/Gizmos/";
+            string path = "Packages/com.unity.render-pipelines.danbaidong/Editor/Gizmos/";
             string gizmoName = "";
             Color tint = Color.white;
 

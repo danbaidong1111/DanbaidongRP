@@ -5,7 +5,7 @@
 #define MAX_VISIBLE_LIGHTS_SSBO 256
 #define USE_STRUCTURED_BUFFER_FOR_LIGHT_DATA 0
 
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShaderTypes.cs.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/ShaderTypes.cs.hlsl"
 
 #if defined(SHADER_API_MOBILE) && (defined(SHADER_API_GLES) || defined(SHADER_API_GLES30))
     #define MAX_VISIBLE_LIGHTS 16
@@ -85,9 +85,9 @@ CBUFFER_END
 // UnityInput.hlsl must be included before UnityInstancing.hlsl, so constant buffer
 // declarations don't fail because of instancing macros.
 // UniversalDOTSInstancing.hlsl must be included after UnityInstancing.hlsl
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/UnityInput.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityInput.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
-#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/UniversalDOTSInstancing.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UniversalDOTSInstancing.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SpaceTransforms.hlsl"
 
 #endif
