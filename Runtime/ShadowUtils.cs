@@ -184,11 +184,13 @@ namespace UnityEngine.Rendering.Universal
         }
 
         public static void RenderShadowSlice(CommandBuffer cmd, ref ScriptableRenderContext context,
-            ref ShadowSliceData shadowSliceData, ref ShadowDrawingSettings settings,
+            ref ShadowSliceData shadowSliceData, ref ShadowDrawingSettings settings, bool clearSlice,
             Matrix4x4 proj, Matrix4x4 view)
         {
             cmd.SetViewport(new Rect(shadowSliceData.offsetX, shadowSliceData.offsetY, shadowSliceData.resolution, shadowSliceData.resolution));
             cmd.SetViewProjectionMatrices(view, proj);
+            if(clearSlice)
+                cmd.ClearRenderTarget(true,true,Color.black);
             context.ExecuteCommandBuffer(cmd);
             cmd.Clear();
             context.DrawShadows(ref settings);
@@ -200,7 +202,7 @@ namespace UnityEngine.Rendering.Universal
         public static void RenderShadowSlice(CommandBuffer cmd, ref ScriptableRenderContext context,
             ref ShadowSliceData shadowSliceData, ref ShadowDrawingSettings settings)
         {
-            RenderShadowSlice(cmd, ref context, ref shadowSliceData, ref settings,
+            RenderShadowSlice(cmd, ref context, ref shadowSliceData, ref settings, false,
                 shadowSliceData.projectionMatrix, shadowSliceData.viewMatrix);
         }
 

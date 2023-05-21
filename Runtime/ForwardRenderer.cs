@@ -37,7 +37,10 @@ namespace UnityEngine.Rendering.Universal
         ColorGradingLutPass m_ColorGradingLutPass;
         DepthOnlyPass m_DepthPrepass;
         DepthNormalOnlyPass m_DepthNormalPrepass;
-        MainLightShadowCasterPass m_MainLightShadowCasterPass;
+        //MainLightShadowCasterPass m_MainLightShadowCasterPass;
+        MainLight8CascadeShadowCasterPass m_MainLight8CascadeShadowCasterPass_scene;
+        MainLight8CascadeShadowCasterPass m_MainLight8CascadeShadowCasterPass_game;
+        MainLightSSShadowmapPass m_MainLightSSShadowmapPass;
         AdditionalLightsShadowCasterPass m_AdditionalLightsShadowCasterPass;
         GBufferPass m_GBufferPass;
         CopyDepthPass m_GBufferCopyDepthPass;
@@ -122,7 +125,10 @@ namespace UnityEngine.Rendering.Universal
 
             // Note: Since all custom render passes inject first and we have stable sort,
             // we inject the builtin passes in the before events.
-            m_MainLightShadowCasterPass = new MainLightShadowCasterPass(RenderPassEvent.BeforeRenderingShadows);
+            //m_MainLightShadowCasterPass = new MainLightShadowCasterPass(RenderPassEvent.BeforeRenderingShadows);
+            m_MainLight8CascadeShadowCasterPass_scene = new MainLight8CascadeShadowCasterPass(RenderPassEvent.BeforeRenderingShadows);
+            m_MainLight8CascadeShadowCasterPass_game  = new MainLight8CascadeShadowCasterPass(RenderPassEvent.BeforeRenderingShadows);
+            m_MainLightSSShadowmapPass = new MainLightSSShadowmapPass(RenderPassEvent.AfterRenderingPrePasses);
             m_AdditionalLightsShadowCasterPass = new AdditionalLightsShadowCasterPass(RenderPassEvent.BeforeRenderingShadows);
 #if ENABLE_VR && ENABLE_XR_MODULE
             m_XROcclusionMeshPass = new XROcclusionMeshPass(RenderPassEvent.BeforeRenderingOpaques);
@@ -308,7 +314,18 @@ namespace UnityEngine.Rendering.Universal
             bool isSceneViewCamera = cameraData.isSceneViewCamera;
             bool requiresDepthTexture = cameraData.requiresDepthTexture || renderPassInputs.requiresDepthTexture || this.actualRenderingMode == RenderingMode.Deferred;
 
-            bool mainLightShadows = m_MainLightShadowCasterPass.Setup(ref renderingData);
+            
+            MainLight8CascadeShadowCasterPass mainLight8CascadeShadowCasterPass = null;
+            if (cameraData.isSceneViewCamera)
+            {
+                mainLight8CascadeShadowCasterPass = m_MainLight8CascadeShadowCasterPass_scene;
+            }
+            else
+            {
+                mainLight8CascadeShadowCasterPass = m_MainLight8CascadeShadowCasterPass_game;
+            }
+            
+            bool mainLightShadows = mainLight8CascadeShadowCasterPass.Setup(ref renderingData);
             bool additionalLightShadows = m_AdditionalLightsShadowCasterPass.Setup(ref renderingData);
             bool transparentsNeedSettingsPass = m_TransparentSettingsPass.Setup(ref renderingData);
 
@@ -394,11 +411,16 @@ namespace UnityEngine.Rendering.Universal
 
             bool hasPassesAfterPostProcessing = activeRenderPassQueue.Find(x => x.renderPassEvent == RenderPassEvent.AfterRendering) != null;
 
-            // if (mainLightShadows)
-            //     EnqueuePass(m_MainLightShadowCasterPass);
+            if (mainLightShadows)
+                EnqueuePass(mainLight8CascadeShadowCasterPass);
 
             if (additionalLightShadows)
                 EnqueuePass(m_AdditionalLightsShadowCasterPass);
+
+            if (m_MainLightSSShadowmapPass.Setup(ref renderingData, ref mainLight8CascadeShadowCasterPass, m_DepthTexture, m_NormalsTexture))
+            {
+                EnqueuePass(m_MainLightSSShadowmapPass);
+            }
 
             if (requiresDepthPrepass)
             {

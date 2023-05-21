@@ -1,0 +1,26 @@
+﻿#define NUMTHREAD_X 8
+#define NUMTHREAD_Y 8
+
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+
+RWTexture2D<float> _MainLightShadowmapCacheTex;
+uint _ShadowmapCacheWidth;
+uint _ShadowmapCacheHeight;
+uint _CurrentCacheCascadesIndex;
+
+
+#pragma kernel CopyCacheShadowmap
+
+[numthreads(NUMTHREAD_X, NUMTHREAD_Y, 1)]
+void CopyCacheShadowmap(uint3 id : SV_DispatchThreadID)
+{
+	
+	_MainLightShadowmapCacheTex[id.xy] = id.y < _ShadowmapCacheWidth ? 0.0 : _MainLightShadowmapCacheTex[id.xy];
+	uint xBound = id.x > _ShadowmapCacheWidth/2?1:0;
+	uint yBound = id.y > _ShadowmapCacheWidth/2*3?1:0;
+	if((xBound + yBound*2) == _CurrentCacheCascadesIndex)
+	{
+		_MainLightShadowmapCacheTex[id.xy] = 0.0;
+	}
+}
+

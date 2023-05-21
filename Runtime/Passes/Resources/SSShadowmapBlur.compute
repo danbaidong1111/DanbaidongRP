@@ -1,0 +1,202 @@
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+static const int gBlurRadius = 3;
+
+
+//static const float weights_base[11] = { 0.0222, 0.0455, 0.0798, 0.1190, 0.1514, 0.1634, 0.1514, 0.1190, 0.0798, 0.0455, 0.0222};
+//static const float weights_base[5] = { 0.0545, 0.2442, 0.4026, 0.2442, 0.0545};
+static const float weights_base[7] = { 0.0366, 0.1113, 0.2167, 0.2708, 0.2167, 0.1113, 0.0366};
+
+float2 _SSShadowmapSize;
+
+SamplerState PointClampSampler;
+
+RWTexture2D<float> _CustomMainLightSSShadowmapTex;
+Texture2D<float> _CameraDepthTexture;
+Texture2D<float2> _CameraNormalsTexture;//RGFloat
+
+#define N 128
+#define CacheSize (N + 2*gBlurRadius)
+groupshared float gCache[CacheSize];
+groupshared float4 gDepthNormalsCache[CacheSize];
+
+#pragma kernel HorzBlurCS
+[numthreads(N, 1, 1)]
+void HorzBlurCS(int3 groupThreadID : SV_GroupThreadID,
+				int3 dispatchThreadID : SV_DispatchThreadID)
+{
+	// Put in an array for each indexing.
+	float2 mSSShadowmapBound = _SSShadowmapSize - 1;
+
+	int2 clampedShadowmapID = min(dispatchThreadID.xy, mSSShadowmapBound.xy);
+	float screenV = dispatchThreadID.y / (mSSShadowmapBound.y);
+	float2 screenUV = float2(clampedShadowmapID.x / (mSSShadowmapBound.x), screenV); 
+	//
+	// Fill local thread storage to reduce bandwidth.  To blur 
+	// N pixels, we will need to load N + 2*BlurRadius pixels
+	// due to the blur radius.
+	//
+	
+	// This thread group runs N threads.  To get the extra 2*BlurRadius pixels, 
+	// have 2*BlurRadius threads sample an extra pixel.
+	if(groupThreadID.x < gBlurRadius)
+	{
+		// Clamp out of bound samples that occur at image borders.
+		int x = max(dispatchThreadID.x - gBlurRadius, 0);
+		gCache[groupThreadID.x] = _CustomMainLightSSShadowmapTex[int2(x, dispatchThreadID.y)];
+		
+		float tempUV = float2(x / (mSSShadowmapBound.x), screenV);
+		float cacheRawDepth = _CameraDepthTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float cacheDepth = LinearEyeDepth(cacheRawDepth,_ZBufferParams);
+
+		float2 cacheRawNormals = _CameraNormalsTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float3 cacheNormals = UnpackNormalOctRectEncode(cacheRawNormals) * float3(1.0, 1.0, -1.0);
+
+		gDepthNormalsCache[groupThreadID.x] = float4(cacheNormals.xyz, cacheDepth);
+	}
+	if(groupThreadID.x >= N-gBlurRadius)
+	{
+		// Clamp out of bound samples that occur at image borders.
+		int x = min(dispatchThreadID.x + gBlurRadius, mSSShadowmapBound.x);
+		gCache[groupThreadID.x+2*gBlurRadius] = _CustomMainLightSSShadowmapTex[int2(x, dispatchThreadID.y)];
+
+		float tempUV = float2(x / (mSSShadowmapBound.x), screenV);
+		float cacheRawDepth = _CameraDepthTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float cacheDepth = LinearEyeDepth(cacheRawDepth,_ZBufferParams);
+
+		float2 cacheRawNormals = _CameraNormalsTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float3 cacheNormals = UnpackNormalOctRectEncode(cacheRawNormals) * float3(1.0, 1.0, -1.0);
+
+		gDepthNormalsCache[groupThreadID.x+2*gBlurRadius] = float4(cacheNormals.xyz, cacheDepth);
+	}
+
+	// Clamp out of bound samples that occur at image borders.
+	gCache[groupThreadID.x+gBlurRadius] = _CustomMainLightSSShadowmapTex[clampedShadowmapID];
+	
+	float inputRawDepth = _CameraDepthTexture.SampleLevel(PointClampSampler, screenUV, 0);
+	float inputDepth = LinearEyeDepth(inputRawDepth,_ZBufferParams);
+	float2 inputRawNormals = _CameraNormalsTexture.SampleLevel(PointClampSampler, screenUV, 0);
+	float3 inputNormals = UnpackNormalOctRectEncode(inputRawNormals) * float3(1.0, 1.0, -1.0);
+	gDepthNormalsCache[groupThreadID.x+gBlurRadius] = float4(inputNormals.xyz, inputDepth);
+
+	// Wait for all threads to finish.
+	GroupMemoryBarrierWithGroupSync();
+	
+	//
+	// Now blur each pixel.
+	//
+
+	float blurVal = 0;
+	float totalWeight = 0;
+	for(int i = -gBlurRadius; i <= gBlurRadius; ++i)
+	{
+		int k = groupThreadID.x + gBlurRadius + i;
+		float weight = weights_base[i + gBlurRadius];
+
+		float3 neighborNormal = gDepthNormalsCache[k].xyz;
+		float  neighborDepth = gDepthNormalsCache[k].w;
+
+		if(dot(neighborNormal, inputNormals) >= 0.8f &&
+			abs(neighborDepth - inputDepth) <= 0.2f)
+		{
+			blurVal += weight * gCache[k];
+			totalWeight += weight;
+		}
+		
+	}
+	
+	_CustomMainLightSSShadowmapTex[dispatchThreadID.xy] = blurVal/totalWeight;
+}
+
+#pragma kernel VertBlurCS
+[numthreads(1, N, 1)]
+void VertBlurCS(int3 groupThreadID : SV_GroupThreadID,
+				int3 dispatchThreadID : SV_DispatchThreadID)
+{
+	// Put in an array for each indexing.
+	//float weights[11] = { w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10 };
+	float2 mSSShadowmapBound = _SSShadowmapSize - 1;
+
+	int2 clampedShadowmapID = min(dispatchThreadID.xy, mSSShadowmapBound.xy-1);
+	float screenU = dispatchThreadID.x / (mSSShadowmapBound.x);
+	float2 screenUV = float2(screenU, clampedShadowmapID.y / (mSSShadowmapBound.y)); 
+
+	//
+	// Fill local thread storage to reduce bandwidth.  To blur 
+	// N pixels, we will need to load N + 2*BlurRadius pixels
+	// due to the blur radius.
+	//
+	
+	// This thread group runs N threads.  To get the extra 2*BlurRadius pixels, 
+	// have 2*BlurRadius threads sample an extra pixel.
+	if(groupThreadID.y < gBlurRadius)
+	{
+		// Clamp out of bound samples that occur at image borders.
+		int y = max(dispatchThreadID.y - gBlurRadius, 0);
+		gCache[groupThreadID.y] = _CustomMainLightSSShadowmapTex[int2(dispatchThreadID.x, y)];
+
+		float tempUV = float2(screenU, y / (mSSShadowmapBound.y));
+		float cacheRawDepth = _CameraDepthTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float cacheDepth = LinearEyeDepth(cacheRawDepth,_ZBufferParams);
+
+		float2 cacheRawNormals = _CameraNormalsTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float3 cacheNormals = UnpackNormalOctRectEncode(cacheRawNormals) * float3(1.0, 1.0, -1.0);
+
+		gDepthNormalsCache[groupThreadID.y] = float4(cacheNormals.xyz, cacheDepth);
+	}
+	if(groupThreadID.y >= N-gBlurRadius)
+	{
+		// Clamp out of bound samples that occur at image borders.
+		int y = min(dispatchThreadID.y + gBlurRadius, _CustomMainLightSSShadowmapTex.Length.y-1);
+		gCache[groupThreadID.y+2*gBlurRadius] = _CustomMainLightSSShadowmapTex[int2(dispatchThreadID.x, y)];
+
+		float tempUV = float2(screenU, y / (mSSShadowmapBound.y));
+		float cacheRawDepth = _CameraDepthTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float cacheDepth = LinearEyeDepth(cacheRawDepth,_ZBufferParams);
+
+		float2 cacheRawNormals = _CameraNormalsTexture.SampleLevel(PointClampSampler, tempUV, 0);
+		float3 cacheNormals = UnpackNormalOctRectEncode(cacheRawNormals) * float3(1.0, 1.0, -1.0);
+
+		gDepthNormalsCache[groupThreadID.y+2*gBlurRadius] = float4(cacheNormals.xyz, cacheDepth);
+	}
+	
+	// Clamp out of bound samples that occur at image borders.
+	gCache[groupThreadID.y+gBlurRadius] = _CustomMainLightSSShadowmapTex[min(dispatchThreadID.xy, _CustomMainLightSSShadowmapTex.Length.xy-1)];
+
+	float inputRawDepth = _CameraDepthTexture.SampleLevel(PointClampSampler, screenUV, 0);
+	float inputDepth = LinearEyeDepth(inputRawDepth,_ZBufferParams);
+	float2 inputRawNormals = _CameraNormalsTexture.SampleLevel(PointClampSampler, screenUV, 0);
+	float3 inputNormals = UnpackNormalOctRectEncode(inputRawNormals) * float3(1.0, 1.0, -1.0);
+	gDepthNormalsCache[groupThreadID.y+gBlurRadius] = float4(inputNormals.xyz, inputDepth);
+
+	// Wait for all threads to finish.
+	GroupMemoryBarrierWithGroupSync();
+	
+	//
+	// Now blur each pixel.
+	//
+
+
+
+	float blurVal = 0;
+	float totalWeight = 0;
+	for(int i = -gBlurRadius; i <= gBlurRadius; ++i)
+	{
+		int k = groupThreadID.y + gBlurRadius + i;
+		float weight = weights_base[i + gBlurRadius];
+
+		float3 neighborNormal = gDepthNormalsCache[k].xyz;
+		float  neighborDepth = gDepthNormalsCache[k].w;
+
+		if(dot(neighborNormal, inputNormals) >= 0.8f &&
+			abs(neighborDepth - inputDepth) <= 0.2f)
+		{
+			blurVal += weight * gCache[k];
+			totalWeight += weight;
+		}
+		
+	}
+	
+	_CustomMainLightSSShadowmapTex[dispatchThreadID.xy] = blurVal/totalWeight;
+
+	
+}
