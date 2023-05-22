@@ -326,6 +326,8 @@ namespace UnityEngine.Rendering.Universal
         public static readonly string Distortion = "_DISTORTION";
         public static readonly string ChromaticAberration = "_CHROMATIC_ABERRATION";
         public static readonly string HDRGrading = "_HDR_GRADING";
+        public static readonly string TonemapGT = "_TONEMAP_GT";
+        public static readonly string TonemapACESSampleVer = "_TONEMAP_ACES_SAMPLE_VER";
         public static readonly string TonemapACES = "_TONEMAP_ACES";
         public static readonly string TonemapNeutral = "_TONEMAP_NEUTRAL";
         public static readonly string FilmGrain = "_FILM_GRAIN";

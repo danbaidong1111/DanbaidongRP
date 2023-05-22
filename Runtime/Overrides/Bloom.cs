@@ -2,9 +2,26 @@ using System;
 
 namespace UnityEngine.Rendering.Universal
 {
+    public enum BloomMode
+    {
+        None,
+        BloomURP,
+        BloomDanbaidong,
+    }
+    [Serializable]
+    public sealed class BloomModeParameter : VolumeParameter<BloomMode> 
+    { 
+        public BloomModeParameter(BloomMode value, bool overrideState = false) : base(value, overrideState) 
+        {
+        } 
+    }
+
     [Serializable, VolumeComponentMenu("Post-processing/Bloom")]
     public sealed class Bloom : VolumeComponent, IPostProcessComponent
     {
+        [Tooltip("Select a Bloom Mode.")]
+        public BloomModeParameter mode = new BloomModeParameter(BloomMode.BloomDanbaidong);
+
         [Tooltip("Filters out pixels under this level of brightness. Value is in gamma-space.")]
         public MinFloatParameter threshold = new MinFloatParameter(0.9f, 0f);
 
@@ -32,7 +49,7 @@ namespace UnityEngine.Rendering.Universal
         [Tooltip("Amount of dirtiness.")]
         public MinFloatParameter dirtIntensity = new MinFloatParameter(0f, 0f);
 
-        public bool IsActive() => intensity.value > 0f;
+        public bool IsActive() => intensity.value > 0f && mode.value != BloomMode.None;
 
         public bool IsTileCompatible() => false;
     }

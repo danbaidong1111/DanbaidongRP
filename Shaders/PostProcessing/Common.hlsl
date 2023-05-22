@@ -167,38 +167,17 @@ float3 H_f(float3 x, float t1, float t2) {
 	return clamp((x - t1) / (t2 - t1), 0.0, 1.0); ;
 }
 
-float3 GranTurismoTonemap(float3 x) {
-	float P = 1.0;//Maximum brightness
-	float a = 1.0;//Contrast
-	float m = 0.22;//Linear section start
-	float l = 0.4;//Linear section length
-	float c = 1.0;//Black tightness
-	float b = 0.0;
-	float l0 = (P - m)*l / a;
-	float L0 = m - m / a;
-	float L1 = m + (1 - m) / a;
-
-	float3 L_x = m + a * (x - m);
-	float3 T_x = m * pow(x / m, c) + b;
-
-	float S0 = m + l0;
-	float S1 = m + a * l0;
-	float C2 = a * P / (P - S1);
-	float3 S_x = P - (P - S1)*exp(-(C2*(x-S0)/P));
-
-	float3 w0_x = 1 - smoothstep(x, 0, m);
-	float3 w2_x = H_f(x, m + l0, m + l0);
-	float3 w1_x = 1 - w0_x - w2_x;
-	float3 f_x = T_x * w0_x + L_x * w1_x + S_x * w2_x;
-	return f_x;
-}
-
 half3 ApplyTonemap(half3 input)
 {
-#if _TONEMAP_ACES
+#if _TONEMAP_GT
+    input.r = GranTurismoTonemap(input.r);
+    input.g = GranTurismoTonemap(input.g);
+    input.b = GranTurismoTonemap(input.b);
+#elif _TONEMAP_ACES_SAMPLE_VER
+    input = AcesFilm(input);
+#elif _TONEMAP_ACES
     float3 aces = unity_to_ACES(input);
-    // input = AcesTonemap(aces);
-    input = GranTurismoTonemap(input);
+    input = AcesTonemap(aces);
 #elif _TONEMAP_NEUTRAL
     input = NeutralTonemap(input);
 #endif

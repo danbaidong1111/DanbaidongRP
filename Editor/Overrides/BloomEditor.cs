@@ -7,6 +7,7 @@ namespace UnityEditor.Rendering.Universal
     [VolumeComponentEditor(typeof(Bloom))]
     sealed class BloomEditor : VolumeComponentEditor
     {
+        SerializedDataParameter m_Mode;
         SerializedDataParameter m_Threshold;
         SerializedDataParameter m_Intensity;
         SerializedDataParameter m_Scatter;
@@ -21,6 +22,7 @@ namespace UnityEditor.Rendering.Universal
         {
             var o = new PropertyFetcher<Bloom>(serializedObject);
 
+            m_Mode = Unpack(o.Find(x => x.mode));
             m_Threshold = Unpack(o.Find(x => x.threshold));
             m_Intensity = Unpack(o.Find(x => x.intensity));
             m_Scatter = Unpack(o.Find(x => x.scatter));
@@ -36,6 +38,7 @@ namespace UnityEditor.Rendering.Universal
         {
             EditorGUILayout.LabelField("Bloom", EditorStyles.miniLabel);
 
+            PropertyField(m_Mode);
             PropertyField(m_Threshold);
             PropertyField(m_Intensity);
             PropertyField(m_Scatter);

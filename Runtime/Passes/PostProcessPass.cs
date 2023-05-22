@@ -920,87 +920,175 @@ namespace UnityEngine.Rendering.Universal.Internal
 
         void SetupBloom(CommandBuffer cmd, int source, Material uberMaterial)
         {
-            // Start at half-res
-            int tw = m_Descriptor.width >> 1;
-            int th = m_Descriptor.height >> 1;
-
-            // Determine the iteration count
-            int maxSize = Mathf.Max(tw, th);
-            int iterations = Mathf.FloorToInt(Mathf.Log(maxSize, 2f) - 1);
-            iterations -= m_Bloom.skipIterations.value;
-            int mipCount = Mathf.Clamp(iterations, 1, k_MaxPyramidSize);
-
-            // Pre-filtering parameters
-            float clamp = m_Bloom.clamp.value;
-            float threshold = Mathf.GammaToLinearSpace(m_Bloom.threshold.value);
-            float thresholdKnee = threshold * 0.5f; // Hardcoded soft knee
-
-            // Material setup
-            float scatter = Mathf.Lerp(0.05f, 0.95f, m_Bloom.scatter.value);
-            var bloomMaterial = m_Materials.bloom;
-            bloomMaterial.SetVector(ShaderConstants._Params, new Vector4(scatter, clamp, threshold, thresholdKnee));
-            CoreUtils.SetKeyword(bloomMaterial, ShaderKeywordStrings.BloomHQ, m_Bloom.highQualityFiltering.value);//_BLOOM_HQ
-            CoreUtils.SetKeyword(bloomMaterial, ShaderKeywordStrings.UseRGBM, m_UseRGBM);
-
-            // Prefilter
-            var desc = GetCompatibleDescriptor(tw, th, m_DefaultHDRFormat);
-            cmd.GetTemporaryRT(ShaderConstants._BloomMipDown[0], desc, FilterMode.Bilinear);
-            cmd.GetTemporaryRT(ShaderConstants._BloomMipUp[0], desc, FilterMode.Bilinear);
-            Blit(cmd, source, ShaderConstants._BloomMipDown[0], bloomMaterial, 0);
-
-            // Downsample - gaussian pyramid
-            int lastDown = ShaderConstants._BloomMipDown[0];
-            for (int i = 1; i < mipCount; i++)
+            if(m_Bloom.mode.value == BloomMode.BloomDanbaidong)
             {
-                tw = Mathf.Max(1, tw >> 1);
-                th = Mathf.Max(1, th >> 1);
-                int mipDown = ShaderConstants._BloomMipDown[i];
-                int mipUp = ShaderConstants._BloomMipUp[i];
+                int Bloomv2Base = 4;
+                Material bloomMaterial = m_Materials.bloom;
+                // 1/4大小
+                int texWidth = m_Descriptor.width >> 1;
+                int texHeight = m_Descriptor.height >> 1;
 
-                desc.width = tw;
-                desc.height = th;
+                // down times
+                int iterations = 4;
 
-                cmd.GetTemporaryRT(mipDown, desc, FilterMode.Bilinear);
-                cmd.GetTemporaryRT(mipUp, desc, FilterMode.Bilinear);
+                // preFilter
+                bloomMaterial.SetVector(ShaderConstants._Bloomv2_Params, new Vector4(2.5f * m_Bloom.intensity.value, m_Bloom.threshold.value, 0.0f, 0.0f));
 
-                // Classic two pass gaussian blur - use mipUp as a temporary target
-                //   First pass does 2x downsampling + 9-tap gaussian
-                //   Second pass does 9-tap gaussian using a 5-tap filter + bilinear filtering
-                Blit(cmd, lastDown, mipUp, bloomMaterial, 1);
-                Blit(cmd, mipUp, mipDown, bloomMaterial, 2);
+                RenderTextureDescriptor rtDesc = GetCompatibleDescriptor(texWidth, texHeight, m_DefaultHDRFormat);
+                cmd.GetTemporaryRT(ShaderConstants._BloomMipDown[0], rtDesc, FilterMode.Bilinear);
+                Blit(cmd, source, ShaderConstants._BloomMipDown[0], bloomMaterial, Bloomv2Base + 0);
 
-                lastDown = mipDown;
+                // pre Blur
+                cmd.GetTemporaryRT(ShaderConstants._BloomMipUp[0], rtDesc, FilterMode.Bilinear);
+
+                cmd.SetGlobalVector(ShaderConstants._Bloomv2BlurScaler, new Vector4(1, 0, 0, 0));
+                Blit(cmd, ShaderConstants._BloomMipDown[0], ShaderConstants._BloomMipUp[0], bloomMaterial, Bloomv2Base + 2);
+                cmd.SetGlobalVector(ShaderConstants._Bloomv2BlurScaler, new Vector4(0, 1, 0, 0));
+                Blit(cmd, ShaderConstants._BloomMipUp[0], ShaderConstants._BloomMipDown[0], bloomMaterial, Bloomv2Base + 2);
+
+                texWidth = texWidth >> 1;
+                texHeight = texHeight >> 1;
+                // downSample
+                int lastDown = ShaderConstants._BloomMipDown[0];
+                for (int i = 1; i < iterations; i++)
+                {
+                    texWidth = Mathf.Max(1, texWidth >> 1);
+                    texHeight = Mathf.Max(1, texHeight >> 1);
+                    int mipDown = ShaderConstants._BloomMipDown[i];
+                    int mipUp = ShaderConstants._BloomMipUp[i];
+
+                    rtDesc.width = texWidth;
+                    rtDesc.height = texHeight;
+
+                    cmd.GetTemporaryRT(mipDown, rtDesc, FilterMode.Bilinear);
+                    cmd.GetTemporaryRT(mipUp, rtDesc, FilterMode.Bilinear);
+
+                    Blit(cmd, lastDown, mipDown, bloomMaterial, Bloomv2Base + 1);
+
+                    lastDown = mipDown;
+                }
+
+                // blur mips
+                for (int i = iterations - 1 ; i > 0; i--)
+                {
+                    int mipDown = ShaderConstants._BloomMipDown[i];
+                    int mipUp = ShaderConstants._BloomMipUp[i];
+
+                    cmd.SetGlobalVector(ShaderConstants._Bloomv2BlurScaler, new Vector4(1, 0, 0, 0));
+                    Blit(cmd, mipDown, mipUp, bloomMaterial, Bloomv2Base + 2 + i);
+                    cmd.SetGlobalVector(ShaderConstants._Bloomv2BlurScaler, new Vector4(0, 1, 0, 0));
+                    Blit(cmd, mipUp, mipDown, bloomMaterial, Bloomv2Base + 2 + i);
+                }
+
+                // upsample once
+                for (int i = 1; i < iterations; i++)
+                {
+                    cmd.SetGlobalTexture("_BloomMip" + (i - 1), ShaderConstants._BloomMipDown[i]);
+                }
+                Blit(cmd, ShaderConstants._BloomMipDown[0], ShaderConstants._BloomMipUp[0], bloomMaterial, Bloomv2Base + 6);
+
+                // Cleanup
+                for (int i = 0; i < iterations; i++)
+                {
+                    cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipDown[i]);
+                    if (i > 0) cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipUp[i]);
+                }
+
+                // Setup bloom on uber
+                var tint = m_Bloom.tint.value.linear;
+                var luma = ColorUtils.Luminance(tint);
+                tint = luma > 0f ? tint * (1f / luma) : Color.white;
+
+                var bloomParams = new Vector4(m_Bloom.intensity.value, tint.r, tint.g, tint.b);
+                uberMaterial.SetVector(ShaderConstants._Bloom_Params, bloomParams);
+                uberMaterial.SetFloat(ShaderConstants._Bloom_RGBM, m_UseRGBM ? 1f : 0f);
+
+                cmd.SetGlobalTexture(ShaderConstants._Bloom_Texture, ShaderConstants._BloomMipUp[0]);
+
             }
-
-            // Upsample (bilinear by default, HQ filtering does bicubic instead
-            for (int i = mipCount - 2; i >= 0; i--)
+            else if(m_Bloom.mode.value == BloomMode.BloomURP)
             {
-                int lowMip = (i == mipCount - 2) ? ShaderConstants._BloomMipDown[i + 1] : ShaderConstants._BloomMipUp[i + 1];
-                int highMip = ShaderConstants._BloomMipDown[i];
-                int dst = ShaderConstants._BloomMipUp[i];
+                // Start at half-res
+                int tw = m_Descriptor.width >> 1;
+                int th = m_Descriptor.height >> 1;
 
-                cmd.SetGlobalTexture(ShaderConstants._SourceTexLowMip, lowMip);
-                Blit(cmd, highMip, BlitDstDiscardContent(cmd, dst), bloomMaterial, 3);
+                // Determine the iteration count
+                int maxSize = Mathf.Max(tw, th);
+                int iterations = Mathf.FloorToInt(Mathf.Log(maxSize, 2f) - 1);
+                iterations -= m_Bloom.skipIterations.value;
+                int mipCount = Mathf.Clamp(iterations, 1, k_MaxPyramidSize);
+
+                // Pre-filtering parameters
+                float clamp = m_Bloom.clamp.value;
+                float threshold = Mathf.GammaToLinearSpace(m_Bloom.threshold.value);
+                float thresholdKnee = threshold * 0.5f; // Hardcoded soft knee
+
+                // Material setup
+                float scatter = Mathf.Lerp(0.05f, 0.95f, m_Bloom.scatter.value);
+                var bloomMaterial = m_Materials.bloom;
+                bloomMaterial.SetVector(ShaderConstants._Params, new Vector4(scatter, clamp, threshold, thresholdKnee));
+                CoreUtils.SetKeyword(bloomMaterial, ShaderKeywordStrings.BloomHQ, m_Bloom.highQualityFiltering.value);//_BLOOM_HQ
+                CoreUtils.SetKeyword(bloomMaterial, ShaderKeywordStrings.UseRGBM, m_UseRGBM);
+
+                // Prefilter
+                var desc = GetCompatibleDescriptor(tw, th, m_DefaultHDRFormat);
+                cmd.GetTemporaryRT(ShaderConstants._BloomMipDown[0], desc, FilterMode.Bilinear);
+                cmd.GetTemporaryRT(ShaderConstants._BloomMipUp[0], desc, FilterMode.Bilinear);
+                Blit(cmd, source, ShaderConstants._BloomMipDown[0], bloomMaterial, 0);
+
+                // Downsample - gaussian pyramid
+                int lastDown = ShaderConstants._BloomMipDown[0];
+                for (int i = 1; i < mipCount; i++)
+                {
+                    tw = Mathf.Max(1, tw >> 1);
+                    th = Mathf.Max(1, th >> 1);
+                    int mipDown = ShaderConstants._BloomMipDown[i];
+                    int mipUp = ShaderConstants._BloomMipUp[i];
+
+                    desc.width = tw;
+                    desc.height = th;
+
+                    cmd.GetTemporaryRT(mipDown, desc, FilterMode.Bilinear);
+                    cmd.GetTemporaryRT(mipUp, desc, FilterMode.Bilinear);
+
+                    // Classic two pass gaussian blur - use mipUp as a temporary target
+                    //   First pass does 2x downsampling + 9-tap gaussian
+                    //   Second pass does 9-tap gaussian using a 5-tap filter + bilinear filtering
+                    Blit(cmd, lastDown, mipUp, bloomMaterial, 1);
+                    Blit(cmd, mipUp, mipDown, bloomMaterial, 2);
+
+                    lastDown = mipDown;
+                }
+
+                // Upsample (bilinear by default, HQ filtering does bicubic instead
+                for (int i = mipCount - 2; i >= 0; i--)
+                {
+                    int lowMip = (i == mipCount - 2) ? ShaderConstants._BloomMipDown[i + 1] : ShaderConstants._BloomMipUp[i + 1];
+                    int highMip = ShaderConstants._BloomMipDown[i];
+                    int dst = ShaderConstants._BloomMipUp[i];
+
+                    cmd.SetGlobalTexture(ShaderConstants._SourceTexLowMip, lowMip);
+                    Blit(cmd, highMip, BlitDstDiscardContent(cmd, dst), bloomMaterial, 3);
+                }
+
+                // Cleanup
+                for (int i = 0; i < mipCount; i++)
+                {
+                    cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipDown[i]);
+                    if (i > 0) cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipUp[i]);
+                }
+
+                // Setup bloom on uber
+                var tint = m_Bloom.tint.value.linear;
+                var luma = ColorUtils.Luminance(tint);
+                tint = luma > 0f ? tint * (1f / luma) : Color.white;
+
+                var bloomParams = new Vector4(m_Bloom.intensity.value, tint.r, tint.g, tint.b);
+                uberMaterial.SetVector(ShaderConstants._Bloom_Params, bloomParams);
+                uberMaterial.SetFloat(ShaderConstants._Bloom_RGBM, m_UseRGBM ? 1f : 0f);
+
+                cmd.SetGlobalTexture(ShaderConstants._Bloom_Texture, ShaderConstants._BloomMipUp[0]);
             }
-
-            // Cleanup
-            for (int i = 0; i < mipCount; i++)
-            {
-                cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipDown[i]);
-                if (i > 0) cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipUp[i]);
-            }
-
-            // Setup bloom on uber
-            var tint = m_Bloom.tint.value.linear;
-            var luma = ColorUtils.Luminance(tint);
-            tint = luma > 0f ? tint * (1f / luma) : Color.white;
-
-            var bloomParams = new Vector4(m_Bloom.intensity.value, tint.r, tint.g, tint.b);
-            uberMaterial.SetVector(ShaderConstants._Bloom_Params, bloomParams);
-            uberMaterial.SetFloat(ShaderConstants._Bloom_RGBM, m_UseRGBM ? 1f : 0f);
-
-            cmd.SetGlobalTexture(ShaderConstants._Bloom_Texture, ShaderConstants._BloomMipUp[0]);
-
             // Setup lens dirtiness on uber
             // Keep the aspect ratio correct & center the dirt texture, we don't want it to be
             // stretched or squashed
@@ -1132,6 +1220,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                 {
                     case TonemappingMode.Neutral: material.EnableKeyword(ShaderKeywordStrings.TonemapNeutral); break;
                     case TonemappingMode.ACES: material.EnableKeyword(ShaderKeywordStrings.TonemapACES); break;
+                    case TonemappingMode.ACESSimpleVer: material.EnableKeyword(ShaderKeywordStrings.TonemapACESSampleVer); break;
+                    case TonemappingMode.GranTurismo: material.EnableKeyword(ShaderKeywordStrings.TonemapGT); break;
                     default: break; // None
                 }
             }
@@ -1338,6 +1428,10 @@ namespace UnityEngine.Rendering.Universal.Internal
             public static readonly int _DownSampleScaleFactor = Shader.PropertyToID("_DownSampleScaleFactor");
 
             public static readonly int _FullscreenProjMat  = Shader.PropertyToID("_FullscreenProjMat");
+
+            // Danbaidong Bloom
+            public static readonly int _Bloomv2_Params     = Shader.PropertyToID("_Bloomv2_Params");
+            public static readonly int _Bloomv2BlurScaler  = Shader.PropertyToID("_Bloomv2BlurScaler");
 
             public static int[] _BloomMipUp;
             public static int[] _BloomMipDown;
