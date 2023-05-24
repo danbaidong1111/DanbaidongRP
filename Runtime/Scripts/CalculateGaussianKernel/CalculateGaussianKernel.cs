@@ -37,7 +37,7 @@ public class CalculateGaussianKernelEditor:Editor
         //EditorGUILayout.PropertyField(serializedObject.FindProperty("sigma"));
         if(GUILayout.Button("calculate gaussian weights"))
         {
-            //ShowWeights(serializedObject.FindProperty("sigma").floatValue);
+            ShowWeights(serializedObject.FindProperty("sigma").floatValue);
         }
 
         float[] weights = new float[serializedObject.FindProperty("PascalTriangleRows").intValue];

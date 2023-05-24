@@ -51,9 +51,9 @@
 SCREENSPACE_TEXTURE(_ScreenSpaceShadowmapTexture);
 SAMPLER(sampler_ScreenSpaceShadowmapTexture);
 
-TEXTURE2D_SHADOW(_CustomMainLightShadowMapTex);
-SAMPLER(sampler_CustomMainLightShadowMapTex);
-//SAMPLER_CMP(sampler_CustomMainLightShadowMapTex);
+TEXTURE2D_SHADOW(_MainLightShadowmapCacheTex);
+SAMPLER(sampler_MainLightShadowmapCacheTex);
+//SAMPLER_CMP(sampler_MainLightShadowmapCacheTex);
 
 TEXTURE2D_SHADOW(_CustomMainLightSSShadowmapTex);
 SAMPLER(sampler_CustomMainLightSSShadowmapTex);
@@ -367,7 +367,7 @@ float2 SampleBlockerAvgDepth(float4 shadowCoord, int searchWidth)
         //offset = RotateVec2(offset, random);
         float2 UVOffset = shadowCoord.xy + offset * searchWidth * _MainLightShadowmapSize.xy;
         
-        float sampleDepth = SAMPLE_TEXTURE2D(_CustomMainLightShadowMapTex, sampler_CustomMainLightShadowMapTex,  UVOffset).r;
+        float sampleDepth = SAMPLE_TEXTURE2D(_MainLightShadowmapCacheTex, sampler_MainLightShadowmapCacheTex,  UVOffset).r;
         if(sampleDepth > shadowCoord.z)
         {
             blockDepth += sampleDepth;
@@ -388,7 +388,7 @@ float2 SampleBlockerAvgDepth(float4 shadowCoord, int searchWidth, float random)
         offset = RotateVec2(offset, random);
         float2 UVOffset = shadowCoord.xy + offset * searchWidth * _MainLightShadowmapSize.xy;
         
-        float sampleDepth = SAMPLE_TEXTURE2D(_CustomMainLightShadowMapTex, sampler_CustomMainLightShadowMapTex,  UVOffset).r;
+        float sampleDepth = SAMPLE_TEXTURE2D(_MainLightShadowmapCacheTex, sampler_MainLightShadowmapCacheTex,  UVOffset).r;
         if(sampleDepth > shadowCoord.z)
         {
             blockDepth += sampleDepth;
@@ -576,7 +576,7 @@ half MainLightRealtimeShadow(float4 shadowCoord)
     ShadowSamplingData shadowSamplingData = GetMainLightShadowSamplingData();
     half4 shadowParams = GetMainLightShadowParams();
 
-    return SampleShadowmap(TEXTURE2D_ARGS(_CustomMainLightShadowMapTex, sampler_CustomMainLightShadowMapTex), shadowCoord, shadowSamplingData, shadowParams, false);
+    return SampleShadowmap(TEXTURE2D_ARGS(_MainLightShadowmapCacheTex, sampler_MainLightShadowmapCacheTex), shadowCoord, shadowSamplingData, shadowParams, false);
 }
 
 float Random1DTo1D(float value,float a,float b){
@@ -595,7 +595,7 @@ half MainLightRealtimeShadow(float4 shadowCoord, float3 positionWS)
     ShadowSamplingData shadowSamplingData = GetMainLightShadowSamplingData();
     half4 shadowParams = GetMainLightShadowParams();
 
-    return SampleShadowmap(TEXTURE2D_ARGS(_CustomMainLightShadowMapTex, sampler_CustomMainLightShadowMapTex), shadowCoord, shadowSamplingData, shadowParams, random, positionWS, false);
+    return SampleShadowmap(TEXTURE2D_ARGS(_MainLightShadowmapCacheTex, sampler_MainLightShadowmapCacheTex), shadowCoord, shadowSamplingData, shadowParams, random, positionWS, false);
 }
 
 half MainLightRealtimeScreenSpaceShadow(float2 screenUV)

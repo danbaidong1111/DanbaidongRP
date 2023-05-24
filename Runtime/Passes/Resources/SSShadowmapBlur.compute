@@ -1,10 +1,12 @@
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
-static const int gBlurRadius = 3;
+static const int gBlurRadius = 6;
 
 
 //static const float weights_base[11] = { 0.0222, 0.0455, 0.0798, 0.1190, 0.1514, 0.1634, 0.1514, 0.1190, 0.0798, 0.0455, 0.0222};
 //static const float weights_base[5] = { 0.0545, 0.2442, 0.4026, 0.2442, 0.0545};
-static const float weights_base[7] = { 0.0366, 0.1113, 0.2167, 0.2708, 0.2167, 0.1113, 0.0366};
+// static const float weights_base[7] = { 0.0366, 0.1113, 0.2167, 0.2708, 0.2167, 0.1113, 0.0366};
+static const float weights_base[13] = { 0.00221820, 0.00877314, 0.02702316, 0.06482518, 0.12110940, 0.17621310, 0.19967560,
+										0.17621310, 0.12110940, 0.06482518, 0.02702316, 0.00877314, 0.00221820};
 
 float2 _SSShadowmapSize;
 

@@ -224,11 +224,11 @@ namespace UnityEngine.Rendering.Universal.Internal
 
 
 
-                    int kernelIndex = m_CacheCompute.FindKernel("CopyCacheShadowmap");
-                    cmd.SetComputeTextureParam(m_CacheCompute, kernelIndex, m_MainLightShadowmapCacahe.id, m_MainLightShadowmapCacaheTexture);
-                    cmd.SetComputeIntParam(m_CacheCompute, "_ShadowmapCacheWidth", m_ShadowmapWidth);
-                    cmd.SetComputeIntParam(m_CacheCompute, "_ShadowmapCacheHeight", m_ShadowmapHeight);
-                    cmd.SetComputeIntParam(m_CacheCompute, "_CurrentCacheCascadesIndex", m_CurrentCacheCascadesIndex);
+                    //int kernelIndex = m_CacheCompute.FindKernel("CopyCacheShadowmap");
+                    //cmd.SetComputeTextureParam(m_CacheCompute, kernelIndex, m_MainLightShadowmapCacahe.id, m_MainLightShadowmapCacaheTexture);
+                    //cmd.SetComputeIntParam(m_CacheCompute, "_ShadowmapCacheWidth", m_ShadowmapWidth);
+                    //cmd.SetComputeIntParam(m_CacheCompute, "_ShadowmapCacheHeight", m_ShadowmapHeight);
+                    //cmd.SetComputeIntParam(m_CacheCompute, "_CurrentCacheCascadesIndex", m_CurrentCacheCascadesIndex);
 
                     //cmd.DispatchCompute(m_CacheCompute, kernelIndex, dispatchThreadGroupXCount, dispatchThreadGroupYCount, dispatchThreadGroupZCount);
                 }
