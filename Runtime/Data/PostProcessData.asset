@@ -22,6 +22,8 @@ MonoBehaviour:
     lutBuilderLdrPS: {fileID: 4800000, guid: a0f7e147644903148bef00536f075b3c, type: 3}
     lutBuilderHdrPS: {fileID: 4800000, guid: 9b3ab4060cd7bcc47a62d92320e4e1f0, type: 3}
     bloomPS: {fileID: 4800000, guid: 6dabb3b246d130d46a4788ccd2d82dc6, type: 3}
+    atmosphericfogPS: {fileID: 4800000, guid: 8cc316eb96e95a345a692a059b2c7371, type: 3}
+    lightShaftPS: {fileID: 4800000, guid: 04386b12f2cea0944b9293150778b510, type: 3}
     uberPostPS: {fileID: 4800000, guid: 321a10e529a92104d8c45c8c49a786de, type: 3}
     finalPostPassPS: {fileID: 4800000, guid: 73109a10fe18afc4fbca1a847cad4728, type: 3}
   textures:

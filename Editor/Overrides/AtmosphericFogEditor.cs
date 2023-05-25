@@ -27,7 +27,7 @@ namespace UnityEditor.Rendering.Universal
         SerializedDataParameter m_sampleCount;
         SerializedDataParameter m_mieScatterColor;
         SerializedDataParameter m_moonMieScatterColor;
-        SerializedDataParameter m_mieScatterFacto;
+        SerializedDataParameter m_mieScatterFactor;
         SerializedDataParameter m_mieExtinctionFactor;
         SerializedDataParameter m_mieG;
 
@@ -77,7 +77,7 @@ namespace UnityEditor.Rendering.Universal
             m_sampleCount              = Unpack(o.Find(x => x.sampleCount));
             m_mieScatterColor          = Unpack(o.Find(x => x.mieScatterColor));
             m_moonMieScatterColor      = Unpack(o.Find(x => x.moonMieScatterColor));
-            m_mieScatterFacto          = Unpack(o.Find(x => x.moonMieScatterColor));
+            m_mieScatterFactor         = Unpack(o.Find(x => x.mieScatterFactor));
             m_mieExtinctionFactor      = Unpack(o.Find(x => x.mieExtinctionFactor));
             m_mieG                     = Unpack(o.Find(x => x.mieG));
             
@@ -117,7 +117,7 @@ namespace UnityEditor.Rendering.Universal
             PropertyField(m_sampleCount);
             PropertyField(m_mieScatterColor);
             PropertyField(m_moonMieScatterColor);
-            PropertyField(m_mieScatterFacto);
+            PropertyField(m_mieScatterFactor);
             PropertyField(m_mieExtinctionFactor);
             PropertyField(m_mieG);
             

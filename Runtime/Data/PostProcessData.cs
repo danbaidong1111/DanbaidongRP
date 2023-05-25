@@ -59,6 +59,12 @@ namespace UnityEngine.Rendering.Universal
             [Reload("Shaders/PostProcessing/Bloom.shader")]
             public Shader bloomPS;
 
+            [Reload("Shaders/PostProcessing/AtmosphericFog.shader")]
+            public Shader atmosphericfogPS;
+
+            [Reload("Shaders/PostProcessing/LightShaft.shader")]
+            public Shader lightShaftPS;
+
             [Reload("Shaders/PostProcessing/UberPost.shader")]
             public Shader uberPostPS;
 

@@ -212,10 +212,10 @@
 
                 return o;
             }
-            
+            float4 _SunDirection;
             half4 frag(v2f i):SV_Target
             {
-                float3 lightDir = _MainLightPosition.xyz;
+                float3 lightDir = _SunDirection.xyz;
                 float3 sunPosWS = lightDir;
 
                 float2 UV = i.uv;

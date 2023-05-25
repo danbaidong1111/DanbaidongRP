@@ -46,6 +46,9 @@ namespace UnityEngine.Rendering.Universal.Internal
         ColorAdjustments m_ColorAdjustments;
         Tonemapping m_Tonemapping;
         FilmGrain m_FilmGrain;
+        AtmosphericFog m_AtmosphericFog;
+
+        const int k_lightshaftStep = 3;
 
         // Misc
         const int k_MaxPyramidSize = 16;
@@ -110,6 +113,15 @@ namespace UnityEngine.Rendering.Universal.Internal
                 m_GaussianCoCFormat = GraphicsFormat.R16_SFloat;
             else // Expect CoC banding
                 m_GaussianCoCFormat = GraphicsFormat.R8_UNorm;
+
+            // LightShaft
+            ShaderConstants._LightShaftMipUp = new int[k_lightshaftStep];
+            ShaderConstants._LightShaftMipDown = new int[k_lightshaftStep];
+            for (int i = 0; i < k_lightshaftStep; i++)
+            {
+                ShaderConstants._LightShaftMipUp[i] = Shader.PropertyToID("_LightShaftMipUp" + i);
+                ShaderConstants._LightShaftMipDown[i] = Shader.PropertyToID("_LightShaftMipDown" + i);
+            }
 
             // Bloom pyramid shader ids - can't use a simple stackalloc in the bloom function as we
             // unfortunately need to allocate strings
@@ -207,6 +219,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             m_ColorAdjustments    = stack.GetComponent<ColorAdjustments>();
             m_Tonemapping         = stack.GetComponent<Tonemapping>();
             m_FilmGrain           = stack.GetComponent<FilmGrain>();
+            m_AtmosphericFog      = stack.GetComponent<AtmosphericFog>();
             m_UseDrawProcedural   = renderingData.cameraData.xr.enabled;
 
             if (m_IsFinalPass)
@@ -357,6 +370,18 @@ namespace UnityEngine.Rendering.Universal.Internal
                     Swap();
                 }
             }
+
+
+            // Atmospheric Fog
+            if (m_AtmosphericFog.IsActive())
+            {
+                using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.AtmosphericFog)))
+                {
+                    DoAtmosphericFog(renderingData, cmd, GetSource(), GetDestination());
+                    Swap();
+                } 
+            }
+
 
             // Depth of Field
             if (m_DepthOfField.IsActive() && !isSceneViewCamera)
@@ -916,6 +941,108 @@ namespace UnityEngine.Rendering.Universal.Internal
 
         #endregion
 
+        #region AtmosphericFog
+
+        void DoAtmosphericFog(RenderingData renderingData, CommandBuffer cmd, int source, int destination)
+        {
+            Material atmosMaterial = m_Materials.atmosphericfog;
+            Material lightShaftMaterial = m_Materials.lightShaft;
+
+            bool enableLightShaft = m_AtmosphericFog.enableLightShaft.value && renderingData.lightData.visibleLights.Length > 0;
+            if (enableLightShaft)
+            {
+                //using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.LightShaft)))
+                {
+                    Vector3 sunDirection = renderingData.lightData.visibleLights[0].light.transform.forward;
+                    Camera cam = renderingData.cameraData.camera;
+                    Vector3 sunWorldPosition = cam.transform.position - sunDirection * 1000f;
+
+                    Vector3 lightScrPos = cam.WorldToViewportPoint(sunWorldPosition, Camera.MonoOrStereoscopicEye.Mono);
+
+                    lightShaftMaterial.SetVector("_LightScrPos", lightScrPos);
+
+
+                    RenderTextureDescriptor rtDesc = GetCompatibleDescriptor(m_Descriptor.width/2, m_Descriptor.height/2, GraphicsFormat.R8_UNorm); 
+                    cmd.GetTemporaryRT(ShaderConstants._LightShaftPreScatterTex, rtDesc);
+
+                    RenderTextureDescriptor downUpSampleRTD = rtDesc;
+                    for (int i = 0; i < k_lightshaftStep; i++)
+                    {
+                        downUpSampleRTD.width /= 2;
+                        downUpSampleRTD.height /= 2;
+                        cmd.GetTemporaryRT(ShaderConstants._LightShaftMipDown[i], downUpSampleRTD, FilterMode.Bilinear);
+                        cmd.GetTemporaryRT(ShaderConstants._LightShaftMipUp[i], downUpSampleRTD, FilterMode.Bilinear);
+                    }
+
+                    cmd.Blit(null, ShaderConstants._LightShaftPreScatterTex, lightShaftMaterial, 0);// 计算scatter
+
+                    // downSample
+                    cmd.Blit(ShaderConstants._LightShaftPreScatterTex, ShaderConstants._LightShaftMipDown[0], lightShaftMaterial, 1);
+                    bool forwardBlur = false;
+                    for (int i = 1; i < k_lightshaftStep; i++)
+                    {
+                        cmd.Blit(ShaderConstants._LightShaftMipDown[i - 1], ShaderConstants._LightShaftMipDown[i], lightShaftMaterial, forwardBlur ? 1 : 2);
+                        forwardBlur = !forwardBlur;
+                    }
+
+                    // upsample
+                    int prevTex = ShaderConstants._LightShaftMipDown[k_lightshaftStep - 1];
+                    for (int i = k_lightshaftStep - 1; i > 1; i--)
+                    {
+                        cmd.SetGlobalTexture("_DownSampleTex", ShaderConstants._LightShaftMipDown[i - 1]);
+                        cmd.Blit(prevTex, ShaderConstants._LightShaftMipUp[i - 1], lightShaftMaterial, 3);
+                        prevTex = ShaderConstants._LightShaftMipUp[i - 1];
+                    }
+
+                    cmd.SetGlobalTexture("_LightShaftMaskTex", ShaderConstants._LightShaftMipUp[1]);
+                    atmosMaterial.EnableKeyword("_ENABLE_LIGHTSHAFT");
+                }
+            }
+            else
+            {
+                atmosMaterial.DisableKeyword("_ENABLE_LIGHTSHAFT");
+            }
+
+            cmd.Blit(source, destination, atmosMaterial, 0);
+
+
+
+            atmosMaterial.SetFloat(ShaderConstants._FogDensity              , m_AtmosphericFog.fogDensity.value);
+            atmosMaterial.SetColor(ShaderConstants._FogColor                , m_AtmosphericFog.fogColor.value);
+            atmosMaterial.SetFloat(ShaderConstants._HeightFogEnd            , m_AtmosphericFog.heightFogEnd.value);
+            atmosMaterial.SetFloat(ShaderConstants._HeightFalloff           , m_AtmosphericFog.heightFalloff.value);
+            atmosMaterial.SetFloat(ShaderConstants._ScatteringM             , m_AtmosphericFog.mieScatterFactor.value);
+            atmosMaterial.SetFloat(ShaderConstants._ExtinctionM             , m_AtmosphericFog.mieExtinctionFactor.value);
+            atmosMaterial.SetFloat(ShaderConstants._MieG                    , m_AtmosphericFog.mieG.value);
+            atmosMaterial.SetFloat(ShaderConstants._InscatteringExponent    , m_AtmosphericFog.inscatteringExponent.value);
+            atmosMaterial.SetColor(ShaderConstants._MieScatterColor         , m_AtmosphericFog.mieScatterColor.value);
+            atmosMaterial.SetColor(ShaderConstants._MoonMieScatterColor     , m_AtmosphericFog.moonMieScatterColor.value);
+            atmosMaterial.SetFloat(ShaderConstants._FogMieStrength          , m_AtmosphericFog.fogMieStrength.value);
+
+            atmosMaterial.SetFloat(ShaderConstants._GroundFogDensity        , m_AtmosphericFog.groundFogDensity.value);
+            atmosMaterial.SetFloat(ShaderConstants._GroundHeightFogEnd      , m_AtmosphericFog.groundHeightFogEnd.value);
+            atmosMaterial.SetFloat(ShaderConstants._GroundHeightFalloff     , m_AtmosphericFog.groundHeightFalloff.value);
+            atmosMaterial.SetFloat(ShaderConstants._GroundFogHeightLimit    , m_AtmosphericFog.groundFogHeightLimit.value);
+            atmosMaterial.SetFloat(ShaderConstants._GroundFogDistanceLimit  , m_AtmosphericFog.groundFogDistanceLimit.value);
+            atmosMaterial.SetFloat(ShaderConstants._GroundFogDistanceFalloff, m_AtmosphericFog.groundFogDistanceFalloff.value);
+
+            if(enableLightShaft)
+            {
+                lightShaftMaterial.SetFloat("_SampleDistance"               , m_AtmosphericFog.lightShaftBlurDistance.value * 4);
+                lightShaftMaterial.SetFloat("_Intensity"                    , m_AtmosphericFog.lightShaftIntensity.value);
+                lightShaftMaterial.SetFloat("_MieG"                         , m_AtmosphericFog.lightShaftMieG.value);
+                lightShaftMaterial.SetFloat("_RevertScale"                  , m_AtmosphericFog.lightShaftRevertScale.value);
+
+                // clean
+                cmd.ReleaseTemporaryRT(ShaderConstants._LightShaftPreScatterTex);
+                for (int i = 0; i < k_lightshaftStep; i++)
+                {
+                    cmd.ReleaseTemporaryRT(ShaderConstants._LightShaftMipDown[i]);
+                }
+            }
+        }
+        #endregion
+
         #region Bloom
 
         void SetupBloom(CommandBuffer cmd, int source, Material uberMaterial)
@@ -1339,6 +1466,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             public readonly Material cameraMotionBlur;
             public readonly Material paniniProjection;
             public readonly Material bloom;
+            public readonly Material atmosphericfog;
+            public readonly Material lightShaft;
             public readonly Material uber;
             public readonly Material finalPass;
 
@@ -1351,6 +1480,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                 cameraMotionBlur = Load(data.shaders.cameraMotionBlurPS);
                 paniniProjection = Load(data.shaders.paniniProjectionPS);
                 bloom = Load(data.shaders.bloomPS);
+                atmosphericfog = Load(data.shaders.atmosphericfogPS);
+                lightShaft = Load(data.shaders.lightShaftPS);
                 uber = Load(data.shaders.uberPostPS);
                 finalPass = Load(data.shaders.finalPostPassPS);
             }
@@ -1379,6 +1510,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                 CoreUtils.Destroy(cameraMotionBlur);
                 CoreUtils.Destroy(paniniProjection);
                 CoreUtils.Destroy(bloom);
+                CoreUtils.Destroy(atmosphericfog);
+                CoreUtils.Destroy(lightShaft);
                 CoreUtils.Destroy(uber);
                 CoreUtils.Destroy(finalPass);
             }
@@ -1432,6 +1565,32 @@ namespace UnityEngine.Rendering.Universal.Internal
             // Danbaidong Bloom
             public static readonly int _Bloomv2_Params     = Shader.PropertyToID("_Bloomv2_Params");
             public static readonly int _Bloomv2BlurScaler  = Shader.PropertyToID("_Bloomv2BlurScaler");
+
+            // AtmosphericFog
+            public static readonly int _SampleCount = Shader.PropertyToID("_SampleCount");
+            public static readonly int _FogDensity = Shader.PropertyToID("_FogDensity");
+            public static readonly int _FogColor = Shader.PropertyToID("_FogColor");
+            public static readonly int _HeightFogEnd = Shader.PropertyToID("_HeightFogEnd");
+            public static readonly int _HeightFalloff = Shader.PropertyToID("_HeightFalloff");
+            public static readonly int _ScatteringM = Shader.PropertyToID("_ScatteringM");
+            public static readonly int _ExtinctionM = Shader.PropertyToID("_ExtinctionM");
+            public static readonly int _MieG = Shader.PropertyToID("_MieG");
+            public static readonly int _InscatteringExponent = Shader.PropertyToID("_InscatteringExponent");
+            public static readonly int _MieScatterColor = Shader.PropertyToID("_MieScatterColor");
+            public static readonly int _MoonMieScatterColor = Shader.PropertyToID("_MoonMieScatterColor");
+            public static readonly int _FogMieStrength = Shader.PropertyToID("_FogMieStrength");
+
+            public static readonly int _GroundFogDensity = Shader.PropertyToID("_GroundFogDensity");
+            public static readonly int _GroundHeightFogEnd = Shader.PropertyToID("_GroundHeightFogEnd");
+            public static readonly int _GroundHeightFalloff = Shader.PropertyToID("_GroundHeightFalloff");
+            public static readonly int _GroundFogHeightLimit = Shader.PropertyToID("_GroundFogHeightLimit");
+            public static readonly int _GroundFogDistanceLimit = Shader.PropertyToID("_GroundFogDistanceLimit");
+            public static readonly int _GroundFogDistanceFalloff = Shader.PropertyToID("_GroundFogDistanceFalloff");
+
+            // LightShaft
+            public static readonly int _LightShaftPreScatterTex = Shader.PropertyToID("_LightShaftPreScatterTex");
+            public static int[] _LightShaftMipUp;
+            public static int[] _LightShaftMipDown;
 
             public static int[] _BloomMipUp;
             public static int[] _BloomMipDown;
