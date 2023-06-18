@@ -22,6 +22,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
         RenderTargetHandle depthHandle;
         RenderTargetHandle normalHandle;
+        bool prePassDone = false;
         public MainLightSSShadowmapPass(RenderPassEvent evt)
         {
             base.profilingSampler = new ProfilingSampler(nameof(MainLightSSShadowmapPass));
@@ -68,7 +69,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             return weights;
         }
 
-        public bool Setup(ref RenderingData renderingData, ref MainLight8CascadeShadowCasterPass shadowPass, RenderTargetHandle depthHandle, RenderTargetHandle normalHandle)
+        public bool Setup(ref RenderingData renderingData, ref MainLight8CascadeShadowCasterPass shadowPass, RenderTargetHandle depthHandle, RenderTargetHandle normalHandle, bool requiresDepthPrepass)
         {
             if (!m_SSShadowmapCompute)
                 return false;
@@ -83,6 +84,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             this.depthHandle = depthHandle;
             this.normalHandle = normalHandle;
+            this.prePassDone = requiresDepthPrepass;
 
             return true;
         }
@@ -167,12 +169,15 @@ namespace UnityEngine.Rendering.Universal.Internal
                 cmd.SetComputeTextureParam(m_SSShadowmapCompute, kernelIndex, "_CameraDepthTexture", depthHandle.Identifier());
                 cmd.SetComputeTextureParam(m_SSShadowmapCompute, kernelIndex, "_CameraNormalsTexture", normalHandle.Identifier());
 
-                cmd.SetComputeTextureParam(m_SSShadowmapBlur, kernelIndex, _SSShadowmapPid, _SSShadowmmapRti);
-                cmd.DispatchCompute(m_SSShadowmapBlur, kernelIndex, blurGroupsXCount, m_SSShadowmapHeight, 1);
+                if(prePassDone)
+                {
+                    cmd.SetComputeTextureParam(m_SSShadowmapBlur, kernelIndex, _SSShadowmapPid, _SSShadowmmapRti);
+                    cmd.DispatchCompute(m_SSShadowmapBlur, kernelIndex, blurGroupsXCount, m_SSShadowmapHeight, 1);
 
-                kernelIndex = m_SSShadowmapBlur.FindKernel("VertBlurCS");
-                cmd.SetComputeTextureParam(m_SSShadowmapBlur, kernelIndex, _SSShadowmapPid, _SSShadowmmapRti);
-                cmd.DispatchCompute(m_SSShadowmapBlur, kernelIndex, m_SSShadowmapWidth, blurGroupsYCount, 1);
+                    kernelIndex = m_SSShadowmapBlur.FindKernel("VertBlurCS");
+                    cmd.SetComputeTextureParam(m_SSShadowmapBlur, kernelIndex, _SSShadowmapPid, _SSShadowmmapRti);
+                    cmd.DispatchCompute(m_SSShadowmapBlur, kernelIndex, m_SSShadowmapWidth, blurGroupsYCount, 1);
+                }
 
                 cmd.SetGlobalTexture(_SSShadowmapPid, _SSShadowmmapRti);
             }

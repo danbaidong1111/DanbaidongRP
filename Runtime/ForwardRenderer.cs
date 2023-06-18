@@ -417,7 +417,7 @@ namespace UnityEngine.Rendering.Universal
             if (additionalLightShadows)
                 EnqueuePass(m_AdditionalLightsShadowCasterPass);
 
-            if (m_MainLightSSShadowmapPass.Setup(ref renderingData, ref mainLight8CascadeShadowCasterPass, m_DepthTexture, m_NormalsTexture))
+            if (m_MainLightSSShadowmapPass.Setup(ref renderingData, ref mainLight8CascadeShadowCasterPass, m_DepthTexture, m_NormalsTexture, requiresDepthPrepass))
             {
                 EnqueuePass(m_MainLightSSShadowmapPass);
             }

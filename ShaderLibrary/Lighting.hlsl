@@ -134,7 +134,9 @@ Light GetMainLight(float2 screenUV)
 Light GetMainLight(float4 shadowCoord, float3 positionWS, half4 shadowMask)
 {
     Light light = GetMainLight();
+#if !defined(_RECEIVE_SHADOWS_OFF)
     light.shadowAttenuation = MainLightShadow(shadowCoord, positionWS, shadowMask, _MainLightOcclusionProbes);
+#endif
     return light;
 }
 
@@ -839,24 +841,25 @@ half4 UniversalFragmentPBR(InputData inputData, SurfaceData surfaceData)
 #endif
 
     Light mainLight = GetMainLight(inputData.shadowCoord, inputData.positionWS, shadowMask);
+#if !defined(_RECEIVE_SHADOWS_OFF)
+    #if defined(_MAIN_LIGHT_SHADOW_RAMP)
+        half2 shadowGradientUV = half2(mainLight.shadowAttenuation, 0.9);
+        half2 colorGradientUV = half2(mainLight.shadowAttenuation, 0.6);
 
-#if defined(_MAIN_LIGHT_SHADOW_RAMP)
-    half2 shadowGradientUV = half2(mainLight.shadowAttenuation, 0.9);
-    half2 colorGradientUV = half2(mainLight.shadowAttenuation, 0.6);
+        if(!_DAYTIME)
+        {
+            shadowGradientUV.y -= 0.5;
+            colorGradientUV.y -= 0.5;
+        }
 
-    if(!_DAYTIME)
-    {
-        shadowGradientUV.y -= 0.5;
-        colorGradientUV.y -= 0.5;
-    }
+        mainLight.shadowAttenuation = SAMPLE_TEXTURE2D(_MainLightShadowRamp, sampler_MainLightShadowRamp, shadowGradientUV);
+        half4 sampleColor = SAMPLE_TEXTURE2D(_MainLightShadowRamp, sampler_MainLightShadowRamp, colorGradientUV);
 
-    mainLight.shadowAttenuation = SAMPLE_TEXTURE2D(_MainLightShadowRamp, sampler_MainLightShadowRamp, shadowGradientUV);
-    half4 sampleColor = SAMPLE_TEXTURE2D(_MainLightShadowRamp, sampler_MainLightShadowRamp, colorGradientUV);
+        // mainLight.shadowAttenuation = SAMPLE_TEXTURE2D(_Gradient, sampler_Gradient, shadowGradientUV);
+        // half4 sampleColor = SAMPLE_TEXTURE2D(_Gradient, sampler_Gradient, colorGradientUV);
 
-    // mainLight.shadowAttenuation = SAMPLE_TEXTURE2D(_Gradient, sampler_Gradient, shadowGradientUV);
-    // half4 sampleColor = SAMPLE_TEXTURE2D(_Gradient, sampler_Gradient, colorGradientUV);
-
-    mainLight.color = lerp(mainLight.color, sampleColor.rgb ,sampleColor.a);
+        mainLight.color = lerp(mainLight.color, sampleColor.rgb ,sampleColor.a);
+    #endif
 #endif
 
     #if defined(_SCREEN_SPACE_OCCLUSION)
