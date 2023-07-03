@@ -170,61 +170,66 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
                 // color += bloom.xyz * BloomTint;
 
                 // BH3
-            // #define _EXPOSURE (16)
-            // #define _CONSTRAST (2.40)
+            #define _EXPOSURE (16)
+            #define _CONSTRAST (2.40)
+                color = LinearToSRGB(color);
+                bloom = (bloom);
+                float3 bloomedCol = bloom.xyz * 0.75 + color * 0.25;
+                float3 expTemp = max(1 - exp2(bloomedCol * (-_EXPOSURE)), 0.0001);
+                float3 constrastColor = (_CONSTRAST + 0.01) * log2(expTemp);
+                constrastColor = exp2(constrastColor);
+                color = constrastColor;
+                color = SRGBToLinear(color);
+                // return half4(color, 1.0);
 
-            //     float3 bloomedCol = bloom.xyz * 0.75 + color * 0.25;
-            //     float3 expTemp = max(1 - exp2(bloomedCol * (-_EXPOSURE)), 0.0001);
-            //     float3 constrastColor = (_CONSTRAST + 0.01) * log2(expTemp);
-            //     constrastColor = exp2(constrastColor);
-            //     color = constrastColor;
+            //     // Genshin
+            // #define _BLOOM_INTENSITY    (0.75)
+            // #define _BLOOM_EXPOSSURE    (1.0)
+            // // input is Linear, but use this to offset URP lut
+            // #define _USER_INPUTGAMMA    (2.2)
+            // #define _COLOR_GRADING_PARAM float4(0.00391, 0.0625, 15, 1)
+            // #define _WHITEBALANCE0      float4(1.00032, -0.00002, 0.00002, 0.00)
+            // #define _WHITEBALANCE1      float4(0.0004, 0.99977, 0.00008, 0.00)
+            // #define _WHITEBALANCE2      float4(-0.00002, -0.00002, 1.00058, 0.00)
 
-                // Genshin
-            #define _BLOOM_INTENSITY    (0.75)
-            #define _BLOOM_EXPOSSURE    (1.0)
-            #define _USER_INPUTGAMMA    (1.0)
-            #define _COLOR_GRADING_PARAM float4(0.00391, 0.0625, 15, 1)
-            #define _WHITEBALANCE0      float4(1.00032, -0.00002, 0.00002, 0.00)
-            #define _WHITEBALANCE1      float4(0.0004, 0.99977, 0.00008, 0.00)
-            #define _WHITEBALANCE2      float4(-0.00002, -0.00002, 1.00058, 0.00)
+            //     half3 bloomedCol = bloom.xyz * _BLOOM_INTENSITY + color.xyz;
+            //     // whiteBalance
+            //     half3 wbColor = bloomedCol.g * _WHITEBALANCE1.xyz;
+            //     wbColor = _WHITEBALANCE0.xyz * bloomedCol.r + wbColor;
+            //     wbColor = _WHITEBALANCE2.xyz * bloomedCol.b + wbColor;
 
-                half3 bloomedCol = bloom.xyz * _BLOOM_INTENSITY + color.xyz;
-                // whiteBalance
-                half3 wbColor = bloomedCol.g * _WHITEBALANCE1.xyz;
-                wbColor = _WHITEBALANCE0.xyz * bloomedCol.r + wbColor;
-                wbColor = _WHITEBALANCE2.xyz * bloomedCol.b + wbColor;
+            //     // Expossure (Tonemapping)
+            //     half3 expossuredCol = wbColor * _BLOOM_EXPOSSURE;
+            //     half3 temp1 = expossuredCol * (expossuredCol * 1.36 + 0.047);
+            //     half3 temp2 = expossuredCol * (expossuredCol * 0.93 + 0.56) + 0.14;
+            //     half3 tonemappedCol = temp1 / temp2;
+            //     tonemappedCol = clamp(tonemappedCol, 0.0, 1.0);
 
-                // Expossure (Tonemapping)
-                half3 expossuredCol = wbColor * _BLOOM_EXPOSSURE;
-                half3 temp1 = expossuredCol * (expossuredCol * 1.36 + 0.047);
-                half3 temp2 = expossuredCol * (expossuredCol * 0.93 + 0.56) + 0.14;
-                half3 tonemappedCol = temp1 / temp2;
-                tonemappedCol = clamp(tonemappedCol, 0.0, 1.0);
+            //     half3 mainCol = tonemappedCol;
+            //     // half3 mainCol = wbColorwbColor;//tone mapping disable
 
-                half3 mainCol = tonemappedCol;
-                // half3 mainCol = wbColorwbColor;//tone mapping disable
+            //     mainCol.xyz = max(mainCol.xyz, 0);
+            //     mainCol.xyz = log2(mainCol.xyz);
+            //     mainCol.xyz = mainCol.xyz * 0.41666666;
+            //     mainCol.xyz = exp2(mainCol.xyz);
+            //     mainCol.xyz = mainCol.xyz * 1.0549999 - 0.055;
+            //     mainCol.xyz = max(mainCol.xyz, 0);
 
-                mainCol.xyz = max(mainCol.xyz, 0);
-                mainCol.xyz = log2(mainCol.xyz);
-                mainCol.xyz = mainCol.xyz * 0.41666666;
-                mainCol.xyz = exp2(mainCol.xyz);
-                mainCol.xyz = mainCol.xyz * 1.0549999 - 0.055;
-                mainCol.xyz = max(mainCol.xyz, 0);
+            //     mainCol.xyz = log2(mainCol.xyz);
+            //     mainCol.xyz = mainCol.xyz * _USER_INPUTGAMMA;
+            //     mainCol.xyz = exp2(mainCol.xyz);
 
-                mainCol.xyz = log2(mainCol.xyz);
-                mainCol.xyz = mainCol.xyz * _USER_INPUTGAMMA;
-                mainCol.xyz = exp2(mainCol.xyz);
+            //     // float2 texCoord2 = float2 (uv.x * _SourceTex_TexelSize.z, uv.y * _SourceTex_TexelSize.w);
+            //     // texCoord2 = texCoord2 * _SourceTex_TexelSize.zw + float2(0.05469, 0.46091);
+            //     // float paramTemp = texCoord2.y * 543.31 + texCoord2.x;
+            //     // paramTemp = sin(paramTemp);
+            //     // paramTemp = (paramTemp * 493013.0);
+            //     // paramTemp = frac(paramTemp);
+            //     // paramTemp = (paramTemp - 0.5);
 
-                
-                float paramTemp = (uv.y * _SourceTex_TexelSize.w * _SourceTex_TexelSize.w + 0.2428) * 543.31 + (uv.x * _SourceTex_TexelSize.z * _SourceTex_TexelSize.z + 0.76172);
-                paramTemp = sin(paramTemp);
-                paramTemp = (paramTemp * 493013.0);
-                paramTemp = frac(paramTemp);
-                paramTemp = (paramTemp - 0.5);
-
-                color = paramTemp * 0.0039215689 + mainCol;
-                color = Gamma22ToLinear(color);
-                return half4(color, 1);
+            //     // color = paramTemp * 0.0039215689 + mainCol;
+            //     color = mainCol;
+            //     // color = Gamma22ToLinear(color);
 
                 #if defined(BLOOM_DIRT)
                 {

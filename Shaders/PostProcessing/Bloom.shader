@@ -279,12 +279,20 @@ Shader "Hidden/Universal Render Pipeline/Bloom"
                 mainCol += (SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, i.uv1));
                 mainCol += (SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, i.uv2));
                 mainCol += (SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, i.uv3));  
-                mainCol /= 4;
+                mainCol *= 0.25;
 
-                mainCol *= 1 / (1 + 0.1 * Luminance(mainCol.rgb));
+                // mainCol *= 1 / (1 + 0.1 * Luminance(mainCol.rgb));
                 mainCol -= _Bloomv2_Params.y;
                 mainCol = max(half3(0,0,0), mainCol.rgb);
+                // C# mul
                 mainCol *= _Bloomv2_Params.x;
+
+
+                // mainCol = LinearToSRGB(mainCol);
+                // mainCol -= _Bloomv2_Params.y;
+                // mainCol = max(half3(0,0,0), mainCol.rgb);
+                // mainCol *= _Bloomv2_Params.x;
+                // mainCol = SRGBToLinear(mainCol);
 
                 return EncodeHDR(mainCol);
             }
@@ -683,7 +691,7 @@ Shader "Hidden/Universal Render Pipeline/Bloom"
             half4 FragUpSample_v2(v2f_upsampler i) : SV_Target
             {
                 half4 combineScale = half4(0.3,0.3,0.26,0.15);
-                // half4 combineScale = half4(0.24, 0.24, 0.28, 0.225);
+                // half4 combineScale = half4(0.24, 0.24, 0.28, 0.225);//bh3
                 half3 main = DecodeHDR(SAMPLE_TEXTURE2D_X(_SourceTex,   sampler_LinearClamp, i.uv)) * combineScale.x;
                 half3 mip0 = DecodeHDR(SAMPLE_TEXTURE2D_X(_BloomMip0, sampler_LinearClamp, i.uv))* combineScale.y;
                 half3 mip1 = DecodeHDR(SAMPLE_TEXTURE2D_X(_BloomMip1, sampler_LinearClamp, i.uv))* combineScale.z;
