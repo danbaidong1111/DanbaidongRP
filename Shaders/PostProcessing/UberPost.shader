@@ -156,6 +156,34 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
                 half4 bloom = SAMPLE_TEXTURE2D_X(_Bloom_Texture, sampler_LinearClamp, uvDistorted);
                 #endif
 
+#define _MODIFY_BH3_20230710 (1)
+#if _MODIFY_BH3_20230710
+                // #if UNITY_COLORSPACE_GAMMA
+                // // bloom.xyz *= bloom.xyz; // γ to linear
+                // #endif
+
+                // UNITY_BRANCH
+                // if (BloomRGBM > 0)
+                // {
+                //     bloom.xyz = DecodeRGBM(bloom);
+                // }
+
+                // bloom.xyz *= BloomIntensity;
+                // // color += bloom.xyz * BloomTint;
+
+                // BH3
+            #define _EXPOSURE (16)
+            #define _CONSTRAST (2.40)
+                color = LinearToSRGB(color);
+                // bloom = float4(0.05704,0.04489,0.0444,0.6582);
+                float3 bloomedCol = bloom.xyz * 0.75 + color * 0.25;
+                float3 expTemp = max(1 - exp2(bloomedCol * (-_EXPOSURE)), 9.9999997e-05);
+                float3 constrastColor = (_CONSTRAST + 0.0099999998) * log2(expTemp);
+                constrastColor = exp2(constrastColor);
+                color = constrastColor;
+                // color = SRGBToLinear(color);
+                return half4((color), 1.0);
+#else
                 #if UNITY_COLORSPACE_GAMMA
                 bloom.xyz *= bloom.xyz; // γ to linear
                 #endif
@@ -181,7 +209,7 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
                 color = constrastColor;
                 color = SRGBToLinear(color);
                 // return half4(color, 1.0);
-
+#endif
             //     // Genshin
             // #define _BLOOM_INTENSITY    (0.75)
             // #define _BLOOM_EXPOSSURE    (1.0)

@@ -23,7 +23,7 @@ Shader "Hidden/Universal Render Pipeline/Bloom"
         #define ThresholdKnee       _Params.w
 
         half4 EncodeHDR(half3 color)
-        {
+        {return color.xyzz;
         #if _USE_RGBM
             half4 outColor = EncodeRGBM(color);
         #else
@@ -38,7 +38,7 @@ Shader "Hidden/Universal Render Pipeline/Bloom"
         }
 
         half3 DecodeHDR(half4 color)
-        {
+        {return color.xyz;
         #if UNITY_COLORSPACE_GAMMA
             color.xyz *= color.xyz; // γ to linear
         #endif
@@ -690,8 +690,8 @@ Shader "Hidden/Universal Render Pipeline/Bloom"
 
             half4 FragUpSample_v2(v2f_upsampler i) : SV_Target
             {
-                half4 combineScale = half4(0.3,0.3,0.26,0.15);
-                // half4 combineScale = half4(0.24, 0.24, 0.28, 0.225);//bh3
+                // half4 combineScale = half4(0.3,0.3,0.26,0.15);
+                half4 combineScale = half4(0.24, 0.24, 0.28, 0.225);//bh3
                 half3 main = DecodeHDR(SAMPLE_TEXTURE2D_X(_SourceTex,   sampler_LinearClamp, i.uv)) * combineScale.x;
                 half3 mip0 = DecodeHDR(SAMPLE_TEXTURE2D_X(_BloomMip0, sampler_LinearClamp, i.uv))* combineScale.y;
                 half3 mip1 = DecodeHDR(SAMPLE_TEXTURE2D_X(_BloomMip1, sampler_LinearClamp, i.uv))* combineScale.z;
