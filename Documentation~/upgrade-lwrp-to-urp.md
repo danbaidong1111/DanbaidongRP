@@ -50,7 +50,7 @@ The following Shader names have been changed for URP, so you need to manually up
 #### Upgrading include paths
 URP uses different include paths to LWRP. LWRP 7.x.x contains forwarding includes, so your custom Shaders will upgrade from LWRP to URP. However, URP 7.x.x does not contain forwarding includes, so you must then manually update the include paths.
 
-* Change all instances of `#include 'Packages/com.unity.render-pipelines.lightweight/xxx'` to  `#include 'Packages/com.unity.render-pipelines.danbaidong/xxx'`
+* Change all instances of `#include 'Packages/com.unity.render-pipelines.lightweight/xxx'` to  `#include 'Packages/com.unity.render-pipelines.universal/xxx'`
 
 ### Upgrading namespaces
 In the .cs files in your Project, find and replace references to the LWRP namespace with the new Universal namespace.
@@ -59,7 +59,7 @@ In the .cs files in your Project, find and replace references to the LWRP namesp
 
 ## Upgrading post-processing effects
 
-URP version 7.x supports both [Post Processing Stack v2 (PPv2) and its own integrated post-processing solution](https://docs.unity3d.com/Packages/com.unity.render-pipelines.danbaidong@7.4/manual/integration-with-post-processing.html). If you have the Post Processing Version 2 package installed in your Project and you want to use URP's integrated post-processing solution, you need to delete the Post Processing Stack v2 package before you install URP into your Project. When you have installed URP, you can then recreate your post-processing effects.
+URP version 7.x supports both [Post Processing Stack v2 (PPv2) and its own integrated post-processing solution](https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@7.4/manual/integration-with-post-processing.html). If you have the Post Processing Version 2 package installed in your Project and you want to use URP's integrated post-processing solution, you need to delete the Post Processing Stack v2 package before you install URP into your Project. When you have installed URP, you can then recreate your post-processing effects.
 
 Upgrading post-processing effects from LWRP to URP is a manual process. You must manually recreate each Post-Processing Profile in your Project, using URP's post-processing implementation.
 
@@ -79,14 +79,14 @@ To install URP as a dependency of the Project:
 * At the top of the dependencies section, add the following entry:
 
 ```json
-"com.unity.render-pipelines.danbaidong": "[Version number you noted earlier]"
+"com.unity.render-pipelines.universal": "[Version number you noted earlier]"
 ```
 
 So, for example, if the version of URP was 7.1.1, your dependencies section would look like this:
 
 ```json
 "dependencies": {
-    "com.unity.render-pipelines.danbaidong": "7.1.1",
+    "com.unity.render-pipelines.universal": "7.1.1",
     ...
 }
 ```

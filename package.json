@@ -1,14 +1,14 @@
 {
   "name": "com.unity.render-pipelines.danbaidong",
-  "description": "The Universal Render Pipeline (URP) is a prebuilt Scriptable Render Pipeline, made by Unity. URP provides artist-friendly workflows that let you quickly and easily create optimized graphics across a range of platforms, from mobile to high-end consoles and PCs.",
-  "version": "10.5.0",
-  "unity": "2020.3",
-  "unityRelease": "4f1",
+  "description": "The Danbaidong Render Pipeline is a prebuilt Scriptable Render Pipeline, made by Unity. URP provides artist-friendly workflows that let you quickly and easily create optimized graphics across a range of platforms, from mobile to high-end consoles and PCs.",
+  "version": "14.0.8",
+  "unity": "2022.2",
   "displayName": "Danbaidong RP",
   "dependencies": {
-    "com.unity.mathematics": "1.1.0",
-    "com.unity.render-pipelines.core": "10.5.0",
-    "com.unity.shadergraph": "10.5.0"
+    "com.unity.mathematics": "1.2.1",
+    "com.unity.burst": "1.8.4",
+    "com.unity.render-pipelines.core": "14.0.8",
+    "com.unity.shadergraph": "14.0.8"
   },
   "keywords": [
     "graphics",
@@ -18,12 +18,11 @@
     "render",
     "pipeline"
   ],
-  "upmCi": {
-    "footprint": "f1f1497600d662d407762552c852c8e5e1a1be41"
-  },
-  "repository": {
-    "url": "https://github.com/Unity-Technologies/Graphics.git",
-    "type": "git",
-    "revision": "434e39e917b0d6d6a91fef17eb6f4479ad1fa385"
-  }
+  "samples": [
+    {
+      "displayName": "DanbaidongRP Package Samples",
+      "description": "Collection of scenes showcasing different features of the Danbaidong Render Pipeline.",
+      "path": "Samples~/DanbaidongRPPackageSamples"
+    }
+  ]
 }

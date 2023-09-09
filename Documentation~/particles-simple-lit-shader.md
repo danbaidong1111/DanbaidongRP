@@ -1,5 +1,3 @@
-**Important:** This page is subject to change during the 2019.1 beta cycle.
-
 # Particles Simple Lit Shader
 
 In the Universal Render Pipeline (URP), use this Shader for particles where performance is more important than photorealism. This Shader uses a simple approximation for lighting. Because this Shader [does not calculate for physical correctness and energy conservation](shading-model.md#simple-shading), it renders quickly.
@@ -55,7 +53,7 @@ The __Advanced__ settings affect behind-the-scenes rendering. They do not have a
 | __Flip-Book Blending__  | Tick this box to blend flip-book frames together. This is useful in texture sheet animations with limited frames, because it makes animations smoother. If you have performance issues, try turning this off. |
 | __Specular Highlights__ | When enabled, your particles have specular highlights from direct lighting, for example [Directional, Point, and Spot lights](https://docs.unity3d.com/Manual/Lighting.html). This means that each particle reflects the shine from these light sources. When disabled, these highlight calculations are not part of the Shader, which can make the Shader render faster. By default, this feature is enabled. |
 | __Vertex Streams__      | This list shows the vertex streams that this Material requires in order to work properly. If the vertex streams aren’t correctly assigned, the __Fix Now__ button appears. Click this button to apply the correct setup of vertex streams to the Particle System that this Material is assigned to. |
-| __Priority__            | Use this slider to determine the chronological rendering order for a Material. URP renders Materials with higher values first. You can use this to reduce overdraw on devices by making the pipeline render Materials in front of other Materials first, so it doesn't have to render overlapping areas twice. This works similarly to the [render queue](https://docs.unity3d.com/ScriptReference/Material-renderQueue.html) in the built-in Unity render pipeline. |
+| __Sorting Priority__            | Use this slider to determine the chronological rendering order for a Material. URP renders Materials with lower values first. You can use this to reduce overdraw on devices by making the pipeline render Materials in front of other Materials first, so it doesn't have to render overlapping areas twice. This works similarly to the [render queue](https://docs.unity3d.com/ScriptReference/Material-renderQueue.html) in the built-in Unity render pipeline. |
 
 
 #### Transparent surface type

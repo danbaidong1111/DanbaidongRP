@@ -5,16 +5,34 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
         #pragma multi_compile_local_fragment _ _DISTORTION
         #pragma multi_compile_local_fragment _ _CHROMATIC_ABERRATION
         #pragma multi_compile_local_fragment _ _BLOOM_LQ _BLOOM_HQ _BLOOM_LQ_DIRT _BLOOM_HQ_DIRT
-        #pragma multi_compile_local_fragment _ _HDR_GRADING _TONEMAP_GT _TONEMAP_ACES_SAMPLE_VER _TONEMAP_ACES _TONEMAP_NEUTRAL
+        #pragma multi_compile_local_fragment _ _HDR_GRADING _TONEMAP_ACES _TONEMAP_NEUTRAL
         #pragma multi_compile_local_fragment _ _FILM_GRAIN
         #pragma multi_compile_local_fragment _ _DITHERING
-        #pragma multi_compile_local_fragment _ _LINEAR_TO_SRGB_CONVERSION
-        #pragma multi_compile _ _USE_DRAW_PROCEDURAL
+        #pragma multi_compile_local_fragment _ _GAMMA_20 _LINEAR_TO_SRGB_CONVERSION
+        #pragma multi_compile_local_fragment _ _USE_FAST_SRGB_LINEAR_CONVERSION
+        #pragma multi_compile_fragment _ _FOVEATED_RENDERING_NON_UNIFORM_RASTER
+        // Foveated rendering currently not supported in dxc on metal
+        #pragma never_use_dxc metal
+        #pragma multi_compile_fragment _ DEBUG_DISPLAY
+        #pragma multi_compile_fragment _ SCREEN_COORD_OVERRIDE
+        #pragma multi_compile_local_fragment _ HDR_INPUT HDR_ENCODING
+
+        #ifdef HDR_ENCODING
+        #define HDR_INPUT 1 // this should be defined when HDR_ENCODING is defined
+        #endif
 
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Filtering.hlsl"
+        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ScreenCoordOverride.hlsl"
+#if defined(HDR_ENCODING)
+        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/HDROutput.hlsl"
+#endif
+
         #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
         #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Debug/DebuggingFullscreen.hlsl"
+        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRendering.hlsl"
 
         // Hardcoded dependencies to reduce the number of variants
         #if _BLOOM_LQ || _BLOOM_HQ || _BLOOM_LQ_DIRT || _BLOOM_HQ_DIRT
@@ -24,13 +42,13 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
             #endif
         #endif
 
-        TEXTURE2D_X(_SourceTex);
         TEXTURE2D_X(_Bloom_Texture);
         TEXTURE2D(_LensDirt_Texture);
         TEXTURE2D(_Grain_Texture);
         TEXTURE2D(_InternalLut);
         TEXTURE2D(_UserLut);
         TEXTURE2D(_BlueNoise_Texture);
+        TEXTURE2D_X(_OverlayUITexture);
 
         float4 _Lut_Params;
         float4 _UserLut_Params;
@@ -43,12 +61,14 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
         float _Chroma_Params;
         half4 _Vignette_Params1;
         float4 _Vignette_Params2;
+    #ifdef USING_STEREO_MATRICES
+        float4 _Vignette_ParamsXR;
+    #endif
         float2 _Grain_Params;
         float4 _Grain_TilingParams;
         float4 _Bloom_Texture_TexelSize;
         float4 _Dithering_Params;
-
-        float4 _SourceTex_TexelSize;
+        float4 _HDROutputLuminanceParams;
 
         #define DistCenter              _Distortion_Params1.xy
         #define DistAxis                _Distortion_Params1.zw
@@ -67,7 +87,12 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
         #define LensDirtIntensity       _LensDirt_Intensity.x
 
         #define VignetteColor           _Vignette_Params1.xyz
+    #ifdef USING_STEREO_MATRICES
+        #define VignetteCenterEye0      _Vignette_ParamsXR.xy
+        #define VignetteCenterEye1      _Vignette_ParamsXR.zw
+    #else
         #define VignetteCenter          _Vignette_Params2.xy
+    #endif
         #define VignetteIntensity       _Vignette_Params2.z
         #define VignetteSmoothness      _Vignette_Params2.w
         #define VignetteRoundness       _Vignette_Params1.w
@@ -84,6 +109,11 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
 
         #define DitheringScale          _Dithering_Params.xy
         #define DitheringOffset         _Dithering_Params.zw
+
+        #define MinNits                 _HDROutputLuminanceParams.x
+        #define MaxNits                 _HDROutputLuminanceParams.y
+        #define PaperWhite              _HDROutputLuminanceParams.z
+        #define OneOverPaperWhite       _HDROutputLuminanceParams.w
 
         float2 DistortUV(float2 uv)
         {
@@ -112,11 +142,11 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
             return uv;
         }
 
-        half4 Frag(Varyings input) : SV_Target
+        half4 FragUberPost(Varyings input) : SV_Target
         {
             UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-            float2 uv = UnityStereoTransformScreenSpaceTex(input.uv);
+            float2 uv = SCREEN_COORD_APPLY_SCALEBIAS(UnityStereoTransformScreenSpaceTex(input.texcoord));
             float2 uvDistorted = DistortUV(uv);
 
             half3 color = (0.0).xxx;
@@ -129,61 +159,38 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
                 float2 end = uv - coords * dot(coords, coords) * ChromaAmount;
                 float2 delta = (end - uv) / 3.0;
 
-                half r = SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, uvDistorted                ).x;
-                half g = SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, DistortUV(delta + uv)      ).y;
-                half b = SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, DistortUV(delta * 2.0 + uv)).z;
+                half r = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, SCREEN_COORD_REMOVE_SCALEBIAS(uvDistorted)                ).x;
+                half g = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, SCREEN_COORD_REMOVE_SCALEBIAS(DistortUV(delta + uv)      )).y;
+                half b = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, SCREEN_COORD_REMOVE_SCALEBIAS(DistortUV(delta * 2.0 + uv))).z;
 
                 color = half3(r, g, b);
             }
             #else
             {
-                color = SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, uvDistorted).xyz;
+                color = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, SCREEN_COORD_REMOVE_SCALEBIAS(uvDistorted)).xyz;
             }
             #endif
 
             // Gamma space... Just do the rest of Uber in linear and convert back to sRGB at the end
             #if UNITY_COLORSPACE_GAMMA
             {
-                color = SRGBToLinear(color);
+                color = GetSRGBToLinear(color);
             }
             #endif
 
             #if defined(BLOOM)
             {
-                #if _BLOOM_HQ && !defined(SHADER_API_GLES)
-                half4 bloom = SampleTexture2DBicubic(TEXTURE2D_X_ARGS(_Bloom_Texture, sampler_LinearClamp), uvDistorted, _Bloom_Texture_TexelSize.zwxy, (1.0).xx, unity_StereoEyeIndex);
-                #else
-                half4 bloom = SAMPLE_TEXTURE2D_X(_Bloom_Texture, sampler_LinearClamp, uvDistorted);
+                float2 uvBloom = uvDistorted;
+                #if defined(_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+                    uvBloom = RemapFoveatedRenderingDistort(uvBloom);
                 #endif
 
-#define _MODIFY_BH3_20230710 (1)
-#if _MODIFY_BH3_20230710
-                // #if UNITY_COLORSPACE_GAMMA
-                // // bloom.xyz *= bloom.xyz; // γ to linear
-                // #endif
+                #if _BLOOM_HQ && !defined(SHADER_API_GLES)
+                half4 bloom = SampleTexture2DBicubic(TEXTURE2D_X_ARGS(_Bloom_Texture, sampler_LinearClamp), SCREEN_COORD_REMOVE_SCALEBIAS(uvBloom), _Bloom_Texture_TexelSize.zwxy, (1.0).xx, unity_StereoEyeIndex);
+                #else
+                half4 bloom = SAMPLE_TEXTURE2D_X(_Bloom_Texture, sampler_LinearClamp, SCREEN_COORD_REMOVE_SCALEBIAS(uvBloom));
+                #endif
 
-                // UNITY_BRANCH
-                // if (BloomRGBM > 0)
-                // {
-                //     bloom.xyz = DecodeRGBM(bloom);
-                // }
-
-                // bloom.xyz *= BloomIntensity;
-                // // color += bloom.xyz * BloomTint;
-
-                // BH3
-            #define _EXPOSURE (16)
-            #define _CONSTRAST (2.40)
-                color = LinearToSRGB(color);
-                // bloom = float4(0.05704,0.04489,0.0444,0.6582);
-                float3 bloomedCol = bloom.xyz * 0.75 + color * 0.25;
-                float3 expTemp = max(1 - exp2(bloomedCol * (-_EXPOSURE)), 9.9999997e-05);
-                float3 constrastColor = (_CONSTRAST + 0.0099999998) * log2(expTemp);
-                constrastColor = exp2(constrastColor);
-                color = constrastColor;
-                // color = SRGBToLinear(color);
-                return half4((color), 1.0);
-#else
                 #if UNITY_COLORSPACE_GAMMA
                 bloom.xyz *= bloom.xyz; // γ to linear
                 #endif
@@ -195,69 +202,7 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
                 }
 
                 bloom.xyz *= BloomIntensity;
-                // color += bloom.xyz * BloomTint;
-
-                // BH3
-            #define _EXPOSURE (16)
-            #define _CONSTRAST (2.40)
-                color = LinearToSRGB(color);
-                bloom = (bloom);
-                float3 bloomedCol = bloom.xyz * 0.75 + color * 0.25;
-                float3 expTemp = max(1 - exp2(bloomedCol * (-_EXPOSURE)), 0.0001);
-                float3 constrastColor = (_CONSTRAST + 0.01) * log2(expTemp);
-                constrastColor = exp2(constrastColor);
-                color = constrastColor;
-                color = SRGBToLinear(color);
-                // return half4(color, 1.0);
-#endif
-            //     // Genshin
-            // #define _BLOOM_INTENSITY    (0.75)
-            // #define _BLOOM_EXPOSSURE    (1.0)
-            // // input is Linear, but use this to offset URP lut
-            // #define _USER_INPUTGAMMA    (2.2)
-            // #define _COLOR_GRADING_PARAM float4(0.00391, 0.0625, 15, 1)
-            // #define _WHITEBALANCE0      float4(1.00032, -0.00002, 0.00002, 0.00)
-            // #define _WHITEBALANCE1      float4(0.0004, 0.99977, 0.00008, 0.00)
-            // #define _WHITEBALANCE2      float4(-0.00002, -0.00002, 1.00058, 0.00)
-
-            //     half3 bloomedCol = bloom.xyz * _BLOOM_INTENSITY + color.xyz;
-            //     // whiteBalance
-            //     half3 wbColor = bloomedCol.g * _WHITEBALANCE1.xyz;
-            //     wbColor = _WHITEBALANCE0.xyz * bloomedCol.r + wbColor;
-            //     wbColor = _WHITEBALANCE2.xyz * bloomedCol.b + wbColor;
-
-            //     // Expossure (Tonemapping)
-            //     half3 expossuredCol = wbColor * _BLOOM_EXPOSSURE;
-            //     half3 temp1 = expossuredCol * (expossuredCol * 1.36 + 0.047);
-            //     half3 temp2 = expossuredCol * (expossuredCol * 0.93 + 0.56) + 0.14;
-            //     half3 tonemappedCol = temp1 / temp2;
-            //     tonemappedCol = clamp(tonemappedCol, 0.0, 1.0);
-
-            //     half3 mainCol = tonemappedCol;
-            //     // half3 mainCol = wbColorwbColor;//tone mapping disable
-
-            //     mainCol.xyz = max(mainCol.xyz, 0);
-            //     mainCol.xyz = log2(mainCol.xyz);
-            //     mainCol.xyz = mainCol.xyz * 0.41666666;
-            //     mainCol.xyz = exp2(mainCol.xyz);
-            //     mainCol.xyz = mainCol.xyz * 1.0549999 - 0.055;
-            //     mainCol.xyz = max(mainCol.xyz, 0);
-
-            //     mainCol.xyz = log2(mainCol.xyz);
-            //     mainCol.xyz = mainCol.xyz * _USER_INPUTGAMMA;
-            //     mainCol.xyz = exp2(mainCol.xyz);
-
-            //     // float2 texCoord2 = float2 (uv.x * _SourceTex_TexelSize.z, uv.y * _SourceTex_TexelSize.w);
-            //     // texCoord2 = texCoord2 * _SourceTex_TexelSize.zw + float2(0.05469, 0.46091);
-            //     // float paramTemp = texCoord2.y * 543.31 + texCoord2.x;
-            //     // paramTemp = sin(paramTemp);
-            //     // paramTemp = (paramTemp * 493013.0);
-            //     // paramTemp = frac(paramTemp);
-            //     // paramTemp = (paramTemp - 0.5);
-
-            //     // color = paramTemp * 0.0039215689 + mainCol;
-            //     color = mainCol;
-            //     // color = Gamma22ToLinear(color);
+                color += bloom.xyz * BloomTint;
 
                 #if defined(BLOOM_DIRT)
                 {
@@ -280,6 +225,12 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
             UNITY_BRANCH
             if (VignetteIntensity > 0)
             {
+            #ifdef USING_STEREO_MATRICES
+                // With XR, the views can use asymmetric FOV which will have the center of each
+                // view be at a different location.
+                const float2 VignetteCenter = unity_StereoEyeIndex == 0 ? VignetteCenterEye0 : VignetteCenterEye1;
+            #endif
+
                 color = ApplyVignette(color, uvDistorted, VignetteCenter, VignetteIntensity, VignetteRoundness, VignetteSmoothness, VignetteColor);
             }
 
@@ -290,20 +241,45 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
 
             #if _FILM_GRAIN
             {
-                color = ApplyGrain(color, uv, TEXTURE2D_ARGS(_Grain_Texture, sampler_LinearRepeat), GrainIntensity, GrainResponse, GrainScale, GrainOffset);
+                color = ApplyGrain(color, uv, TEXTURE2D_ARGS(_Grain_Texture, sampler_LinearRepeat), GrainIntensity, GrainResponse, GrainScale, GrainOffset, OneOverPaperWhite);
             }
             #endif
 
-            // Back to sRGB
-            #if UNITY_COLORSPACE_GAMMA || _LINEAR_TO_SRGB_CONVERSION
+            // When Unity is configured to use gamma color encoding, we ignore the request to convert to gamma 2.0 and instead fall back to sRGB encoding
+            #if _GAMMA_20 && !UNITY_COLORSPACE_GAMMA
             {
-                color = LinearToSRGB(color);
+                color = LinearToGamma20(color);
+            }
+            // Back to sRGB
+            #elif UNITY_COLORSPACE_GAMMA || _LINEAR_TO_SRGB_CONVERSION
+            {
+                color = GetLinearToSRGB(color);
             }
             #endif
 
             #if _DITHERING
             {
-                color = ApplyDithering(color, uv, TEXTURE2D_ARGS(_BlueNoise_Texture, sampler_PointRepeat), DitheringScale, DitheringOffset);
+                color = ApplyDithering(color, uv, TEXTURE2D_ARGS(_BlueNoise_Texture, sampler_PointRepeat), DitheringScale, DitheringOffset, PaperWhite, OneOverPaperWhite);
+                // Assume color > 0 and prevent 0 - ditherNoise.
+                // Negative colors can cause problems if fed back to the postprocess via render to FP16 texture.
+                color = max(color, 0);
+            }
+            #endif
+
+            #ifdef HDR_ENCODING
+            {
+                float4 uiSample = SAMPLE_TEXTURE2D_X(_OverlayUITexture, sampler_PointClamp, input.texcoord);
+                color.rgb = SceneUIComposition(uiSample, color.rgb, PaperWhite, MaxNits);
+                color.rgb = OETF(color.rgb);
+            }
+            #endif
+
+            #if defined(DEBUG_DISPLAY)
+            half4 debugColor = 0;
+
+            if(CanDebugOverrideOutputColor(half4(color, 1), uv, debugColor))
+            {
+                return debugColor;
             }
             #endif
 
@@ -314,7 +290,10 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
 
     SubShader
     {
-        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline"}
+        Tags
+        {
+            "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline"
+        }
         LOD 100
         ZTest Always ZWrite Off Cull Off
 
@@ -323,8 +302,8 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
             Name "UberPost"
 
             HLSLPROGRAM
-                #pragma vertex FullscreenVert
-                #pragma fragment Frag
+                #pragma vertex Vert
+                #pragma fragment FragUberPost
             ENDHLSL
         }
     }

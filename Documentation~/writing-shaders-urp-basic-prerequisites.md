@@ -2,7 +2,7 @@
 
 To follow the examples in this section:
 
-1. Install URP into an existing Unity project, or create a new project using the [__Universal Project Template__](https://docs.unity3d.com/Packages/com.unity.render-pipelines.danbaidong@8.0/manual/creating-a-new-project-with-urp.html).
+1. Install URP into an existing Unity project, or create a new project using the [__Universal Project Template__](https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@8.0/manual/creating-a-new-project-with-urp.html).
 
 2. In the sample Scene, create a GameObject to test the shaders on; for example, a capsule.
 

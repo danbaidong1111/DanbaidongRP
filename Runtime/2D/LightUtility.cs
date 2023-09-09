@@ -1,15 +1,20 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using Unity.Collections;
 using Unity.Mathematics;
-using UnityEngine.Experimental.Rendering.Universal.LibTessDotNet;
-using UnityEngine.Rendering;
 using UnityEngine.U2D;
 
-namespace UnityEngine.Experimental.Rendering.Universal
+namespace UnityEngine.Rendering.Universal
 {
     internal static class LightUtility
     {
+        public static bool CheckForChange(Light2D.LightType a, ref Light2D.LightType b)
+        {
+            var changed = a != b;
+            b = a;
+            return changed;
+        }
+
         public static bool CheckForChange(int a, ref int b)
         {
             var changed = a != b;
@@ -31,19 +36,17 @@ namespace UnityEngine.Experimental.Rendering.Universal
             return changed;
         }
 
-        private struct ParametricLightMeshVertex
+        private enum PivotType
         {
-            public float3 position;
-            public Color color;
+            PivotBase,
+            PivotCurve,
+            PivotIntersect,
+            PivotSkip,
+            PivotClip
+        };
 
-            public static readonly VertexAttributeDescriptor[] VertexLayout = new[]
-            {
-                new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.Float32, 3),
-                new VertexAttributeDescriptor(VertexAttribute.Color, VertexAttributeFormat.Float32, 4),
-            };
-        }
-
-        private struct SpriteLightMeshVertex
+        [Serializable]
+        internal struct LightMeshVertex
         {
             public Vector3 position;
             public Color color;
@@ -57,7 +60,339 @@ namespace UnityEngine.Experimental.Rendering.Universal
             };
         }
 
-        public static Bounds GenerateParametricMesh(Mesh mesh, float radius, float falloffDistance, float angle, int sides)
+        static bool TestPivot(List<IntPoint> path, int activePoint, long lastPoint)
+        {
+            for (int i = activePoint; i < path.Count; ++i)
+            {
+                if (path[i].N > lastPoint)
+                    return true;
+            }
+
+            return (path[activePoint].N == -1);
+        }
+
+        // Degenerate Pivots at the End Points.
+        static List<IntPoint> DegeneratePivots(List<IntPoint> path, List<IntPoint> inPath, ref int interiorStart)
+        {
+            List<IntPoint> degenerate = new List<IntPoint>();
+            var minN = path[0].N;
+            var maxN = path[0].N;
+            for (int i = 1; i < path.Count; ++i)
+            {
+                if (path[i].N != -1)
+                {
+                    minN = Math.Min(minN, path[i].N);
+                    maxN = Math.Max(maxN, path[i].N);
+                }
+            }
+
+            for (long i = 0; i < minN; ++i)
+            {
+                IntPoint ins = path[(int)minN];
+                ins.N = i;
+                degenerate.Add(ins);
+            }
+            degenerate.AddRange(path.GetRange(0, path.Count));
+            interiorStart = degenerate.Count;
+            for (long i = maxN + 1; i < inPath.Count; ++i)
+            {
+                IntPoint ins = inPath[(int)i];
+                ins.N = i;
+                degenerate.Add(ins);
+            }
+            return degenerate;
+        }
+
+        // Ensure that we get a valid path from 0.
+        static List<IntPoint> SortPivots(List<IntPoint> outPath, List<IntPoint> inPath)
+        {
+            List<IntPoint> sorted = new List<IntPoint>();
+            var min = outPath[0].N;
+            var max = outPath[0].N;
+            var minIndex = 0;
+            bool newMin = true;
+            for (int i = 1; i < outPath.Count; ++i)
+            {
+                if (max > outPath[i].N && newMin && outPath[i].N != -1)
+                {
+                    min = max = outPath[i].N;
+                    minIndex = i;
+                    newMin = false;
+                }
+                else if (outPath[i].N >= max)
+                {
+                    max = outPath[i].N;
+                    newMin = true;
+                }
+            }
+            sorted.AddRange(outPath.GetRange(minIndex, (outPath.Count - minIndex)));
+            sorted.AddRange(outPath.GetRange(0, minIndex));
+            return sorted;
+        }
+
+        // Ensure that all points eliminated due to overlaps and intersections are accounted for Tessellation.
+        static List<IntPoint> FixPivots(List<IntPoint> outPath, List<IntPoint> inPath, ref int interiorStart)
+        {
+            var path = SortPivots(outPath, inPath);
+            long pivotPoint = path[0].N;
+
+            // Connect Points for Overlaps.
+            for (int i = 1; i < path.Count; ++i)
+            {
+                var j = (i == path.Count - 1) ? 0 : (i + 1);
+                var prev = path[i - 1];
+                var curr = path[i];
+                var next = path[j];
+
+                if (prev.N > curr.N)
+                {
+                    var incr = TestPivot(path, i, pivotPoint);
+                    if (incr)
+                    {
+                        if (prev.N == next.N)
+                            curr.N = prev.N;
+                        else
+                            curr.N = (pivotPoint + 1) < inPath.Count ? (pivotPoint + 1) : 0;
+                        curr.D = 3;
+                        path[i] = curr;
+                    }
+                }
+                pivotPoint = path[i].N;
+            }
+
+            // Insert Skipped Points.
+            for (int i = 1; i < path.Count - 1;)
+            {
+                var prev = path[i - 1];
+                var curr = path[i];
+                var next = path[i + 1];
+
+                if (curr.N - prev.N > 1)
+                {
+                    if (curr.N == next.N)
+                    {
+                        IntPoint ins = curr;
+                        ins.N = (ins.N - 1);
+                        path[i] = ins;
+                    }
+                    else
+                    {
+                        IntPoint ins = curr;
+                        ins.N = (ins.N - 1);
+                        path.Insert(i, ins);
+                    }
+                }
+                else
+                {
+                    i++;
+                }
+            }
+
+            path = DegeneratePivots(path, inPath, ref interiorStart);
+            return path;
+        }
+
+        // Rough shape only used in Inspector for quick preview.
+        internal static List<Vector2> GetOutlinePath(Vector3[] shapePath, float offsetDistance)
+        {
+            const float kClipperScale = 10000.0f;
+            List<IntPoint> path = new List<IntPoint>();
+            List<Vector2> output = new List<Vector2>();
+            for (var i = 0; i < shapePath.Length; ++i)
+            {
+                var newPoint = new Vector2(shapePath[i].x, shapePath[i].y) * kClipperScale;
+                path.Add(new IntPoint((System.Int64)(newPoint.x), (System.Int64)(newPoint.y)));
+            }
+            List<List<IntPoint>> solution = new List<List<IntPoint>>();
+            ClipperOffset clipOffset = new ClipperOffset(24.0f);
+            clipOffset.AddPath(path, JoinType.jtRound, EndType.etClosedPolygon);
+            clipOffset.Execute(ref solution, kClipperScale * offsetDistance, path.Count);
+            if (solution.Count > 0)
+            {
+                int interiorStart = 0;
+                var outPath = solution[0];
+                outPath = FixPivots(outPath, path, ref interiorStart);
+
+                for (int i = 0; i < outPath.Count; ++i)
+                    output.Add(new Vector2(outPath[i].X / kClipperScale, outPath[i].Y / kClipperScale));
+            }
+            return output;
+        }
+
+        static void TransferToMesh(NativeArray<LightMeshVertex> vertices, int vertexCount, NativeArray<ushort> indices,
+            int indexCount, Light2D light)
+        {
+            var mesh = light.lightMesh;
+            mesh.SetVertexBufferParams(vertexCount, LightMeshVertex.VertexLayout);
+            mesh.SetVertexBufferData(vertices, 0, 0, vertexCount);
+            mesh.SetIndices(indices, 0, indexCount, MeshTopology.Triangles, 0, true);
+
+            light.vertices = new LightMeshVertex[vertexCount];
+            NativeArray<LightMeshVertex>.Copy(vertices, light.vertices, vertexCount);
+            light.indices = new ushort[indexCount];
+            NativeArray<ushort>.Copy(indices, light.indices, indexCount);
+        }
+
+        public static Bounds GenerateShapeMesh(Light2D light, Vector3[] shapePath, float falloffDistance)
+        {
+            const float kClipperScale = 10000.0f;
+
+            // todo Revisit this while we do Batching.
+            var meshInteriorColor = new Color(0.0f, 0, 0, 1.0f);
+            var meshExteriorColor = new Color(0.0f, 0, 0, 0.0f);
+
+            // Create shape geometry based on edges
+            int inEdgeCount = shapePath.Length;
+            NativeArray<int2> tessInEdges = new NativeArray<int2>(inEdgeCount, Allocator.Temp);
+            NativeArray<float2> tessInVertices = new NativeArray<float2>(inEdgeCount, Allocator.Temp);
+
+            for (int i = 0; i < inEdgeCount; ++i)
+            {
+                int edgeEnd = i + 1;
+                if (edgeEnd == inEdgeCount)
+                    edgeEnd = 0;
+
+                int2 edge = new int2(i, edgeEnd);
+                tessInEdges[i] = edge;
+
+                int index = edge.x;
+                tessInVertices[index] = new float2(shapePath[index].x, shapePath[index].y);
+            }
+
+            // Do tessellation
+            NativeArray<int> tessOutIndices = new NativeArray<int>(tessInEdges.Length * 8, Allocator.Temp);
+            NativeArray<float2> tessOutVertices = new NativeArray<float2>(tessInEdges.Length * 8, Allocator.Temp);
+            NativeArray<int2> tessOutEdges = new NativeArray<int2>(tessInEdges.Length * 8, Allocator.Temp);
+            int tessOutVertexCount = 0;
+            int tessOutIndexCount = 0;
+            int tessOutEdgeCount = 0;
+
+            UTess.ModuleHandle.Tessellate(Allocator.Temp, tessInVertices, tessInEdges, ref tessOutVertices, ref tessOutVertexCount, ref tessOutIndices, ref tessOutIndexCount, ref tessOutEdges, ref tessOutEdgeCount);
+
+            // Create falloff geometry with random noise to account for collinear points
+            var inputPointCount = shapePath.Length;
+            List<IntPoint> path = new List<IntPoint>();
+            for (var i = 0; i < inputPointCount; ++i)
+            {
+                var newPoint = new Vector2(shapePath[i].x, shapePath[i].y) * kClipperScale;
+                var addPoint = new IntPoint((System.Int64)(newPoint.x) + Random.Range(-100, 100), (System.Int64)(newPoint.y) + Random.Range(-100, 100));
+                addPoint.N = i; addPoint.D = -1;
+                path.Add(addPoint);
+            }
+            var lastPointIndex = inputPointCount - 1;
+            var interiorStartPoint = 0;
+
+            // Generate Bevels.
+            List<List<IntPoint>> solution = new List<List<IntPoint>>();
+            ClipperOffset clipOffset = new ClipperOffset(24.0f);
+            clipOffset.AddPath(path, JoinType.jtRound, EndType.etClosedPolygon);
+            clipOffset.Execute(ref solution, kClipperScale * falloffDistance, path.Count);
+
+            if (solution.Count > 0)
+            {
+                // Fix path for Pivots.
+                var outPath = solution[0];
+                var minPath = (long)inputPointCount;
+                for (int i = 0; i < outPath.Count; ++i)
+                    minPath = (outPath[i].N != -1) ? Math.Min(minPath, outPath[i].N) : minPath;
+                var containsStart = minPath == 0;
+                outPath = FixPivots(outPath, path, ref interiorStartPoint);
+
+                // Size accounts for light mesh + falloff geometry(outer + inner)
+                int totalOutVertices = tessOutVertexCount + outPath.Count + inputPointCount;
+                int totalOutIndices = tessOutIndexCount + (outPath.Count * 6) + 6;
+                var outVertices = new NativeArray<LightMeshVertex>(totalOutVertices, Allocator.Temp);
+                var outIndices = new NativeArray<ushort>(totalOutIndices, Allocator.Temp);
+
+                for (int i = 0; i < tessOutIndexCount; ++i)
+                    outIndices[i] = (ushort)tessOutIndices[i];
+
+                for (int i = 0; i < tessOutVertexCount; ++i)
+                {
+                    outVertices[i] = new LightMeshVertex()
+                    {
+                        position = new float3(tessOutVertices[i].x, tessOutVertices[i].y, 0),
+                        color = meshInteriorColor
+                    };
+                }
+
+                var vcount = tessOutVertexCount;
+                var icount = tessOutIndexCount;
+                var innerIndices = new ushort[inputPointCount];
+
+                // Inner Vertices. (These may or may not be part of the created path. Beware!!)
+                for (int i = 0; i < inputPointCount; ++i)
+                {
+                    outVertices[vcount++] = new LightMeshVertex()
+                    {
+                        position = new float3(shapePath[i].x, shapePath[i].y, 0),
+                        color = meshInteriorColor
+                    };
+                    innerIndices[i] = (ushort)(vcount - 1);
+                }
+
+                var saveIndex = (ushort)vcount;
+                var pathStart = saveIndex;
+                var prevIndex = outPath[0].N == -1 ? 0 : outPath[0].N;
+
+                // Outer Vertices
+                for (int i = 0; i < outPath.Count; ++i)
+                {
+                    var curr = outPath[i];
+                    var currPoint = new float2(curr.X / kClipperScale, curr.Y / kClipperScale);
+                    var currIndex = curr.N == -1 ? 0 : curr.N;
+
+                    outVertices[vcount++] = new LightMeshVertex()
+                    {
+                        position = new float3(currPoint.x, currPoint.y, 0),
+                        color = (interiorStartPoint > i) ? meshExteriorColor : meshInteriorColor
+                    };
+
+                    if (prevIndex != currIndex)
+                    {
+                        outIndices[icount++] = innerIndices[prevIndex];
+                        outIndices[icount++] = innerIndices[currIndex];
+                        outIndices[icount++] = (ushort)(vcount - 1);
+                    }
+
+                    outIndices[icount++] = innerIndices[prevIndex];
+                    outIndices[icount++] = saveIndex;
+                    outIndices[icount++] = saveIndex = (ushort)(vcount - 1);
+                    prevIndex = currIndex;
+                }
+
+                // Close the Loop.
+                {
+                    outIndices[icount++] = pathStart;
+                    outIndices[icount++] = innerIndices[minPath];
+                    outIndices[icount++] = containsStart ? innerIndices[lastPointIndex] : saveIndex;
+
+                    outIndices[icount++] = containsStart ? pathStart : saveIndex;
+                    outIndices[icount++] = containsStart ? saveIndex : innerIndices[minPath];
+
+                    // Last Triangle. todo: Remove Clipper Usage and use SpriteShape Geometry Generator for falloff potentially.
+                    if (containsStart)
+                    {
+                        var kTolerance = 0.001f;
+                        var connectingPoint = innerIndices[lastPointIndex];
+                        // End point detection is tricky and depends on convexity of shape. Simple test is to just check the vertices and detect.
+                        var testA = MathF.Abs(outVertices[connectingPoint].position.x - outVertices[outIndices[icount - 1]].position.x) > kTolerance || MathF.Abs(outVertices[connectingPoint].position.y - outVertices[outIndices[icount - 1]].position.y) > kTolerance;
+                        var testB = MathF.Abs(outVertices[connectingPoint].position.x - outVertices[outIndices[icount - 2]].position.x) > kTolerance || MathF.Abs(outVertices[connectingPoint].position.y - outVertices[outIndices[icount - 2]].position.y) > kTolerance;
+                        if (!testA || !testB)
+                            connectingPoint = (ushort)(interiorStartPoint + inputPointCount + tessOutVertexCount - 1);
+                        outIndices[icount++] = connectingPoint;
+                    }
+                    else
+                        outIndices[icount++] = innerIndices[minPath - 1];
+                }
+
+                TransferToMesh(outVertices, vcount, outIndices, icount, light);
+            }
+
+            return light.lightMesh.GetSubMesh(0).bounds;
+        }
+
+        public static Bounds GenerateParametricMesh(Light2D light, float radius, float falloffDistance, float angle, int sides)
         {
             var angleOffset = Mathf.PI / 2.0f + Mathf.Deg2Rad * angle;
             if (sides < 3)
@@ -66,20 +401,21 @@ namespace UnityEngine.Experimental.Rendering.Universal
                 sides = 4;
             }
 
-            if(sides == 4)
+            if (sides == 4)
             {
                 angleOffset = Mathf.PI / 4.0f + Mathf.Deg2Rad * angle;
             }
 
             var vertexCount = 1 + 2 * sides;
             var indexCount = 3 * 3 * sides;
-            var vertices = new NativeArray<ParametricLightMeshVertex>(vertexCount, Allocator.Temp);
+            var vertices = new NativeArray<LightMeshVertex>(vertexCount, Allocator.Temp);
             var triangles = new NativeArray<ushort>(indexCount, Allocator.Temp);
             var centerIndex = (ushort)(2 * sides);
+            var mesh = light.lightMesh;
 
-            // Color will contain r,g = x,y extrusion direction, a = alpha. b is unused at the moment. The inner shape should not be extruded
+            // Only Alpha value in Color channel is ever used. May remove it or keep it for batching params in the future.
             var color = new Color(0, 0, 0, 1);
-            vertices[centerIndex] = new ParametricLightMeshVertex
+            vertices[centerIndex] = new LightMeshVertex
             {
                 position = float3.zero,
                 color = color
@@ -96,12 +432,12 @@ namespace UnityEngine.Experimental.Rendering.Universal
                 var endPoint = radius * extrudeDir;
 
                 var vertexIndex = (2 * i + 2) % (2 * sides);
-                vertices[vertexIndex] = new ParametricLightMeshVertex
+                vertices[vertexIndex] = new LightMeshVertex
                 {
                     position = endPoint,
                     color = new Color(extrudeDir.x, extrudeDir.y, 0, 0)
                 };
-                vertices[vertexIndex + 1] = new ParametricLightMeshVertex
+                vertices[vertexIndex + 1] = new LightMeshVertex
                 {
                     position = endPoint,
                     color = color
@@ -127,9 +463,14 @@ namespace UnityEngine.Experimental.Rendering.Universal
                 max = math.max(max, endPoint + extrudeDir * falloffDistance);
             }
 
-            mesh.SetVertexBufferParams(vertexCount, ParametricLightMeshVertex.VertexLayout);
+            mesh.SetVertexBufferParams(vertexCount, LightMeshVertex.VertexLayout);
             mesh.SetVertexBufferData(vertices, 0, 0, vertexCount);
             mesh.SetIndices(triangles, MeshTopology.Triangles, 0, false);
+
+            light.vertices = new LightMeshVertex[vertexCount];
+            NativeArray<LightMeshVertex>.Copy(vertices, light.vertices, vertexCount);
+            light.indices = new ushort[indexCount];
+            NativeArray<ushort>.Copy(triangles, light.indices, indexCount);
 
             return new Bounds
             {
@@ -138,9 +479,11 @@ namespace UnityEngine.Experimental.Rendering.Universal
             };
         }
 
-        public static Bounds GenerateSpriteMesh(Mesh mesh, Sprite sprite)
+        public static Bounds GenerateSpriteMesh(Light2D light, Sprite sprite)
         {
-            if(sprite == null)
+            var mesh = light.lightMesh;
+
+            if (sprite == null)
             {
                 mesh.Clear();
                 return new Bounds(Vector3.zero, Vector3.zero);
@@ -155,145 +498,30 @@ namespace UnityEngine.Experimental.Rendering.Universal
             var srcIndices = sprite.GetIndices();
 
             var center = 0.5f * (sprite.bounds.min + sprite.bounds.max);
-            var vertices = new NativeArray<SpriteLightMeshVertex>(srcIndices.Length, Allocator.Temp);
-            var color = new Color(0,0,0, 1);
+            var vertices = new NativeArray<LightMeshVertex>(srcIndices.Length, Allocator.Temp);
+            var color = new Color(0, 0, 0, 1);
 
             for (var i = 0; i < srcVertices.Length; i++)
             {
-                vertices[i] = new SpriteLightMeshVertex
+                vertices[i] = new LightMeshVertex
                 {
-                    position = new Vector3(srcVertices[i].x, srcVertices[i].y, 0) - center,
+                    position = new Vector3(srcVertices[i].x, srcVertices[i].y, 0),
                     color = color,
                     uv = srcUVs[i]
                 };
             }
-            mesh.SetVertexBufferParams(vertices.Length, SpriteLightMeshVertex.VertexLayout);
+            mesh.SetVertexBufferParams(vertices.Length, LightMeshVertex.VertexLayout);
             mesh.SetVertexBufferData(vertices, 0, 0, vertices.Length);
             mesh.SetIndices(srcIndices, MeshTopology.Triangles, 0, true);
+
+            light.vertices = new LightMeshVertex[vertices.Length];
+            NativeArray<LightMeshVertex>.Copy(vertices, light.vertices, vertices.Length);
+            light.indices = new ushort[srcIndices.Length];
+            NativeArray<ushort>.Copy(srcIndices, light.indices, srcIndices.Length);
+
             return mesh.GetSubMesh(0).bounds;
         }
 
-        public static List<Vector2> GetFalloffShape(Vector3[] shapePath)
-        {
-            var extrusionDir = new List<Vector2>();
-            for (var i = 0; i < shapePath.Length; ++i)
-            {
-                var h = (i == 0) ? (shapePath.Length - 1) : (i - 1);
-                var j = (i + 1) % shapePath.Length;
-
-                var pp = shapePath[h];
-                var cp = shapePath[i];
-                var np = shapePath[j];
-
-                var cpd = cp - pp;
-                var npd = np - cp;
-                if (cpd.magnitude < 0.001f || npd.magnitude < 0.001f)
-                    continue;
-
-                var vl = cpd.normalized;
-                var vr = npd.normalized;
-
-                vl = new Vector2(-vl.y, vl.x);
-                vr = new Vector2(-vr.y, vr.x);
-
-                var va = vl.normalized + vr.normalized;
-                var vn = -va.normalized;
-
-                if (va.magnitude > 0 && vn.magnitude > 0)
-                {
-                    var dir = new Vector2(vn.x, vn.y);
-                    extrusionDir.Add(dir);
-                }
-            }
-            return extrusionDir;
-        }
-
-        public static Bounds GenerateShapeMesh(Mesh mesh, Vector3[] shapePath, float falloffDistance)
-        {
-            var meshInteriorColor = new Color(0,0,0,1);
-            var min = new float3(float.MaxValue, float.MaxValue, 0);
-            var max = new float3(float.MinValue, float.MinValue, 0);
-
-            // Create interior geometry
-            var pointCount = shapePath.Length;
-            var inputs = new ContourVertex[pointCount];
-            for (var i = 0; i < pointCount; ++i)
-                inputs[i] = new ContourVertex() { Position = new Vec3() { X = shapePath[i].x, Y = shapePath[i].y }};
-
-            var tessI = new Tess();
-            tessI.AddContour(inputs, ContourOrientation.Original);
-            tessI.Tessellate(WindingRule.EvenOdd, ElementType.Polygons, 3);
-
-            var indicesI = tessI.Elements.Select(i => i);
-            var verticesI = tessI.Vertices.Select(v => new float3(v.Position.X, v.Position.Y, 0));
-
-            var finalVertices = new NativeArray<ParametricLightMeshVertex>(verticesI.Count() + 2 * shapePath.Length, Allocator.Temp);
-            var finalIndices = new NativeArray<ushort>(indicesI.Count() + 6 * shapePath.Length, Allocator.Temp);
-
-            var vertexOffset = 0;
-            foreach(var v in verticesI)
-            {
-                finalVertices[vertexOffset++] = new ParametricLightMeshVertex
-                {
-                    position = v,
-                    color = meshInteriorColor
-                };
-            }
-
-            var indexOffset = 0;
-            foreach (var v in indicesI)
-            {
-                finalIndices[indexOffset++] = (ushort)v;
-            }
-
-            // Create falloff geometry
-            var extrusionDirs = GetFalloffShape(shapePath);
-            var falloffPointCount = 2 * shapePath.Length;
-            for (var i = 0; i < shapePath.Length; i++)
-            {
-                // Making triangles ABD and DCA
-                var triangleIndex = 2 * i;
-                var aIndex = vertexOffset + triangleIndex;
-                var bIndex = vertexOffset + triangleIndex + 1;
-                var cIndex = vertexOffset + (triangleIndex + 2) % falloffPointCount;
-                var dIndex = vertexOffset + (triangleIndex + 3) % falloffPointCount;
-
-                // We are making degenerate triangles which will be extruded by the shader
-                var point = new ParametricLightMeshVertex
-                {
-                    position = shapePath[i],
-                    color = new Color(0, 0, 0, 1)
-                };
-                finalVertices[vertexOffset + i * 2] = point;
-
-                point.color = new Color(extrusionDirs[i].x, extrusionDirs[i].y, 0, 0);
-                finalVertices[vertexOffset + i * 2 + 1] =  point;
-
-                finalIndices[indexOffset + i*6 + 0] = (ushort)aIndex;
-                finalIndices[indexOffset + i*6 + 1] = (ushort)bIndex;
-                finalIndices[indexOffset + i*6 + 2] = (ushort)dIndex;
-
-                finalIndices[indexOffset + i*6 + 3] = (ushort)dIndex;
-                finalIndices[indexOffset + i*6 + 4] = (ushort)cIndex;
-                finalIndices[indexOffset + i*6 + 5] = (ushort)aIndex;
-
-                var extrudeDir = new float3(extrusionDirs[i].x, extrusionDirs[i].y, 0);
-                min = math.min(min, point.position + extrudeDir * falloffDistance);
-                max = math.max(max, point.position + extrudeDir * falloffDistance);
-            }
-
-            mesh.SetVertexBufferParams(finalVertices.Length, ParametricLightMeshVertex.VertexLayout);
-            mesh.SetVertexBufferData(finalVertices, 0, 0, finalVertices.Length);
-            mesh.SetIndices(finalIndices, MeshTopology.Triangles, 0, false);
-
-            return new Bounds
-            {
-                min = min,
-                max = max
-            };
-        }
-
-#if UNITY_EDITOR
         public static int GetShapePathHash(Vector3[] path)
         {
             unchecked
@@ -313,8 +541,5 @@ namespace UnityEngine.Experimental.Rendering.Universal
                 return hashCode;
             }
         }
-#endif
-
     }
 }
-

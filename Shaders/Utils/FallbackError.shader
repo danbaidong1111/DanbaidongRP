@@ -1,16 +1,37 @@
-// Shader to use as a fallback error when rendering UniversalRP materials with built-in pipeline
 Shader "Hidden/Universal Render Pipeline/FallbackError"
 {
     SubShader
     {
+        Tags
+        {
+            "RenderType" = "Opaque"
+            "RenderPipeline" = "UniversalPipeline"
+            "IgnoreProjector" = "True"
+        }
+
         Pass
         {
-            CGPROGRAM
+            HLSLPROGRAM
+            #pragma target 2.0
+            #pragma editor_sync_compilation
+
+            // -------------------------------------
+            // Shader Stages
             #pragma vertex vert
             #pragma fragment frag
-            #pragma target 2.0
-            #pragma multi_compile _ UNITY_SINGLE_PASS_STEREO STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON
-            #include "UnityCG.cginc"
+
+            // -------------------------------------
+            // Unity defined keywords
+            #pragma multi_compile _ STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON
+
+            //--------------------------------------
+            // GPU Instancing
+            #include_with_pragmas "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DOTS.hlsl"
+
+            // -------------------------------------
+            // Includes
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Input.hlsl"
 
             struct appdata_t
             {
@@ -24,21 +45,22 @@ Shader "Hidden/Universal Render Pipeline/FallbackError"
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
-            v2f vert(appdata_t v)
+            v2f vert (appdata_t v)
             {
                 v2f o;
                 UNITY_SETUP_INSTANCE_ID(v);
                 UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
-                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.vertex = TransformObjectToHClip(v.vertex.xyz);
                 return o;
             }
 
-            fixed4 frag(v2f i) : SV_Target
+            float4 frag (v2f i) : SV_Target
             {
-                return fixed4(1,0,1,1);
+                return float4(1,0,1,1);
             }
-            ENDCG
+            ENDHLSL
         }
     }
-    Fallback Off
+
+    Fallback "Hidden/Core/FallbackError"
 }

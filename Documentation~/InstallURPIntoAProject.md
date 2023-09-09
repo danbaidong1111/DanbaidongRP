@@ -12,7 +12,7 @@ URP does not currently support custom post-processing effects. If your Project u
 
 1. In Unity, open your Project.
 2. In the top navigation bar, select __Window > Package Manager__ to open the __Package Manager__ window.
-3. Select the __All__ tab. This tab displays the list of available packages for the version of Unity that you are currently running.
+3. In the __Packages__ menu, select **Unity Registry**. This shows the list of available packages for the version of Unity that you are currently running.
 4. Select **Universal RP** from the list of packages.
 5. In the bottom right corner of the Package Manager window, select __Install__. Unity installs URP directly into your Project.
 
@@ -22,25 +22,32 @@ Before you can start using URP, you need to configure it. To do this, you need t
 
 ### Creating the Universal Render Pipeline Asset
 
-The [Universal Render Pipeline Asset](universalrp-asset.md) controls the global rendering and quality settings of your Project, and creates the rendering pipeline instance. The rendering pipeline instance contains intermediate resources and the render pipeline implementation.
+The [Universal Render Pipeline Asset](universalrp-asset.md) (URP Asset) contains the global rendering and quality settings of your project, and creates the rendering pipeline instance. The rendering pipeline instance contains intermediate resources and the render pipeline implementation.
 
 To create a Universal Render Pipeline Asset:
 
 1. In the Editor, go to the Project window.
-2. Right-click in the Project window, and select  __Create > Rendering > Universal Render Pipeline > Pipeline Asset__. Alternatively, navigate to the menu bar at the top, and select __Assets > Create > Rendering > Universal Render Pipeline > Pipeline Asset__.
+2. Right-click in the Project window, and select  __Create > Rendering > URP Asset__. Alternatively, navigate to the menu bar at the top, and select __Assets > Create > Rendering > URP Asset__.
 
 You can either leave the default name for the new Universal Render Pipeline Asset, or type a new one.
 
+### <a name="set-urp-active"></a>Set URP as the active render pipeline
 
-### Adding the Asset to your Graphics settings
+To set URP as the active render pipeline:
 
-To use URP, you need to add the newly created Universal Render Pipeline Asset to your Graphics settings in Unity. If you don't, Unity still tries to use the Built-in render pipeline.
+1. In your project, locate the Render Pipeline Asset that you want to use.<br/>**Tip**: to find all URP Assets in a project, use the following query in the search field: `t:universalrenderpipelineasset`.
 
-To add the Universal Render Pipeline Asset to your Graphics settings:
+1. Select **Edit** > **Project Settings** > **Graphics**.
 
+2. In the **Scriptable Render Pipeline Settings** field, select the URP Asset. When you select the URP Asset, the available Graphics settings change immediately.
 
-1. Navigate to __Edit > Project Settings... > Graphics__.
-2. In the __Scriptable Render Pipeline Settings__ field, add the Universal Render Pipeline Asset you created earlier. When you add the Universal Render Pipeline Asset, the available Graphics settings immediately change. Your Project is now using URP.
+**Optional**:
+
+Set an override URP Assets for different quality levels:
+
+1. Select **Edit** > **Project Settings** > **Quality**.
+
+2. Select a quality level. In the **Render Pipeline Asset** field, select the Render Pipeline Asset.
 
 ## Upgrading your shaders
 

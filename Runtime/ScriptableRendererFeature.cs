@@ -9,7 +9,7 @@ namespace UnityEngine.Rendering.Universal
     /// <seealso cref="ScriptableRenderer"/>
     /// <seealso cref="ScriptableRenderPass"/>
     [ExcludeFromPreset]
-    [MovedFrom("UnityEngine.Rendering.LWRP")] public abstract class ScriptableRendererFeature : ScriptableObject, IDisposable
+    public abstract class ScriptableRendererFeature : ScriptableObject, IDisposable
     {
         [SerializeField, HideInInspector] private bool m_Active = true;
         /// <summary>
@@ -23,11 +23,25 @@ namespace UnityEngine.Rendering.Universal
         public abstract void Create();
 
         /// <summary>
+        /// Callback before cull happens in renderer.
+        /// </summary>
+        /// <param name="renderer">Renderer of callback.</param>
+        /// <param name="cameraData">CameraData contains all relevant render target information for the camera.</param>
+        public virtual void OnCameraPreCull(ScriptableRenderer renderer, in CameraData cameraData) { }
+
+        /// <summary>
         /// Injects one or multiple <c>ScriptableRenderPass</c> in the renderer.
         /// </summary>
-        /// <param name="renderPasses">List of render passes to add to.</param>
+        /// <param name="renderer">Renderer used for adding render passes.</param>
         /// <param name="renderingData">Rendering state. Use this to setup render passes.</param>
         public abstract void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData);
+
+        /// <summary>
+        /// Callback after render targets are initialized. This allows for accessing targets from renderer after they are created and ready.
+        /// </summary>
+        /// <param name="renderer">Renderer used for adding render passes.</param>
+        /// <param name="renderingData">Rendering state. Use this to setup render passes.</param>
+        public virtual void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData) { }
 
         void OnEnable()
         {
@@ -37,6 +51,28 @@ namespace UnityEngine.Rendering.Universal
         void OnValidate()
         {
             Create();
+        }
+
+        /// <summary>
+        /// Override this method and return true if the feature should use the Native RenderPass API
+        /// </summary>
+        internal virtual bool SupportsNativeRenderPass()
+        {
+            return false;
+        }
+
+        /// <summary>
+        /// Override this method and return true that renderer would produce rendering layers texture.
+        /// </summary>
+        /// <param name="isDeferred">True if renderer is using deferred rendering mode</param>
+        /// <param name="atEvent">Requeted event at which rendering layers texture will be produced</param>
+        /// <param name="maskSize">Requested bit size of rendering layers texture</param>
+        /// <returns></returns>
+        internal virtual bool RequireRenderingLayers(bool isDeferred, out RenderingLayerUtils.Event atEvent, out RenderingLayerUtils.MaskSize maskSize)
+        {
+            atEvent = RenderingLayerUtils.Event.DepthNormalPrePass;
+            maskSize = RenderingLayerUtils.MaskSize.Bits8;
+            return false;
         }
 
         /// <summary>
@@ -58,6 +94,11 @@ namespace UnityEngine.Rendering.Universal
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// Called by Dispose().
+        /// Override this function to clean up resources in your renderer.
+        /// </summary>
+        /// <param name="disposing"></param>
         protected virtual void Dispose(bool disposing)
         {
         }

@@ -45,11 +45,11 @@ Make the following changes to the ShaderLab code:
 1. In the `HLSLPROGRAM` block, add the include declaration for the depth texture shader header. For example, place it under the existing include declaration for `Core.hlsl`.
 
     ```c++
-    #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
     // The DeclareDepthTexture.hlsl file contains utilities for sampling the Camera
     // depth texture.
-    #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
+    #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
     ```
     The `DeclareDepthTexture.hlsl` file contains functions for sampling the Camera depth texture. This example uses the `SampleSceneDepth` function for sampling the Z coordinate for pixels.
 
@@ -168,11 +168,11 @@ Shader "Example/URPReconstructWorldPos"
             // The Core.hlsl file contains definitions of frequently used HLSL
             // macros and functions, and also contains #include references to other
             // HLSL files (for example, Common.hlsl, SpaceTransforms.hlsl, etc.).
-            #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             // The DeclareDepthTexture.hlsl file contains utilities for sampling the
             // Camera depth texture.
-            #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
             // This example uses the Attributes structure as an input structure in
             // the vertex shader.

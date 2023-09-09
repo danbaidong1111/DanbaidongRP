@@ -1,26 +1,35 @@
 Shader "Hidden/Universal Render Pipeline/FinalPost"
 {
     HLSLINCLUDE
-        #pragma exclude_renderers gles
+        #pragma multi_compile_local_fragment _ _POINT_SAMPLING _RCAS _EASU_RCAS_AND_HDR_INPUT
         #pragma multi_compile_local_fragment _ _FXAA
         #pragma multi_compile_local_fragment _ _FILM_GRAIN
         #pragma multi_compile_local_fragment _ _DITHERING
         #pragma multi_compile_local_fragment _ _LINEAR_TO_SRGB_CONVERSION
-        #pragma multi_compile _ _USE_DRAW_PROCEDURAL
+        #pragma multi_compile_fragment _ DEBUG_DISPLAY
+        #pragma multi_compile_fragment _ SCREEN_COORD_OVERRIDE
+        #pragma multi_compile_local_fragment _ HDR_INPUT HDR_COLORSPACE_CONVERSION HDR_ENCODING HDR_COLORSPACE_CONVERSION_AND_ENCODING
 
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/ScreenCoordOverride.hlsl"
+#if defined(HDR_COLORSPACE_CONVERSION) || defined(HDR_ENCODING) || defined(HDR_COLORSPACE_CONVERSION_AND_ENCODING)
+        #define HDR_INPUT 1 // this should be defined when HDR_COLORSPACE_CONVERSION or HDR_ENCODING are defined
+        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/HDROutput.hlsl"
+#endif
         #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Debug/DebuggingFullscreen.hlsl"
         #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/Common.hlsl"
 
-        TEXTURE2D_X(_SourceTex);
         TEXTURE2D(_Grain_Texture);
         TEXTURE2D(_BlueNoise_Texture);
+        TEXTURE2D_X(_OverlayUITexture);
 
         float4 _SourceSize;
         float2 _Grain_Params;
         float4 _Grain_TilingParams;
         float4 _Dithering_Params;
+        float4 _HDROutputLuminanceParams;
 
         #define GrainIntensity          _Grain_Params.x
         #define GrainResponse           _Grain_Params.y
@@ -30,96 +39,59 @@ Shader "Hidden/Universal Render Pipeline/FinalPost"
         #define DitheringScale          _Dithering_Params.xy
         #define DitheringOffset         _Dithering_Params.zw
 
-        #define FXAA_SPAN_MAX           (8.0)
-        #define FXAA_REDUCE_MUL         (1.0 / 8.0)
-        #define FXAA_REDUCE_MIN         (1.0 / 128.0)
+        #define MinNits                 _HDROutputLuminanceParams.x
+        #define MaxNits                 _HDROutputLuminanceParams.y
+        #define PaperWhite              _HDROutputLuminanceParams.z
+        #define OneOverPaperWhite       _HDROutputLuminanceParams.w
 
-        half3 Fetch(float2 coords, float2 offset)
-        {
-            float2 uv = coords + offset;
-            return SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, uv).xyz;
-        }
+        #if SHADER_TARGET >= 45
+            #define FSR_INPUT_TEXTURE _BlitTexture
+            #define FSR_INPUT_SAMPLER sampler_LinearClamp
 
-        half3 Load(int2 icoords, int idx, int idy)
-        {
-            #if SHADER_API_GLES
-            float2 uv = (icoords + int2(idx, idy)) * _SourceSize.zw;
-            return SAMPLE_TEXTURE2D_X(_SourceTex, sampler_LinearClamp, uv).xyz;
-            #else
-            return LOAD_TEXTURE2D_X(_SourceTex, clamp(icoords + int2(idx, idy), 0, _SourceSize.xy - 1.0)).xyz;
-            #endif
-        }
+            // If HDR_INPUT is defined, we must also define FSR_EASU_ONE_OVER_PAPER_WHITE before including the FSR common header.
+            // URP doesn't actually uses EASU from finalPost shader, only RCAS.
+            #define FSR_EASU_ONE_OVER_PAPER_WHITE  OneOverPaperWhite
+            #include "Packages/com.unity.render-pipelines.core/Runtime/PostProcessing/Shaders/FSRCommon.hlsl"
+        #endif
 
-        half4 Frag(Varyings input) : SV_Target
+        half4 FragFinalPost(Varyings input) : SV_Target
         {
             UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
-            float2 uv = UnityStereoTransformScreenSpaceTex(input.uv);
+            float2 uv = UnityStereoTransformScreenSpaceTex(input.texcoord);
             float2 positionNDC = uv;
             int2   positionSS  = uv * _SourceSize.xy;
 
-            half3 color = Load(positionSS, 0, 0).xyz;
+            #if _POINT_SAMPLING
+            half3 color = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_PointClamp, uv).xyz;
+            #elif (_RCAS || _EASU_RCAS_AND_HDR_INPUT) && SHADER_TARGET >= 45
+            half3 color = ApplyRCAS(positionSS);
+            // When Unity is configured to use gamma color encoding, we must convert back from linear after RCAS is performed.
+            // (The input color data for this shader variant is always linearly encoded because RCAS requires it)
+            #if _EASU_RCAS_AND_HDR_INPUT
+            // Revert operation from ScalingSetup.shader
+            color.rgb = FastTonemapInvert(color.rgb) * PaperWhite;
+            #endif
+            #if UNITY_COLORSPACE_GAMMA
+            color = GetLinearToSRGB(color);
+            #endif
+            #else
+            half3 color = SAMPLE_TEXTURE2D_X(_BlitTexture, sampler_LinearClamp, uv).xyz;
+            #endif
 
             #if _FXAA
             {
-                // Edge detection
-                half3 rgbNW = Load(positionSS, -1, -1);
-                half3 rgbNE = Load(positionSS,  1, -1);
-                half3 rgbSW = Load(positionSS, -1,  1);
-                half3 rgbSE = Load(positionSS,  1,  1);
-
-                rgbNW = saturate(rgbNW);
-                rgbNE = saturate(rgbNE);
-                rgbSW = saturate(rgbSW);
-                rgbSE = saturate(rgbSE);
-                color = saturate(color);
-
-                half lumaNW = Luminance(rgbNW);
-                half lumaNE = Luminance(rgbNE);
-                half lumaSW = Luminance(rgbSW);
-                half lumaSE = Luminance(rgbSE);
-                half lumaM = Luminance(color);
-
-                float2 dir;
-                dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
-                dir.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
-
-                half lumaSum = lumaNW + lumaNE + lumaSW + lumaSE;
-                float dirReduce = max(lumaSum * (0.25 * FXAA_REDUCE_MUL), FXAA_REDUCE_MIN);
-                float rcpDirMin = rcp(min(abs(dir.x), abs(dir.y)) + dirReduce);
-
-                dir = min((FXAA_SPAN_MAX).xx, max((-FXAA_SPAN_MAX).xx, dir * rcpDirMin)) * _SourceSize.zw;
-
-                // Blur
-                half3 rgb03 = Fetch(positionNDC, dir * (0.0 / 3.0 - 0.5));
-                half3 rgb13 = Fetch(positionNDC, dir * (1.0 / 3.0 - 0.5));
-                half3 rgb23 = Fetch(positionNDC, dir * (2.0 / 3.0 - 0.5));
-                half3 rgb33 = Fetch(positionNDC, dir * (3.0 / 3.0 - 0.5));
-
-                rgb03 = saturate(rgb03);
-                rgb13 = saturate(rgb13);
-                rgb23 = saturate(rgb23);
-                rgb33 = saturate(rgb33);
-
-                half3 rgbA = 0.5 * (rgb13 + rgb23);
-                half3 rgbB = rgbA * 0.5 + 0.25 * (rgb03 + rgb33);
-
-                half lumaB = Luminance(rgbB);
-
-                half lumaMin = Min3(lumaM, lumaNW, Min3(lumaNE, lumaSW, lumaSE));
-                half lumaMax = Max3(lumaM, lumaNW, Max3(lumaNE, lumaSW, lumaSE));
-
-                color = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
+                color = ApplyFXAA(color, positionNDC, positionSS, _SourceSize, _BlitTexture, PaperWhite, OneOverPaperWhite);
             }
             #endif
 
             #if _FILM_GRAIN
             {
-                color = ApplyGrain(color, positionNDC, TEXTURE2D_ARGS(_Grain_Texture, sampler_LinearRepeat), GrainIntensity, GrainResponse, GrainScale, GrainOffset);
+                color = ApplyGrain(color, SCREEN_COORD_APPLY_SCALEBIAS(positionNDC), TEXTURE2D_ARGS(_Grain_Texture, sampler_LinearRepeat), GrainIntensity, GrainResponse, GrainScale, GrainOffset, OneOverPaperWhite);
             }
             #endif
-			
-			#if _LINEAR_TO_SRGB_CONVERSION
+
+            #if _LINEAR_TO_SRGB_CONVERSION
             {
                 color = LinearToSRGB(color);
             }
@@ -127,15 +99,42 @@ Shader "Hidden/Universal Render Pipeline/FinalPost"
 
             #if _DITHERING
             {
-                color = ApplyDithering(color, positionNDC, TEXTURE2D_ARGS(_BlueNoise_Texture, sampler_PointRepeat), DitheringScale, DitheringOffset);
+                color = ApplyDithering(color, SCREEN_COORD_APPLY_SCALEBIAS(positionNDC), TEXTURE2D_ARGS(_BlueNoise_Texture, sampler_PointRepeat), DitheringScale, DitheringOffset, PaperWhite, OneOverPaperWhite);
             }
             #endif
 
-            return half4(color, 1.0);
+            #ifdef HDR_COLORSPACE_CONVERSION
+            {
+                color.rgb = RotateRec709ToOutputSpace(color.rgb) * PaperWhite;
+            }
+            #endif
+
+            #ifdef HDR_ENCODING
+            {
+                float4 uiSample = SAMPLE_TEXTURE2D_X(_OverlayUITexture, sampler_PointClamp, input.texcoord);
+                color.rgb = SceneUIComposition(uiSample, color.rgb, PaperWhite, MaxNits);
+                color.rgb = OETF(color.rgb);
+            }
+            #endif
+
+            half4 finalColor = half4(color, 1);
+
+            #if defined(DEBUG_DISPLAY)
+            half4 debugColor = 0;
+
+            if(CanDebugOverrideOutputColor(finalColor, uv, debugColor))
+            {
+                return debugColor;
+            }
+            #endif
+
+            return finalColor;
         }
 
     ENDHLSL
 
+    /// Standard FinalPost shader variant with support for FSR
+    /// Note: FSR requires shader target 4.5 because it relies on texture gather instructions
     SubShader
     {
         Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline"}
@@ -147,8 +146,27 @@ Shader "Hidden/Universal Render Pipeline/FinalPost"
             Name "FinalPost"
 
             HLSLPROGRAM
-                #pragma vertex FullscreenVert
-                #pragma fragment Frag
+                #pragma vertex Vert
+                #pragma fragment FragFinalPost
+                #pragma target 4.5
+            ENDHLSL
+        }
+    }
+
+    /// Fallback version of FinalPost shader which lacks support for FSR
+    SubShader
+    {
+        Tags { "RenderType" = "Opaque" "RenderPipeline" = "UniversalPipeline"}
+        LOD 100
+        ZTest Always ZWrite Off Cull Off
+
+        Pass
+        {
+            Name "FinalPost"
+
+            HLSLPROGRAM
+                #pragma vertex Vert
+                #pragma fragment FragFinalPost
             ENDHLSL
         }
     }

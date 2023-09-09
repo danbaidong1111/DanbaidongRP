@@ -2,42 +2,7 @@
 #define UNIVERSAL_POSTPROCESSING_COMMON_INCLUDED
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
-#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/Fullscreen.hlsl"
-
-// ----------------------------------------------------------------------------------
-// Render fullscreen mesh by using a matrix set directly by the pipeline instead of
-// relying on the matrix set by the C++ engine to avoid issues with XR
-
-float4x4 _FullscreenProjMat;
-
-float4 TransformFullscreenMesh(half3 positionOS)
-{
-    return mul(_FullscreenProjMat, half4(positionOS, 1));
-}
-
-Varyings VertFullscreenMesh(Attributes input)
-{
-    Varyings output;
-    UNITY_SETUP_INSTANCE_ID(input);
-    UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(output);
-
-#if _USE_DRAW_PROCEDURAL
-    GetProceduralQuad(input.vertexID, output.positionCS, output.uv);
-#else
-    output.positionCS = TransformFullscreenMesh(input.positionOS.xyz);
-    output.uv = input.uv;
-#endif
-
-    return output;
-}
-
-// ----------------------------------------------------------------------------------
-// Samplers
-
-SAMPLER(sampler_LinearClamp);
-SAMPLER(sampler_LinearRepeat);
-SAMPLER(sampler_PointClamp);
-SAMPLER(sampler_PointRepeat);
+#include "Packages/com.unity.render-pipelines.core/Runtime/Utilities/Blit.hlsl"
 
 // ----------------------------------------------------------------------------------
 // Utility functions
@@ -48,6 +13,42 @@ half GetLuminance(half3 colorLinear)
     return AcesLuminance(colorLinear);
 #else
     return Luminance(colorLinear);
+#endif
+}
+
+real3 GetSRGBToLinear(real3 c)
+{
+#if _USE_FAST_SRGB_LINEAR_CONVERSION
+    return FastSRGBToLinear(c);
+#else
+    return SRGBToLinear(c);
+#endif
+}
+
+real4 GetSRGBToLinear(real4 c)
+{
+#if _USE_FAST_SRGB_LINEAR_CONVERSION
+    return FastSRGBToLinear(c);
+#else
+    return SRGBToLinear(c);
+#endif
+}
+
+real3 GetLinearToSRGB(real3 c)
+{
+#if _USE_FAST_SRGB_LINEAR_CONVERSION
+    return FastLinearToSRGB(c);
+#else
+    return LinearToSRGB(c);
+#endif
+}
+
+real4 GetLinearToSRGB(real4 c)
+{
+#if _USE_FAST_SRGB_LINEAR_CONVERSION
+    return FastLinearToSRGB(c);
+#else
+    return LinearToSRGB(c);
 #endif
 }
 
@@ -69,113 +70,9 @@ half3 ApplyVignette(half3 input, float2 uv, float2 center, float intensity, floa
     return input * lerp(color, (1.0).xxx, vfactor);
 }
 
-//画面变白，饱和度有下降
-half3 MyAcesTonemap(float3 aces)
-{
-#if TONEMAPPING_USE_FULL_ACES
-
-    float3 oces = RRT(aces);
-    float3 odt = ODT_RGBmonitor_100nits_dim(oces);
-    return odt;
-
-#else
-
-    // --- Glow module --- //
-    float saturation = rgb_2_saturation(aces);
-    float ycIn = rgb_2_yc(aces);
-    float s = sigmoid_shaper((saturation - 0.4) / 0.2);
-    float addedGlow = 1.0 + glow_fwd(ycIn, RRT_GLOW_GAIN * s, RRT_GLOW_MID);
-    aces *= addedGlow;
-
-    // --- Red modifier --- //
-    float hue = rgb_2_hue(aces);
-    float centeredHue = center_hue(hue, RRT_RED_HUE);
-    float hueWeight;
-    {
-        //hueWeight = cubic_basis_shaper(centeredHue, RRT_RED_WIDTH);
-        hueWeight = smoothstep(0.0, 1.0, 1.0 - abs(2.0 * centeredHue / RRT_RED_WIDTH));
-        hueWeight *= hueWeight;
-    }
-
-    aces.r += hueWeight * saturation * (RRT_RED_PIVOT - aces.r) * (1.0 - RRT_RED_SCALE);
-
-    // --- ACES to RGB rendering space --- //
-    float3 acescg = max(0.0, ACES_to_ACEScg(aces));
-
-    // --- Global desaturation --- //
-    //acescg = mul(RRT_SAT_MAT, acescg);
-    acescg = lerp(dot(acescg, AP1_RGB2Y).xxx, acescg, RRT_SAT_FACTOR.xxx);
-
-    // Luminance fitting of *RRT.a1.0.3 + ODT.Academy.RGBmonitor_100nits_dim.a1.0.3*.
-    // https://github.com/colour-science/colour-unity/blob/master/Assets/Colour/Notebooks/CIECAM02_Unity.ipynb
-    // RMSE: 0.0012846272106
-#if defined(SHADER_API_SWITCH) // Fix floating point overflow on extremely large values.
-    const float a = 2.51 * 0.01;
-    const float b = 0.03 * 0.01;
-    const float c = 2.43 * 0.01;
-    const float d = 0.59 * 0.01;
-    const float e = 0.14 * 0.01;
-    float3 x = acescg;
-   float3 rgbPost = ((a * x + b)) / ((c * x + d) + e/(x + FLT_MIN));
-#else
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    float3 x = acescg;
-    float3 rgbPost = (x * (a * x + b)) / (x * (c * x + d) + e);
-#endif
-
-    // Scale luminance to linear code value
-    // float3 linearCV = Y_2_linCV(rgbPost, CINEMA_WHITE, CINEMA_BLACK);
-
-    // Apply gamma adjustment to compensate for dim surround
-    float3 linearCV = darkSurround_to_dimSurround(rgbPost);
-
-    // Apply desaturation to compensate for luminance difference
-    //linearCV = mul(ODT_SAT_MAT, color);
-    linearCV = lerp(dot(linearCV, AP1_RGB2Y).xxx, linearCV, ODT_SAT_FACTOR.xxx);
-
-    // Convert to display primary encoding
-    // Rendering space RGB to XYZ
-    float3 XYZ = mul(AP1_2_XYZ_MAT, linearCV);
-
-    // Apply CAT from ACES white point to assumed observer adapted white point
-    XYZ = mul(D60_2_D65_CAT, XYZ);
-
-    // CIE XYZ to display primaries
-    linearCV = mul(XYZ_2_REC709_MAT, XYZ);
-
-    return linearCV;
-
-#endif
-}
-
-//颜色会变白，应该是因为没有在ACES空间计算
-float3 SampleACESFilm(float3 x)
-{
-    float a = 2.51f;
-    float b = 0.03f;
-    float c = 2.43f;
-    float d = 0.59f;
-    float e = 0.14f;
-    return ((x * (a * x + b)) / (x * (c * x + d) + e));
-}
-
-float3 H_f(float3 x, float t1, float t2) {
-	return clamp((x - t1) / (t2 - t1), 0.0, 1.0); ;
-}
-
 half3 ApplyTonemap(half3 input)
 {
-#if _TONEMAP_GT
-    input.r = GranTurismoTonemap(input.r);
-    input.g = GranTurismoTonemap(input.g);
-    input.b = GranTurismoTonemap(input.b);
-#elif _TONEMAP_ACES_SAMPLE_VER
-    input = AcesFilm(input);
-#elif _TONEMAP_ACES
+#if _TONEMAP_ACES
     float3 aces = unity_to_ACES(input);
     input = AcesTonemap(aces);
 #elif _TONEMAP_NEUTRAL
@@ -202,10 +99,10 @@ half3 ApplyColorGrading(half3 input, float postExposure, TEXTURE2D_PARAM(lutTex,
         if (userLutContrib > 0.0)
         {
             input = saturate(input);
-            input.rgb = LinearToSRGB(input.rgb); // In LDR do the lookup in sRGB for the user LUT
+            input.rgb = GetLinearToSRGB(input.rgb); // In LDR do the lookup in sRGB for the user LUT
             half3 outLut = ApplyLut2D(TEXTURE2D_ARGS(userLutTex, userLutSampler), input, userLutParams);
             input = lerp(input, outLut, userLutContrib);
-            input.rgb = SRGBToLinear(input.rgb);
+            input.rgb = GetSRGBToLinear(input.rgb);
         }
     }
 
@@ -220,10 +117,10 @@ half3 ApplyColorGrading(half3 input, float postExposure, TEXTURE2D_PARAM(lutTex,
         UNITY_BRANCH
         if (userLutContrib > 0.0)
         {
-            input.rgb = LinearToSRGB(input.rgb); // In LDR do the lookup in sRGB for the user LUT
+            input.rgb = GetLinearToSRGB(input.rgb); // In LDR do the lookup in sRGB for the user LUT
             half3 outLut = ApplyLut2D(TEXTURE2D_ARGS(userLutTex, userLutSampler), input, userLutParams);
             input = lerp(input, outLut, userLutContrib);
-            input.rgb = SRGBToLinear(input.rgb);
+            input.rgb = GetSRGBToLinear(input.rgb);
         }
 
         input = ApplyLut2D(TEXTURE2D_ARGS(lutTex, lutSampler), input, lutParams);
@@ -233,7 +130,7 @@ half3 ApplyColorGrading(half3 input, float postExposure, TEXTURE2D_PARAM(lutTex,
     return input;
 }
 
-half3 ApplyGrain(half3 input, float2 uv, TEXTURE2D_PARAM(GrainTexture, GrainSampler), float intensity, float response, float2 scale, float2 offset)
+half3 ApplyGrain(half3 input, float2 uv, TEXTURE2D_PARAM(GrainTexture, GrainSampler), float intensity, float response, float2 scale, float2 offset, float oneOverPaperWhite)
 {
     // Grain in range [0;1] with neutral at 0.5
     half grain = SAMPLE_TEXTURE2D(GrainTexture, GrainSampler, uv * scale + offset).w;
@@ -242,13 +139,17 @@ half3 ApplyGrain(half3 input, float2 uv, TEXTURE2D_PARAM(GrainTexture, GrainSamp
     grain = (grain - 0.5) * 2.0;
 
     // Noisiness response curve based on scene luminance
-    float lum = 1.0 - sqrt(Luminance(input));
+    float lum = Luminance(input);
+    #ifdef HDR_INPUT
+    lum *= oneOverPaperWhite;
+    #endif
+    lum = 1.0 - sqrt(lum);
     lum = lerp(1.0, lum, response);
 
     return input + input * grain * intensity * lum;
 }
 
-half3 ApplyDithering(half3 input, float2 uv, TEXTURE2D_PARAM(BlueNoiseTexture, BlueNoiseSampler), float2 scale, float2 offset)
+half3 ApplyDithering(half3 input, float2 uv, TEXTURE2D_PARAM(BlueNoiseTexture, BlueNoiseSampler), float2 scale, float2 offset, float paperWhite, float oneOverPaperWhite)
 {
     // Symmetric triangular distribution on [-1,1] with maximal density at 0
     float noise = SAMPLE_TEXTURE2D(BlueNoiseTexture, BlueNoiseSampler, uv * scale + offset).a * 2.0 - 1.0;
@@ -256,11 +157,112 @@ half3 ApplyDithering(half3 input, float2 uv, TEXTURE2D_PARAM(BlueNoiseTexture, B
 
 #if UNITY_COLORSPACE_GAMMA
     input += noise / 255.0;
-#else
+#elif defined(HDR_INPUT)
+    input = input * oneOverPaperWhite;
+    // Do not call GetSRGBToLinear/GetLinearToSRGB because the "fast" version will clamp values!
     input = SRGBToLinear(LinearToSRGB(input) + noise / 255.0);
+    input = input * paperWhite;
+#else
+    input = GetSRGBToLinear(GetLinearToSRGB(input) + noise / 255.0);
 #endif
 
     return input;
+}
+
+#define FXAA_SPAN_MAX   (8.0)
+#define FXAA_REDUCE_MUL (1.0 / 8.0)
+#define FXAA_REDUCE_MIN (1.0 / 128.0)
+
+half3 FXAAFetch(float2 coords, float2 offset, TEXTURE2D_X(inputTexture))
+{
+    float2 uv = coords + offset;
+    return SAMPLE_TEXTURE2D_X(inputTexture, sampler_LinearClamp, uv).xyz;
+}
+
+half3 FXAALoad(int2 icoords, int idx, int idy, float4 sourceSize, TEXTURE2D_X(inputTexture))
+{
+    #if SHADER_API_GLES
+    float2 uv = (icoords + int2(idx, idy)) * sourceSize.zw;
+    return SAMPLE_TEXTURE2D_X(inputTexture, sampler_PointClamp, uv).xyz;
+    #else
+    return LOAD_TEXTURE2D_X(inputTexture, clamp(icoords + int2(idx, idy), 0, sourceSize.xy - 1.0)).xyz;
+    #endif
+}
+
+half3 ApplyFXAA(half3 color, float2 positionNDC, int2 positionSS, float4 sourceSize, TEXTURE2D_X(inputTexture), float paperWhite, float oneOverPaperWhite)
+{
+    // Edge detection
+    half3 rgbNW = FXAALoad(positionSS, -1, -1, sourceSize, inputTexture);
+    half3 rgbNE = FXAALoad(positionSS,  1, -1, sourceSize, inputTexture);
+    half3 rgbSW = FXAALoad(positionSS, -1,  1, sourceSize, inputTexture);
+    half3 rgbSE = FXAALoad(positionSS,  1,  1, sourceSize, inputTexture);
+
+    #ifdef HDR_INPUT
+        // The pixel values we have are already tonemapped but in the range [0, 10000] nits. To run FXAA properly, we need to convert them
+        // to a SDR range [0; 1]. Since the tonemapped values are not evenly distributed and mostly close to the paperWhite nits value, we can
+        // normalize by paperWhite to get most of the scene in [0; 1] range. For the remaining pixels, we can use the FastTonemap() to remap
+        // them to [0, 1] range.
+        float lumaNW = Luminance(FastTonemap(rgbNW.xyz * oneOverPaperWhite));
+        float lumaNE = Luminance(FastTonemap(rgbNE.xyz * oneOverPaperWhite));
+        float lumaSW = Luminance(FastTonemap(rgbSW.xyz * oneOverPaperWhite));
+        float lumaSE = Luminance(FastTonemap(rgbSE.xyz * oneOverPaperWhite));
+        float lumaM = Luminance(FastTonemap(color.xyz * oneOverPaperWhite));
+    #else
+        rgbNW = saturate(rgbNW);
+        rgbNE = saturate(rgbNE);
+        rgbSW = saturate(rgbSW);
+        rgbSE = saturate(rgbSE);
+        color = saturate(color);
+
+        half lumaNW = Luminance(rgbNW);
+        half lumaNE = Luminance(rgbNE);
+        half lumaSW = Luminance(rgbSW);
+        half lumaSE = Luminance(rgbSE);
+        half lumaM = Luminance(color);
+    #endif
+
+    float2 dir;
+    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    dir.y = ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+
+    half lumaSum = lumaNW + lumaNE + lumaSW + lumaSE;
+    float dirReduce = max(lumaSum * (0.25 * FXAA_REDUCE_MUL), FXAA_REDUCE_MIN);
+    float rcpDirMin = rcp(min(abs(dir.x), abs(dir.y)) + dirReduce);
+
+    dir = min((FXAA_SPAN_MAX).xx, max((-FXAA_SPAN_MAX).xx, dir * rcpDirMin)) * sourceSize.zw;
+
+    // Blur
+    half3 rgb03 = FXAAFetch(positionNDC, dir * (0.0 / 3.0 - 0.5), inputTexture);
+    half3 rgb13 = FXAAFetch(positionNDC, dir * (1.0 / 3.0 - 0.5), inputTexture);
+    half3 rgb23 = FXAAFetch(positionNDC, dir * (2.0 / 3.0 - 0.5), inputTexture);
+    half3 rgb33 = FXAAFetch(positionNDC, dir * (3.0 / 3.0 - 0.5), inputTexture);
+
+    #ifdef HDR_INPUT
+        rgb03 = FastTonemap(rgb03 * oneOverPaperWhite);
+        rgb13 = FastTonemap(rgb13 * oneOverPaperWhite);
+        rgb23 = FastTonemap(rgb23 * oneOverPaperWhite);
+        rgb33 = FastTonemap(rgb33 * oneOverPaperWhite);
+    #else
+        rgb03 = saturate(rgb03);
+        rgb13 = saturate(rgb13);
+        rgb23 = saturate(rgb23);
+        rgb33 = saturate(rgb33);
+    #endif
+
+    half3 rgbA = 0.5 * (rgb13 + rgb23);
+    half3 rgbB = rgbA * 0.5 + 0.25 * (rgb03 + rgb33);
+
+    half lumaB = Luminance(rgbB);
+
+    half lumaMin = Min3(lumaM, lumaNW, Min3(lumaNE, lumaSW, lumaSE));
+    half lumaMax = Max3(lumaM, lumaNW, Max3(lumaNE, lumaSW, lumaSE));
+
+    half3 rgb = ((lumaB < lumaMin) || (lumaB > lumaMax)) ? rgbA : rgbB;
+
+    #ifdef HDR_INPUT
+        rgb.xyz = FastTonemapInvert(rgb) * paperWhite;;
+    #endif
+    return rgb;
 }
 
 #endif // UNIVERSAL_POSTPROCESSING_COMMON_INCLUDED

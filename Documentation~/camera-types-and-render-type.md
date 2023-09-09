@@ -19,16 +19,14 @@ To change the type of a Camera in the Unity Editor:
 
 ![Render Type in the Camera component Inspector](Images/camera-inspector-render-type.png)
 
-You can change a Camera’s type in a script, by setting the `renderType` property of the Camera's [Universal Additional Camera Data](../api/UnityEngine.Rendering.Universal.UniversalAdditionalCameraData.html) component, like this:
+You can change a Camera’s type in a script, by setting the `renderType` property of the Camera's [Universal Additional Camera Data](xref:UnityEngine.Rendering.Universal.UniversalAdditionalCameraData) component, like this:
 
 ```
 var cameraData = camera.GetUniversalAdditionalCameraData();
 cameraData.renderType = CameraRenderType.Base;
 ```
 
-<a name="base-camera"></a>
-
-## Base Camera
+## <a name="base-camera"></a>Base Camera
 
 Base Camera is the default type of Camera in URP. A Base Camera is a general purpose Camera that renders to a given render target.
 
@@ -38,7 +36,7 @@ When you have an active Base Camera in your Scene, this icon appears next to the
 
 ![Overlay Camera icon](Images/camera-icon-base.png)
 
-For information on the properties that Unity exposes in the Inspector for a Base Camera, see the [Base Camera component reference](camera-component-reference.md#base-camera).
+For information on the properties that Unity exposes in the Inspector for a Base Camera, see the [Camera component reference](camera-component-reference.md).
 
 <a name="overlay-camera"></a>
 
@@ -48,7 +46,7 @@ An Overlay Camera is a Camera that renders its view on top of another Camera's o
 
 You must use Overlay Cameras in conjunction with one or more Base Cameras using the [Camera Stacking](camera-stacking.md) system. You cannot use Overlay Cameras on their own. An Overlay Camera that is not part of a Camera Stack does not perform any steps of its render loop, and is known as an orphan Camera.
 
-__Important note:__ In this version of URP, Overlay Cameras and Camera Stacking are supported only when using the Forward Renderer.
+__Important note:__ In this version of URP, Overlay Cameras and Camera Stacking are supported only when using the Universal Renderer.
 
 When you have an active Overlay Camera in your Scene, this icon appears next to the Camera Gizmo in the Scene view:
 
@@ -63,8 +61,6 @@ The Base Camera in a Camera Stack determines most of the properties of the Camer
 * Clipping plans
 * Renderer
 * Clear Depth
-* Opaque Texture
-* Depth Texture
 * Render Shadows
 * Culling Mask
 * Occlusion Culling
@@ -73,4 +69,4 @@ Unity hides all of the other unused properties in the Inspector. You can access 
 
 You cannot apply post-processing to an individual Overlay Camera. You can apply post-processing to an individual Base Camera, or to a Camera Stack.
 
-For information on the properties that Unity exposes in the Inspector of an Overlay Camera, see the [Overlay Camera component reference](camera-component-reference.md#overlay-camera).
+For information on the properties that Unity exposes in the Inspector of an Overlay Camera, see the [Camera component reference](camera-component-reference.md).

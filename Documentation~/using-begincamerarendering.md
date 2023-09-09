@@ -13,7 +13,7 @@ Other events in the [RenderPipelineManager](https://docs.unity3d.com/ScriptRefer
 ## beginCameraRendering event example
 
 This example demonstrates how to subscribe a method to the `beginCameraRendering` event.
-To follow the steps in this example, create a [new Unity project using the __Universal Project Template__](https://docs.unity3d.com/Packages/com.unity.render-pipelines.danbaidong@8.0/manual/creating-a-new-project-with-urp.html).
+To follow the steps in this example, create a [new Unity project using the __Universal Project Template__](https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@8.0/manual/creating-a-new-project-with-urp.html).
 
 1. In the Scene, create a Cube. Name it Example Cube.
 2. In your Project, create a C# script. Call it `URPCallbackExample`.

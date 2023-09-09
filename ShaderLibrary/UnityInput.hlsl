@@ -3,7 +3,7 @@
 #ifndef UNIVERSAL_SHADER_VARIABLES_INCLUDED
 #define UNIVERSAL_SHADER_VARIABLES_INCLUDED
 
-#if defined(STEREO_INSTANCING_ON) && (defined(SHADER_API_D3D11) || defined(SHADER_API_GLES3) || defined(SHADER_API_GLCORE) || defined(SHADER_API_PSSL) || defined(SHADER_API_VULKAN))
+#if defined(STEREO_INSTANCING_ON) && (defined(SHADER_API_D3D11) || defined(SHADER_API_GLES3) || defined(SHADER_API_GLCORE) || defined(SHADER_API_PSSL) || defined(SHADER_API_VULKAN) || (defined(SHADER_API_METAL) && !defined(UNITY_COMPILER_DXC)))
 #define UNITY_STEREO_INSTANCING_ENABLED
 #endif
 
@@ -98,6 +98,8 @@ float4x4 unity_CameraToWorld;
 
 // ----------------------------------------------------------------------------
 
+#ifndef DOTS_INSTANCING_ON // UnityPerDraw cbuffer doesn't exist with hybrid renderer
+
 // Block Layout should be respected due to SRP Batcher
 CBUFFER_START(UnityPerDraw)
 // Space block Feature
@@ -106,20 +108,31 @@ float4x4 unity_WorldToObject;
 float4 unity_LODFade; // x is the fade value ranging within [0,1]. y is x quantized into 16 levels
 real4 unity_WorldTransformParams; // w is usually 1.0, or -1.0 for odd-negative scale transforms
 
+// Render Layer block feature
+// Only the first channel (x) contains valid data and the float must be reinterpreted using asuint() to extract the original 32 bits values.
+float4 unity_RenderingLayer;
+
 // Light Indices block feature
 // These are set internally by the engine upon request by RendererConfiguration.
-real4 unity_LightData;
-real4 unity_LightIndices[2];
+half4 unity_LightData;
+half4 unity_LightIndices[2];
 
 float4 unity_ProbesOcclusion;
 
 // Reflection Probe 0 block feature
 // HDR environment map decode instructions
 real4 unity_SpecCube0_HDR;
+real4 unity_SpecCube1_HDR;
+
+float4 unity_SpecCube0_BoxMax;          // w contains the blend distance
+float4 unity_SpecCube0_BoxMin;          // w contains the lerp value
+float4 unity_SpecCube0_ProbePosition;   // w is set to 1 for box projection
+float4 unity_SpecCube1_BoxMax;          // w contains the blend distance
+float4 unity_SpecCube1_BoxMin;          // w contains the sign of (SpecCube0.importance - SpecCube1.importance)
+float4 unity_SpecCube1_ProbePosition;   // w is set to 1 for box projection
 
 // Lightmap block feature
 float4 unity_LightmapST;
-float4 unity_LightmapIndex;
 float4 unity_DynamicLightmapST;
 
 // SH block feature
@@ -130,7 +143,22 @@ real4 unity_SHBr;
 real4 unity_SHBg;
 real4 unity_SHBb;
 real4 unity_SHC;
+
+// Renderer bounding box.
+float4 unity_RendererBounds_Min;
+float4 unity_RendererBounds_Max;
+
+// Velocity
+float4x4 unity_MatrixPreviousM;
+float4x4 unity_MatrixPreviousMI;
+//X : Use last frame positions (right now skinned meshes are the only objects that use this
+//Y : Force No Motion
+//Z : Z bias value
+//W : Camera only
+float4 unity_MotionVectorsParams;
 CBUFFER_END
+
+#endif // UNITY_DOTS_INSTANCING_ENABLED
 
 #if defined(USING_STEREO_MATRICES)
 CBUFFER_START(UnityStereoViewBuffer)
@@ -146,12 +174,6 @@ float4x4 unity_StereoCameraInvProjection[2];
 
 float3   unity_StereoWorldSpaceCameraPos[2];
 float4   unity_StereoScaleOffset[2];
-CBUFFER_END
-#endif
-
-#if defined(USING_STEREO_MATRICES) && defined(UNITY_STEREO_MULTIVIEW_ENABLED)
-CBUFFER_START(UnityStereoEyeIndices)
-    float4 unity_StereoEyeIndices[2];
 CBUFFER_END
 #endif
 
@@ -205,6 +227,8 @@ real4 unity_ShadowColor;
 // Unity specific
 TEXTURECUBE(unity_SpecCube0);
 SAMPLER(samplerunity_SpecCube0);
+TEXTURECUBE(unity_SpecCube1);
+SAMPLER(samplerunity_SpecCube1);
 
 // Main lightmap
 TEXTURE2D(unity_Lightmap);
@@ -212,9 +236,17 @@ SAMPLER(samplerunity_Lightmap);
 TEXTURE2D_ARRAY(unity_Lightmaps);
 SAMPLER(samplerunity_Lightmaps);
 
+// Dynamic lightmap
+TEXTURE2D(unity_DynamicLightmap);
+SAMPLER(samplerunity_DynamicLightmap);
+// TODO ENLIGHTEN: Instanced GI
+
 // Dual or directional lightmap (always used with unity_Lightmap, so can share sampler)
 TEXTURE2D(unity_LightmapInd);
 TEXTURE2D_ARRAY(unity_LightmapsInd);
+TEXTURE2D(unity_DynamicDirectionality);
+// TODO ENLIGHTEN: Instanced GI
+// TEXTURE2D_ARRAY(unity_DynamicDirectionality);
 
 TEXTURE2D(unity_ShadowMask);
 SAMPLER(samplerunity_ShadowMask);
@@ -226,9 +258,18 @@ SAMPLER(samplerunity_ShadowMasks);
 // TODO: all affine matrices should be 3x4.
 // TODO: sort these vars by the frequency of use (descending), and put commonly used vars together.
 // Note: please use UNITY_MATRIX_X macros instead of referencing matrix variables directly.
-float4x4 _PrevViewProjMatrix;
-float4x4 _ViewProjMatrix;
-float4x4 _NonJitteredViewProjMatrix;
+#if defined(USING_STEREO_MATRICES)
+float4x4 _PrevViewProjMatrixStereo[2];
+float4x4 _NonJitteredViewProjMatrixStereo[2];
+float4x4 _ViewProjMatrixStereo[2];
+#define  _PrevViewProjMatrix  _PrevViewProjMatrixStereo[unity_StereoEyeIndex]
+#define  _NonJitteredViewProjMatrix _NonJitteredViewProjMatrixStereo[unity_StereoEyeIndex]
+#define  _ViewProjMatrix      _ViewProjMatrixStereo[unity_StereoEyeIndex]
+#else
+float4x4 _PrevViewProjMatrix;         // non-jittered. Motion vectors.
+float4x4 _NonJitteredViewProjMatrix;  // non-jittered.
+float4x4 _ViewProjMatrix; // TODO: URP currently uses unity_MatrixVP, see Input.hlsl
+#endif
 float4x4 _ViewMatrix;
 float4x4 _ProjMatrix;
 float4x4 _InvViewProjMatrix;

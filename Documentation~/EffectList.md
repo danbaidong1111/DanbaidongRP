@@ -6,7 +6,7 @@ These are the post-processing effects that are available in the Universal Render
 
 * [Bloom](post-processing-bloom.md)
 
-* [Channel Mixed](Post-Processing-Channel-Mixer.md)
+* [Channel Mixer](Post-Processing-Channel-Mixer.md)
 
 * [Chromatic Aberration](post-processing-chromatic-aberration.md)
 
@@ -35,3 +35,5 @@ These are the post-processing effects that are available in the Universal Render
 * [Vignette](post-processing-vignette.md)
 
 * [White Balance](Post-Processing-White-Balance.md)
+
+* [Lens Flare](shared/lens-flare/lens-flare-component.md)

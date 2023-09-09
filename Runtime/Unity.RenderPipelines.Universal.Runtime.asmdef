@@ -2,11 +2,11 @@
     "name": "Unity.RenderPipelines.Universal.Runtime",
     "rootNamespace": "",
     "references": [
-        "GUID:df380645f10b7bc4b97d4f5eb6303d95",
-        "GUID:f391df510ac93ab4699d1f4769c76a40",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipeline.Universal.ShaderLibrary",
         "GUID:7dbf32976982c98448af054f2512cb79",
-        "GUID:d8b63aba1907145bea998dd612889d6b",
-        "GUID:2665a8d13d1b3f18800f46e256720795"
+        "Unity.Mathematics",
+        "Unity.Burst"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -30,6 +30,16 @@
             "name": "com.unity.adaptiveperformance",
             "expression": "2.1.0",
             "define": "ADAPTIVE_PERFORMANCE_2_1_0_OR_NEWER"
+        },
+        {
+            "name": "com.unity.adaptiveperformance",
+            "expression": "4.0.0-pre.1",
+            "define": "ADAPTIVE_PERFORMANCE_4_0_0_OR_NEWER"
+        },
+        {
+            "name": "com.unity.burst",
+            "expression": "1.0.0",
+            "define": "ENABLE_BURST_1_0_0_OR_NEWER"
         },
         {
             "name": "com.unity.modules.vr",

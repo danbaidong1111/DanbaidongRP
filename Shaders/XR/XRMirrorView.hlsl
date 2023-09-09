@@ -1,5 +1,6 @@
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRendering.hlsl"
 
 #if SRC_TEXTURE2D_X_ARRAY
 TEXTURE2D_ARRAY(_SourceTex);
@@ -29,22 +30,33 @@ Varyings VertQuad(Attributes input)
     output.positionCS = GetQuadVertexPosition(input.vertexID) * float4(_ScaleBiasRt.x, _ScaleBiasRt.y, 1, 1) + float4(_ScaleBiasRt.z, _ScaleBiasRt.w, 0, 0);
     output.positionCS.xy = output.positionCS.xy * float2(2.0f, -2.0f) + float2(-1.0f, 1.0f); //convert to -1..1
 
+    //Using temporary as writing to global _ScaleBias.w is prohibited when compiling with DXC
+    float scaleBiasW = _ScaleBias.w;
 #if UNITY_UV_STARTS_AT_TOP
     // Unity viewport convention is bottom left as origin. Adjust Scalebias to read the correct region.
-    _ScaleBias.w = 1 - _ScaleBias.w - _ScaleBias.y;
+    scaleBiasW = 1 - _ScaleBias.w - _ScaleBias.y;
 #endif
-    output.texcoord = GetQuadTexCoord(input.vertexID) * _ScaleBias.xy + _ScaleBias.zw;
+    output.texcoord = GetQuadTexCoord(input.vertexID) * _ScaleBias.xy + float2(_ScaleBias.z, scaleBiasW);
     return output;
 }
 
 float4 FragBilinear(Varyings input) : SV_Target
 {
     float4 outColor;
+    float2 uv = input.texcoord.xy;
+
+#if defined(_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+    // We use stereo eye index to sample the correct slice when resolving foveated targets.
+    // Since MirrorView is not a stereo shader we have to populate unity_StereoEyeIndex ourselves.
+    unity_StereoEyeIndex = _SourceTexArraySlice;
+
+    uv = RemapFoveatedRenderingResolve(input.texcoord.xy);
+#endif
 
 #if SRC_TEXTURE2D_X_ARRAY
-    outColor = SAMPLE_TEXTURE2D_ARRAY(_SourceTex, sampler_LinearClamp, input.texcoord.xy, _SourceTexArraySlice);
+    outColor = SAMPLE_TEXTURE2D_ARRAY(_SourceTex, sampler_LinearClamp, uv, _SourceTexArraySlice);
 #else
-    outColor = SAMPLE_TEXTURE2D(_SourceTex, sampler_LinearClamp, input.texcoord.xy);
+    outColor = SAMPLE_TEXTURE2D(_SourceTex, sampler_LinearClamp, uv);
 #endif
 
     if (_SRGBRead && _SRGBWrite)
