@@ -72,7 +72,13 @@ half3 ApplyVignette(half3 input, float2 uv, float2 center, float intensity, floa
 
 half3 ApplyTonemap(half3 input)
 {
-#if _TONEMAP_ACES
+#if _TONEMAP_GT
+    input.r = GranTurismoTonemap(input.r);
+    input.g = GranTurismoTonemap(input.g);
+    input.b = GranTurismoTonemap(input.b);
+#elif _TONEMAP_ACES_SAMPLE_VER
+    input = AcesFilm(input);
+#elif _TONEMAP_ACES
     float3 aces = unity_to_ACES(input);
     input = AcesTonemap(aces);
 #elif _TONEMAP_NEUTRAL

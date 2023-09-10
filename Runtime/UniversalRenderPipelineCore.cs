@@ -1069,6 +1069,9 @@ namespace UnityEngine.Rendering.Universal
         /// <summary> Keyword used for high quality Bloom. </summary>
         public const string BloomHQ = "_BLOOM_HQ";
 
+        /// <summary> Keyword used for Danbaidong Bloom. </summary>
+        public const string BloomDanbaidong = "_BLOOM_DANBAIDONG";
+
         /// <summary> Keyword used for low quality Bloom dirt. </summary>
         public const string BloomLQDirt = "_BLOOM_LQ_DIRT";
 
@@ -1086,6 +1089,9 @@ namespace UnityEngine.Rendering.Universal
 
         /// <summary> Keyword used for HDR Color Grading. </summary>
         public const string HDRGrading = "_HDR_GRADING";
+
+        public static readonly string TonemapGT = "_TONEMAP_GT";
+        public static readonly string TonemapACESSampleVer = "_TONEMAP_ACES_SAMPLE_VER";
 
         /// <summary> Keyword used for ACES Tonemapping. </summary>
         public const string TonemapACES = "_TONEMAP_ACES";

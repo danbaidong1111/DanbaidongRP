@@ -24,6 +24,8 @@ namespace UnityEngine.Rendering.Universal
         /// Note that if you use this tonemapper all the grading operations will be done in the ACES color spaces for optimal precision and results.
         /// </summary>
         ACES, // ACES Filmic reference tonemapper (custom approximation)
+        ACESSimpleVer,  // ACES Filmic(避免亮度降低的简单版本)
+        GranTurismo,    // GTTonemapping(避免非亮部色调变化，通常用于卡通渲染) ref:https://forum.unity.com/threads/how-to-do-custom-tone-mapping-instead-of-neutral-aces-in-urp.849280/
     }
 
     /// <summary>

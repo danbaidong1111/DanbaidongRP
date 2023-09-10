@@ -4,8 +4,8 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
         #pragma exclude_renderers gles
         #pragma multi_compile_local_fragment _ _DISTORTION
         #pragma multi_compile_local_fragment _ _CHROMATIC_ABERRATION
-        #pragma multi_compile_local_fragment _ _BLOOM_LQ _BLOOM_HQ _BLOOM_LQ_DIRT _BLOOM_HQ_DIRT
-        #pragma multi_compile_local_fragment _ _HDR_GRADING _TONEMAP_ACES _TONEMAP_NEUTRAL
+        #pragma multi_compile_local_fragment _ _BLOOM_LQ _BLOOM_HQ _BLOOM_LQ_DIRT _BLOOM_HQ_DIRT _BLOOM_DANBAIDONG
+        #pragma multi_compile_local_fragment _ _HDR_GRADING _TONEMAP_GT _TONEMAP_ACES_SAMPLE_VER _TONEMAP_ACES _TONEMAP_NEUTRAL
         #pragma multi_compile_local_fragment _ _FILM_GRAIN
         #pragma multi_compile_local_fragment _ _DITHERING
         #pragma multi_compile_local_fragment _ _GAMMA_20 _LINEAR_TO_SRGB_CONVERSION
@@ -35,10 +35,13 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/FoveatedRendering.hlsl"
 
         // Hardcoded dependencies to reduce the number of variants
-        #if _BLOOM_LQ || _BLOOM_HQ || _BLOOM_LQ_DIRT || _BLOOM_HQ_DIRT
+        #if _BLOOM_LQ || _BLOOM_HQ || _BLOOM_LQ_DIRT || _BLOOM_HQ_DIRT || _BLOOM_DANBAIDONG
             #define BLOOM
             #if _BLOOM_LQ_DIRT || _BLOOM_HQ_DIRT
                 #define BLOOM_DIRT
+            #endif
+            #if _BLOOM_DANBAIDONG
+                #define BLOOM_DANBAIDONG
             #endif
         #endif
 
@@ -54,6 +57,7 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
         float4 _UserLut_Params;
         float4 _Bloom_Params;
         float _Bloom_RGBM;
+        float4 _Bloom_Danbaidong_Params;// threshold, lumRnageScale, preFilterScale, intensity
         float4 _LensDirt_Params;
         float _LensDirt_Intensity;
         float4 _Distortion_Params1;
@@ -180,6 +184,7 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
 
             #if defined(BLOOM)
             {
+
                 float2 uvBloom = uvDistorted;
                 #if defined(_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
                     uvBloom = RemapFoveatedRenderingDistort(uvBloom);
@@ -201,8 +206,54 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
                     bloom.xyz = DecodeRGBM(bloom);
                 }
 
-                bloom.xyz *= BloomIntensity;
-                color += bloom.xyz * BloomTint;
+                #if defined(BLOOM_DANBAIDONG)
+                {
+                    color += bloom.xyz * _Bloom_Danbaidong_Params.w;
+                    // Genshin
+                #define _BLOOM_INTENSITY    (0.75)
+                #define _BLOOM_EXPOSSURE    (1.0)
+                // input is Linear, but use this to offset URP lut
+                #define _USER_INPUTGAMMA    (2.2)
+                #define _COLOR_GRADING_PARAM float4(0.00391, 0.0625, 15, 1)
+                #define _WHITEBALANCE0      float4(1.00032, -0.00002, 0.00002, 0.00)
+                #define _WHITEBALANCE1      float4(0.0004, 0.99977, 0.00008, 0.00)
+                #define _WHITEBALANCE2      float4(-0.00002, -0.00002, 1.00058, 0.00)
+
+                    half3 bloomedCol = bloom.xyz * _BLOOM_INTENSITY + color.xyz;
+                    // whiteBalance
+                    half3 wbColor = _WHITEBALANCE0.xyz * bloomedCol.r + bloomedCol.g * _WHITEBALANCE1.xyz + _WHITEBALANCE2.xyz * bloomedCol.b;
+                    
+
+                    // Expossure (Tonemapping)
+                    half3 expossuredCol = wbColor * _BLOOM_EXPOSSURE;
+                    half3 temp1 = expossuredCol * (expossuredCol * 1.36 + 0.047);
+                    half3 temp2 = expossuredCol * (expossuredCol * 0.93 + 0.56) + 0.14;
+                    half3 tonemappedCol = temp1 / temp2;
+                    tonemappedCol = clamp(tonemappedCol, 0.0, 1.0);
+
+                    half3 mainCol = tonemappedCol;
+                    // half3 mainCol = wbColor;//tone mapping disable
+
+                    mainCol.xyz = max(mainCol.xyz, 0);
+                    mainCol.xyz = log2(mainCol.xyz);
+                    mainCol.xyz = mainCol.xyz * 0.41666666;
+                    mainCol.xyz = exp2(mainCol.xyz);
+                    mainCol.xyz = mainCol.xyz * 1.0549999 - 0.055;
+                    mainCol.xyz = max(mainCol.xyz, 0);
+
+                    mainCol.xyz = log2(mainCol.xyz);
+                    mainCol.xyz = mainCol.xyz * _USER_INPUTGAMMA;
+                    mainCol.xyz = exp2(mainCol.xyz);
+                    color = mainCol;
+
+                }
+                #else
+                {
+                    bloom.xyz *= BloomIntensity;
+                    color += bloom.xyz * BloomTint;
+                }
+                #endif
+
 
                 #if defined(BLOOM_DIRT)
                 {

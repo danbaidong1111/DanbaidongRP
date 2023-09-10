@@ -7,8 +7,12 @@ namespace UnityEditor.Rendering.Universal
     [CustomEditor(typeof(Bloom))]
     sealed class BloomEditor : VolumeComponentEditor
     {
+        SerializedDataParameter m_Mode;
         SerializedDataParameter m_Threshold;
         SerializedDataParameter m_Intensity;
+        SerializedDataParameter m_LumRnageScale;
+        SerializedDataParameter m_PreFilterScale;
+        SerializedDataParameter m_BlurCompositeWeight;
         SerializedDataParameter m_Scatter;
         SerializedDataParameter m_Clamp;
         SerializedDataParameter m_Tint;
@@ -22,8 +26,12 @@ namespace UnityEditor.Rendering.Universal
         {
             var o = new PropertyFetcher<Bloom>(serializedObject);
 
+            m_Mode = Unpack(o.Find(x => x.mode));
             m_Threshold = Unpack(o.Find(x => x.threshold));
             m_Intensity = Unpack(o.Find(x => x.intensity));
+            m_LumRnageScale = Unpack(o.Find(x => x.lumRnageScale));
+            m_PreFilterScale = Unpack(o.Find(x => x.preFilterScale));
+            m_BlurCompositeWeight = Unpack(o.Find(x => x.blurCompositeWeight));
             m_Scatter = Unpack(o.Find(x => x.scatter));
             m_Clamp = Unpack(o.Find(x => x.clamp));
             m_Tint = Unpack(o.Find(x => x.tint));
@@ -36,21 +44,36 @@ namespace UnityEditor.Rendering.Universal
 
         public override void OnInspectorGUI()
         {
-            PropertyField(m_Threshold);
-            PropertyField(m_Intensity);
-            PropertyField(m_Scatter);
-            PropertyField(m_Tint);
-            PropertyField(m_Clamp);
-            PropertyField(m_HighQualityFiltering);
+            if (m_Mode.value.intValue == (int)BloomMode.BloomDanbaidong)
+            {
+                PropertyField(m_Mode);
+                PropertyField(m_Threshold);
+                PropertyField(m_Tint);
+                PropertyField(m_LumRnageScale);
+                PropertyField(m_PreFilterScale);
+                PropertyField(m_BlurCompositeWeight);
+                PropertyField(m_Intensity);
+            }
+            else
+            {
+                PropertyField(m_Mode);
+                PropertyField(m_Threshold);
+                PropertyField(m_Intensity);
+                PropertyField(m_Scatter);
+                PropertyField(m_Tint);
+                PropertyField(m_Clamp);
+                PropertyField(m_HighQualityFiltering);
 
-            if (m_HighQualityFiltering.overrideState.boolValue && m_HighQualityFiltering.value.boolValue && CoreEditorUtils.buildTargets.Contains(GraphicsDeviceType.OpenGLES2))
-                EditorGUILayout.HelpBox("High Quality Bloom isn't supported on GLES2 platforms.", MessageType.Warning);
+                if (m_HighQualityFiltering.overrideState.boolValue && m_HighQualityFiltering.value.boolValue && CoreEditorUtils.buildTargets.Contains(GraphicsDeviceType.OpenGLES2))
+                    EditorGUILayout.HelpBox("High Quality Bloom isn't supported on GLES2 platforms.", MessageType.Warning);
 
-            PropertyField(m_Downsample);
-            PropertyField(m_MaxIterations);
+                PropertyField(m_Downsample);
+                PropertyField(m_MaxIterations);
 
-            PropertyField(m_DirtTexture);
-            PropertyField(m_DirtIntensity);
+                PropertyField(m_DirtTexture);
+                PropertyField(m_DirtIntensity);
+            }
+
         }
     }
 }
