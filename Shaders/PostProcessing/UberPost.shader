@@ -208,43 +208,16 @@ Shader "Hidden/Universal Render Pipeline/UberPost"
 
                 #if defined(BLOOM_DANBAIDONG)
                 {
-                    color += bloom.xyz * _Bloom_Danbaidong_Params.w;
-                    // Genshin
-                #define _BLOOM_INTENSITY    (0.75)
-                #define _BLOOM_EXPOSSURE    (1.0)
-                // input is Linear, but use this to offset URP lut
-                #define _USER_INPUTGAMMA    (2.2)
-                #define _COLOR_GRADING_PARAM float4(0.00391, 0.0625, 15, 1)
-                #define _WHITEBALANCE0      float4(1.00032, -0.00002, 0.00002, 0.00)
-                #define _WHITEBALANCE1      float4(0.0004, 0.99977, 0.00008, 0.00)
-                #define _WHITEBALANCE2      float4(-0.00002, -0.00002, 1.00058, 0.00)
-
-                    half3 bloomedCol = bloom.xyz * _BLOOM_INTENSITY + color.xyz;
-                    // whiteBalance
-                    half3 wbColor = _WHITEBALANCE0.xyz * bloomedCol.r + bloomedCol.g * _WHITEBALANCE1.xyz + _WHITEBALANCE2.xyz * bloomedCol.b;
-                    
+                    half3 bloomedCol = bloom.xyz * _Bloom_Danbaidong_Params.w + color.xyz;
 
                     // Expossure (Tonemapping)
-                    half3 expossuredCol = wbColor * _BLOOM_EXPOSSURE;
-                    half3 temp1 = expossuredCol * (expossuredCol * 1.36 + 0.047);
-                    half3 temp2 = expossuredCol * (expossuredCol * 0.93 + 0.56) + 0.14;
-                    half3 tonemappedCol = temp1 / temp2;
-                    tonemappedCol = clamp(tonemappedCol, 0.0, 1.0);
+                    // half3 expossuredCol = bloomedCol;
+                    // half3 temp1 = expossuredCol * (expossuredCol * 1.36 + 0.047);
+                    // half3 temp2 = expossuredCol * (expossuredCol * 0.93 + 0.56) + 0.14;
+                    // half3 tonemappedCol = temp1 / temp2;
+                    // tonemappedCol = clamp(tonemappedCol, 0.0, 1.0);
 
-                    half3 mainCol = tonemappedCol;
-                    // half3 mainCol = wbColor;//tone mapping disable
-
-                    mainCol.xyz = max(mainCol.xyz, 0);
-                    mainCol.xyz = log2(mainCol.xyz);
-                    mainCol.xyz = mainCol.xyz * 0.41666666;
-                    mainCol.xyz = exp2(mainCol.xyz);
-                    mainCol.xyz = mainCol.xyz * 1.0549999 - 0.055;
-                    mainCol.xyz = max(mainCol.xyz, 0);
-
-                    mainCol.xyz = log2(mainCol.xyz);
-                    mainCol.xyz = mainCol.xyz * _USER_INPUTGAMMA;
-                    mainCol.xyz = exp2(mainCol.xyz);
-                    color = mainCol;
+                    color = bloomedCol;
 
                 }
                 #else

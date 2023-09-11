@@ -39,7 +39,7 @@ namespace UnityEngine.Rendering.Universal
     public sealed partial class Bloom : VolumeComponent, IPostProcessComponent
     {
         [Tooltip("Select a Bloom Mode.")]
-        public BloomModeParameter mode = new BloomModeParameter(BloomMode.BloomDanbaidong);
+        public BloomModeParameter mode = new BloomModeParameter(BloomMode.None);
         /// <summary>
         /// Set the level of brightness to filter out pixels under this level.
         /// This value is expressed in gamma-space.

@@ -54,7 +54,7 @@ namespace UnityEditor.Rendering.Universal
                 PropertyField(m_BlurCompositeWeight);
                 PropertyField(m_Intensity);
             }
-            else
+            else if (m_Mode.value.intValue == (int)BloomMode.BloomURP)
             {
                 PropertyField(m_Mode);
                 PropertyField(m_Threshold);
@@ -72,6 +72,10 @@ namespace UnityEditor.Rendering.Universal
 
                 PropertyField(m_DirtTexture);
                 PropertyField(m_DirtIntensity);
+            }
+            else
+            {
+                PropertyField(m_Mode);
             }
 
         }

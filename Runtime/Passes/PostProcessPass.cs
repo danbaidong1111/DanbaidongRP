@@ -1164,7 +1164,7 @@ namespace UnityEngine.Rendering.Universal
                 uberMaterial.EnableKeyword(ShaderKeywordStrings.BloomDanbaidong);
 
             }
-            else
+            else if (m_Bloom.mode.value == BloomMode.BloomURP)
             {// Start at half-res
                 int downres = 1;
                 switch (m_Bloom.downscale.value)
