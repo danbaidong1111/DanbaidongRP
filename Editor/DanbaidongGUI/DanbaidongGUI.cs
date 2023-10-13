@@ -95,7 +95,14 @@ namespace UnityEditor.DanbaidongGUI
             }
 
             GUI.enabled = true;
+
             DrawerHelper.DrawSingleLine();
+            materialEditor.RenderQueueField();
+            materialEditor.EnableInstancingField();
+            materialEditor.LightmapEmissionProperty();
+            materialEditor.DoubleSidedGIField();
+            EditorGUILayout.Space();
+            
             DrawerHelper.DrawLabel();
         }
 
