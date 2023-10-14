@@ -1104,8 +1104,8 @@ namespace UnityEngine.Rendering.Universal
                 var bloomMaterial = m_Materials.bloom;
                 var danbaidongBloomParams = new Vector4(m_Bloom.threshold.value, m_Bloom.lumRnageScale.value, m_Bloom.preFilterScale.value, m_Bloom.intensity.value);
                 bloomMaterial.SetVector(ShaderConstants._Bloom_Danbaidong_Params, danbaidongBloomParams);
-                bloomMaterial.SetVector(ShaderConstants._Bloom_Danbaidong_Params, danbaidongBloomParams);
-                bloomMaterial.SetColor(ShaderConstants._Bloom_Danbaidong_BlurCompositeWeight, m_Bloom.blurCompositeWeight.value);
+                bloomMaterial.SetVector(ShaderConstants._Bloom_Danbaidong_BlurCompositeWeight, m_Bloom.blurCompositeWeight.value);
+                bloomMaterial.SetColor(ShaderConstants._Bloom_Danbaidong_ColorTint, m_Bloom.tint.value);
 
 
                 // preFilter
