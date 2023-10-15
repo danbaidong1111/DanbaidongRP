@@ -37,6 +37,7 @@ namespace UnityEditor.Rendering.Universal
             public static readonly GUIContent shadowTransparentReceiveLabel = EditorGUIUtility.TrTextContent("Transparent Receive Shadows", "When disabled, none of the transparent objects will receive shadows.");
             public static readonly GUIContent invalidStencilOverride = EditorGUIUtility.TrTextContent("Error: When using the deferred rendering path, the Renderer requires the control over the 4 highest bits of the stencil buffer to store Material types. The current combination of the stencil override options prevents the Renderer from controlling the required bits. Try changing one of the options to Replace.");
             public static readonly GUIContent intermediateTextureMode = EditorGUIUtility.TrTextContent("Intermediate Texture", "Controls when URP renders via an intermediate texture.");
+            public static readonly GUIContent insertedGbufferPassesLabel = EditorGUIUtility.TrTextContent("InsertedGbufferPasses", "Custom Passes inserted after GBufferPass.");
         }
 
         SerializedProperty m_OpaqueLayerMask;
@@ -51,6 +52,7 @@ namespace UnityEditor.Rendering.Universal
         SerializedProperty m_Shaders;
         SerializedProperty m_ShadowTransparentReceiveProp;
         SerializedProperty m_IntermediateTextureMode;
+        SerializedProperty m_InsertedGbufferPasses;
 
         private void OnEnable()
         {
@@ -66,6 +68,7 @@ namespace UnityEditor.Rendering.Universal
             m_Shaders = serializedObject.FindProperty("shaders");
             m_ShadowTransparentReceiveProp = serializedObject.FindProperty("m_ShadowTransparentReceive");
             m_IntermediateTextureMode = serializedObject.FindProperty("m_IntermediateTextureMode");
+            m_InsertedGbufferPasses = serializedObject.FindProperty("m_InsertedGbufferPasses");
         }
 
         /// <inheritdoc/>
@@ -163,6 +166,17 @@ namespace UnityEditor.Rendering.Universal
             }
             EditorGUI.indentLevel--;
             EditorGUILayout.Space();
+
+            if (m_RenderingMode.intValue == (int)RenderingMode.Deferred)
+            {
+                EditorGUILayout.LabelField("Insert Gbuffer Passes", EditorStyles.boldLabel);
+                EditorGUI.indentLevel++;
+                {
+                    EditorGUILayout.PropertyField(m_InsertedGbufferPasses, Styles.insertedGbufferPassesLabel);
+                }
+                EditorGUI.indentLevel--;
+                EditorGUILayout.Space();
+            }
 
             serializedObject.ApplyModifiedProperties();
 

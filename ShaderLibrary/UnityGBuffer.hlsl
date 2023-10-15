@@ -279,4 +279,61 @@ InputData InputDataFromGbufferAndWorldPosition(half4 gbuffer2, float3 wsPos)
     return inputData;
 }
 
+
+// This will encode SurfaceData into GBuffer
+FragmentOutput CharacterDataToGbuffer(half3 baseCol, half3 directColor, float3 normalWS, half smoothness, half3 indirectColor, half occlusion = 1.0)
+{
+    half3 packedNormalWS = PackNormal(normalWS);
+
+    // Pack directColor
+
+
+    // TODO: pack emission, reduceEmiss /= 20, reduceEmiss = sqrt(reduceEmiss)
+    FragmentOutput output;
+    output.GBuffer0 = half4(directColor / 10.0, 0.5);  // diffuse           diffuse         diffuse         materialFlags   (sRGB rendertarget)
+    output.GBuffer1 = half4(sqrt(directColor / 20.0), 0.5);                              // metallic/specular specular        specular        occlusion
+    output.GBuffer2 = half4(packedNormalWS, smoothness);                             // encoded-normal    encoded-normal  encoded-normal  smoothness
+    output.GBuffer3 = half4(0, 0, 0, 1);                                  // GI                GI              GI              unused          (lighting buffer)
+
+    return output;
+}
+
+// This decodes the Gbuffer into a SurfaceData struct
+BRDFData CharacterDataFromGbuffer(half4 gbuffer0, half4 gbuffer1, half4 gbuffer2)
+{
+    half3 albedo = gbuffer0.rgb;
+    half3 specular = gbuffer1.rgb;
+    uint materialFlags = UnpackMaterialFlags(gbuffer0.a);
+    half smoothness = gbuffer2.a;
+
+    BRDFData brdfData = (BRDFData)0;
+    half alpha = half(1.0); // NOTE: alpha can get modfied, forward writes it out (_ALPHAPREMULTIPLY_ON).
+
+    half3 brdfDiffuse;
+    half3 brdfSpecular;
+    half reflectivity;
+    half oneMinusReflectivity;
+
+    if ((materialFlags & kMaterialFlagSpecularSetup) != 0)
+    {
+        // Specular setup
+        reflectivity = ReflectivitySpecular(specular);
+        oneMinusReflectivity = half(1.0) - reflectivity;
+        brdfDiffuse = albedo * oneMinusReflectivity;
+        brdfSpecular = specular;
+    }
+    else
+    {
+        // Metallic setup
+        reflectivity = specular.r;
+        oneMinusReflectivity = 1.0 - reflectivity;
+        half metallic = MetallicFromReflectivity(reflectivity);
+        brdfDiffuse = albedo * oneMinusReflectivity;
+        brdfSpecular = lerp(kDieletricSpec.rgb, albedo, metallic);
+    }
+    InitializeBRDFDataDirect(albedo, brdfDiffuse, brdfSpecular, reflectivity, oneMinusReflectivity, smoothness, alpha, brdfData);
+
+    return brdfData;
+}
+
 #endif // UNIVERSAL_GBUFFERUTIL_INCLUDED

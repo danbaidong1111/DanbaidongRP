@@ -22,6 +22,10 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         _SimpleLitDirStencilReadMask ("SimpleLitDirStencilReadMask", Int) = 0
         _SimpleLitDirStencilWriteMask ("SimpleLitDirStencilWriteMask", Int) = 0
 
+        _CharacterLitDirStencilRef ("CharacterLitDirStencilRef", Int) = 0
+        _CharacterLitDirStencilReadMask ("CharacterLitDirStencilReadMask", Int) = 0
+        _CharacterLitDirStencilWriteMask ("CharacterLitDirStencilWriteMask", Int) = 0
+
         _ClearStencilRef ("ClearStencilRef", Int) = 0
         _ClearStencilReadMask ("ClearStencilReadMask", Int) = 0
         _ClearStencilWriteMask ("ClearStencilWriteMask", Int) = 0
@@ -341,6 +345,52 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         return half4(color, alpha);
     }
 
+    half4 CharacterDeferredShading(Varyings input) : SV_Target
+    {
+        UNITY_SETUP_INSTANCE_ID(input);
+        UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
+
+        float2 screen_uv = (input.screenUV.xy / input.screenUV.z);
+
+#if defined(_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+        float2 undistorted_screen_uv = screen_uv;
+        screen_uv = input.positionCS.xy * _ScreenSize.zw;
+#endif
+
+        half4 shadowMask = 1.0;
+
+        #if _RENDER_PASS_ENABLED
+        float d        = LOAD_FRAMEBUFFER_INPUT(GBUFFER3, input.positionCS.xy).x;
+        half4 gbuffer0 = LOAD_FRAMEBUFFER_INPUT(GBUFFER0, input.positionCS.xy);
+        half4 gbuffer1 = LOAD_FRAMEBUFFER_INPUT(GBUFFER1, input.positionCS.xy);
+        half4 gbuffer2 = LOAD_FRAMEBUFFER_INPUT(GBUFFER2, input.positionCS.xy);
+        #if defined(_DEFERRED_MIXED_LIGHTING)
+        shadowMask = LOAD_FRAMEBUFFER_INPUT(GBUFFER4, input.positionCS.xy);
+        #endif
+        #else
+        // Using SAMPLE_TEXTURE2D is faster than using LOAD_TEXTURE2D on iOS platforms (5% faster shader).
+        // Possible reason: HLSLcc upcasts Load() operation to float, which doesn't happen for Sample()?
+        float d        = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, my_point_clamp_sampler, screen_uv, 0).x; // raw depth value has UNITY_REVERSED_Z applied on most platforms.
+        half4 gbuffer0 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer0, my_point_clamp_sampler, screen_uv, 0);
+        half4 gbuffer1 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer1, my_point_clamp_sampler, screen_uv, 0);
+        half4 gbuffer2 = SAMPLE_TEXTURE2D_X_LOD(_GBuffer2, my_point_clamp_sampler, screen_uv, 0);
+        #if defined(_DEFERRED_MIXED_LIGHTING)
+        shadowMask = SAMPLE_TEXTURE2D_X_LOD(MERGE_NAME(_, GBUFFER_SHADOWMASK), my_point_clamp_sampler, screen_uv, 0);
+        #endif
+        #endif
+
+        half surfaceDataOcclusion = gbuffer1.a;
+        uint materialFlags = UnpackMaterialFlags(gbuffer0.a);
+
+        half3 color = 0.0.xxx;
+        half alpha = 1.0;
+
+        color = gbuffer0.xyz * 10;
+        // color = pow(gbuffer1.xyz, 2) * 20;
+
+        return half4(color, alpha);
+    }
+
     half4 FragFog(Varyings input) : SV_Target
     {
         UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
@@ -621,7 +671,56 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 5 - Legacy fog
+        // 5 - Deferred Directional Light (CharacterLit)
+        Pass
+        {
+            Name "Deferred Directional Light (CharacterLit)"
+
+            ZTest NotEqual
+            ZWrite Off
+            Cull Off
+            Blend One SrcAlpha, Zero One
+            BlendOp Add, Add
+
+            Stencil
+            {
+                Ref [_CharacterLitDirStencilRef]
+                ReadMask [_CharacterLitDirStencilReadMask]
+                WriteMask [_CharacterLitDirStencilWriteMask]
+                Comp Equal
+                Pass Keep
+                Fail Keep
+                ZFail Keep
+            }
+
+            HLSLPROGRAM
+            #pragma exclude_renderers gles gles3 glcore
+            #pragma target 4.5
+
+            #pragma multi_compile _DIRECTIONAL
+            #pragma multi_compile_fragment _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            #pragma multi_compile_fragment _ _DEFERRED_MAIN_LIGHT
+            #pragma multi_compile_fragment _ _DEFERRED_FIRST_LIGHT
+            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ LIGHTMAP_SHADOW_MIXING
+            #pragma multi_compile_fragment _ SHADOWS_SHADOWMASK
+            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
+            #pragma multi_compile_fragment _ _DEFERRED_MIXED_LIGHTING
+            #pragma multi_compile_fragment _ _LIGHT_LAYERS
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+            #pragma multi_compile_fragment _ _LIGHT_COOKIES
+            #pragma multi_compile_fragment _ _FOVEATED_RENDERING_NON_UNIFORM_RASTER
+			// Foveated rendering currently not supported in dxc on metal
+            #pragma never_use_dxc metal
+
+            #pragma vertex Vertex
+            #pragma fragment CharacterDeferredShading
+
+            ENDHLSL
+        }
+
+        // 6 - Legacy fog
         Pass
         {
             Name "Fog"
@@ -647,7 +746,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 6 - Clear stencil partial
+        // 7 - Clear stencil partial
         // This pass clears stencil between camera stacks rendering.
         // This is because deferred renderer encodes material properties in the 4 highest bits of the stencil buffer,
         // but we don't want to keep this information between camera stacks.
@@ -682,7 +781,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 7 - SSAO Only
+        // 8 - SSAO Only
         // This pass only runs when there is no fullscreen deferred light rendered (no directional light). It will adjust indirect/baked lighting with realtime occlusion
         // by rendering just before deferred shading pass.
         // This pass is also completely discarded from vertex shader when SSAO renderer feature is not enabled.

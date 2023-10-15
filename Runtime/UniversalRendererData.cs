@@ -6,6 +6,8 @@ using ShaderKeywordFilter = UnityEditor.ShaderKeywordFilter;
 using System;
 using UnityEngine.Scripting.APIUpdating;
 using UnityEngine.Assertions;
+using UnityEngine.Rendering.Universal.Internal;
+using System.Collections.Generic;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -20,6 +22,23 @@ namespace UnityEngine.Rendering.Universal
         AfterTransparents,
         /// <summary>Depth will be written by a depth prepass</summary>
         ForcePrepass
+    }
+
+    [Serializable]
+    public class InsertedGBufferPassSetting
+    {
+        public string lightMode = "GBufferInserted";
+
+        [Tooltip("Disable overrideStencil if you want to use shader custom stencil")]
+        public bool overrideStencil = true;
+        public StencilUsage stencil = StencilUsage.MaterialUnlit;
+
+        [Tooltip("Fur multi passes rendering")]
+        public bool multiPass = false;
+        [Range(1, 30)]
+        public int multiTimes = 10;
+
+        public LayerMask layer;
     }
 
     /// <summary>
@@ -170,6 +189,8 @@ namespace UnityEngine.Rendering.Universal
         [SerializeField] bool m_AccurateGbufferNormals = false;
         [SerializeField] IntermediateTextureMode m_IntermediateTextureMode = IntermediateTextureMode.Always;
 
+        [SerializeField] List<InsertedGBufferPassSetting> m_InsertedGbufferPasses = new List<InsertedGBufferPassSetting>();
+
         /// <inheritdoc/>
         protected override ScriptableRenderer Create()
         {
@@ -295,6 +316,19 @@ namespace UnityEngine.Rendering.Universal
             {
                 SetDirty();
                 m_IntermediateTextureMode = value;
+            }
+        }
+
+        /// <summary>
+        ///  Passes Inserted after Gbuffer Pass.
+        /// </summary>
+        public List<InsertedGBufferPassSetting> insertedGbufferPasses
+        {
+            get => m_InsertedGbufferPasses;
+            set
+            {
+                SetDirty();
+                m_InsertedGbufferPasses = value;
             }
         }
 

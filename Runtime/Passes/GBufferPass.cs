@@ -3,6 +3,7 @@ using UnityEngine.Experimental.Rendering;
 using UnityEngine.Profiling;
 using Unity.Collections;
 using UnityEngine.Experimental.Rendering.RenderGraphModule;
+using System.Collections.Generic;
 
 namespace UnityEngine.Rendering.Universal.Internal
 {
@@ -12,6 +13,7 @@ namespace UnityEngine.Rendering.Universal.Internal
         static readonly int s_CameraNormalsTextureID = Shader.PropertyToID("_CameraNormalsTexture");
         static ShaderTagId s_ShaderTagLit = new ShaderTagId("Lit");
         static ShaderTagId s_ShaderTagSimpleLit = new ShaderTagId("SimpleLit");
+        static ShaderTagId s_ShaderTagCharacterLit = new ShaderTagId("CharacterLit");
         static ShaderTagId s_ShaderTagUnlit = new ShaderTagId("Unlit");
         static ShaderTagId s_ShaderTagUniversalGBuffer = new ShaderTagId("UniversalGBuffer");
         static ShaderTagId s_ShaderTagUniversalMaterialType = new ShaderTagId("UniversalMaterialType");
@@ -27,7 +29,13 @@ namespace UnityEngine.Rendering.Universal.Internal
         RenderStateBlock m_RenderStateBlock;
         private PassData m_PassData;
 
+        // InsertGBufferPass set by rendererdata
+        List<InsertedGBufferPassSetting> m_InsertedGBufferPasses;
+
         public GBufferPass(RenderPassEvent evt, RenderQueueRange renderQueueRange, LayerMask layerMask, StencilState stencilState, int stencilReference, DeferredLights deferredLights)
+                    : this(evt, renderQueueRange, layerMask, stencilState, stencilReference, deferredLights, null) { }
+
+        public GBufferPass(RenderPassEvent evt, RenderQueueRange renderQueueRange, LayerMask layerMask, StencilState stencilState, int stencilReference, DeferredLights deferredLights, List<InsertedGBufferPassSetting> insertedGbufferPasses)
         {
             base.profilingSampler = new ProfilingSampler(nameof(GBufferPass));
             base.renderPassEvent = evt;
@@ -43,20 +51,28 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             if (s_ShaderTagValues == null)
             {
-                s_ShaderTagValues = new ShaderTagId[4];
+                s_ShaderTagValues = new ShaderTagId[5];
                 s_ShaderTagValues[0] = s_ShaderTagLit;
                 s_ShaderTagValues[1] = s_ShaderTagSimpleLit;
-                s_ShaderTagValues[2] = s_ShaderTagUnlit;
-                s_ShaderTagValues[3] = new ShaderTagId(); // Special catch all case for materials where UniversalMaterialType is not defined or the tag value doesn't match anything we know.
+                s_ShaderTagValues[2] = s_ShaderTagCharacterLit;
+                s_ShaderTagValues[3] = s_ShaderTagUnlit;
+                s_ShaderTagValues[4] = new ShaderTagId(); // Special catch all case for materials where UniversalMaterialType is not defined or the tag value doesn't match anything we know.
             }
 
             if (s_RenderStateBlocks == null)
             {
-                s_RenderStateBlocks = new RenderStateBlock[4];
+                s_RenderStateBlocks = new RenderStateBlock[5];
                 s_RenderStateBlocks[0] = DeferredLights.OverwriteStencil(m_RenderStateBlock, (int)StencilUsage.MaterialMask, (int)StencilUsage.MaterialLit);
                 s_RenderStateBlocks[1] = DeferredLights.OverwriteStencil(m_RenderStateBlock, (int)StencilUsage.MaterialMask, (int)StencilUsage.MaterialSimpleLit);
-                s_RenderStateBlocks[2] = DeferredLights.OverwriteStencil(m_RenderStateBlock, (int)StencilUsage.MaterialMask, (int)StencilUsage.MaterialUnlit);
-                s_RenderStateBlocks[3] = s_RenderStateBlocks[0];
+                s_RenderStateBlocks[2] = DeferredLights.OverwriteStencil(m_RenderStateBlock, (int)StencilUsage.MaterialMask, (int)StencilUsage.MaterialCharacterLit);
+                s_RenderStateBlocks[3] = DeferredLights.OverwriteStencil(m_RenderStateBlock, (int)StencilUsage.MaterialMask, (int)StencilUsage.MaterialUnlit);
+                s_RenderStateBlocks[4] = s_RenderStateBlocks[0];
+            }
+
+            m_InsertedGBufferPasses = insertedGbufferPasses;
+            if (m_InsertedGBufferPasses == null)
+            {
+                m_InsertedGBufferPasses = new List<InsertedGBufferPassSetting>();
             }
         }
 
@@ -131,6 +147,9 @@ namespace UnityEngine.Rendering.Universal.Internal
 
                 ExecutePass(context, m_PassData, ref renderingData);
 
+                ExecuteInsertedPass(cmd, this, m_RenderStateBlock, m_InsertedGBufferPasses, context, m_PassData, ref renderingData);
+
+
                 // If any sub-system needs camera normal texture, make it available.
                 // Input attachments will only be used when this is not needed so safe to skip in that case
                 if (!m_DeferredLights.UseRenderPass)
@@ -176,6 +195,46 @@ namespace UnityEngine.Rendering.Universal.Internal
                 CoreUtils.SetKeyword(renderingData.commandBuffer, ShaderKeywordStrings.WriteRenderingLayers, false);
                 context.ExecuteCommandBuffer(renderingData.commandBuffer);
                 renderingData.commandBuffer.Clear();
+            }
+        }
+
+        static void ExecuteInsertedPass(CommandBuffer cmd, ScriptableRenderPass sp, RenderStateBlock renderStateBlock, List<InsertedGBufferPassSetting> insertedPasses, ScriptableRenderContext context, PassData data, ref RenderingData renderingData)
+        {
+            if (insertedPasses.Count <= 0)
+            {
+                return;
+            }
+
+            foreach (var iPass in insertedPasses)
+            {
+                if (string.IsNullOrEmpty(iPass.lightMode))
+                    continue;
+
+                ShaderTagId passTagId = new ShaderTagId(iPass.lightMode);
+                DrawingSettings drawingSettings = sp.CreateDrawingSettings(passTagId, ref renderingData, renderingData.cameraData.defaultOpaqueSortFlags);
+                FilteringSettings filteringSettings = data.filteringSettings;
+                filteringSettings.layerMask = iPass.layer;
+                RenderStateBlock stateBlock = DeferredLights.OverwriteStencil(renderStateBlock, (int)StencilUsage.MaterialMask, (int)iPass.stencil);
+                float drawRendererTimes = iPass.multiPass ? iPass.multiTimes : 1.0f;
+
+                for (int i = 0; i < drawRendererTimes; i++)
+                {
+                    if (iPass.multiPass)
+                    {
+                        cmd.SetGlobalVector("_MULTIPASS_PARAMS", new Vector3(i, drawRendererTimes, i / drawRendererTimes));
+                        context.ExecuteCommandBuffer(cmd);
+                    }
+                        
+
+                    if (iPass.overrideStencil)
+                    {
+                        context.DrawRenderers(renderingData.cullResults, ref drawingSettings, ref filteringSettings, ref stateBlock);
+                    }
+                    else
+                    {
+                        context.DrawRenderers(renderingData.cullResults, ref drawingSettings, ref filteringSettings);
+                    }
+                }
             }
         }
 
