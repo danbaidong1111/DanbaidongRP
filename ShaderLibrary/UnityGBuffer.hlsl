@@ -3,6 +3,7 @@
 
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceData.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DanbaidongToon.hlsl"
 
 // inspired from [builtin_shaders]/CGIncludes/UnityGBuffer.cginc
 
@@ -280,60 +281,58 @@ InputData InputDataFromGbufferAndWorldPosition(half4 gbuffer2, float3 wsPos)
 }
 
 
+half3 PackColorToR8G8B8(half3 color)
+{
+    color /= 15.0;
+    color = sqrt(color);
+    return color;
+}
+half3 UnPackColorFromR8G8B8(half3 color)
+{
+    color = color * color;
+    color *= 15;
+    return color;
+}
+
 // This will encode SurfaceData into GBuffer
-FragmentOutput CharacterDataToGbuffer(half3 baseCol, half3 directColor, float3 normalWS, half smoothness, half3 indirectColor, half occlusion = 1.0)
+FragmentOutput CharacterDataToGbuffer(half3 albedo, half3 directColor, half3 indirectColor, half smoothness, half metallic, float3 normalWS, half useShadow = 1.0)
 {
     half3 packedNormalWS = PackNormal(normalWS);
 
     // Pack directColor
+    directColor = PackColorToR8G8B8(directColor);
 
 
-    // TODO: pack emission, reduceEmiss /= 20, reduceEmiss = sqrt(reduceEmiss)
+    // GBuffer3: ColorAttachment format is precisely, no need to pack.
     FragmentOutput output;
-    output.GBuffer0 = half4(directColor / 10.0, 0.5);  // diffuse           diffuse         diffuse         materialFlags   (sRGB rendertarget)
-    output.GBuffer1 = half4(sqrt(directColor / 20.0), 0.5);                              // metallic/specular specular        specular        occlusion
-    output.GBuffer2 = half4(packedNormalWS, smoothness);                             // encoded-normal    encoded-normal  encoded-normal  smoothness
-    output.GBuffer3 = half4(0, 0, 0, 1);                                  // GI                GI              GI              unused          (lighting buffer)
+    output.GBuffer0 = half4(albedo.rgb, useShadow);                 // diffuse              diffuse             diffuse             useShadow       (sRGB albedo will used for additional lighting)
+    output.GBuffer1 = half4(directColor.rgb, metallic);             // direct               direct              direct              metallic        (directLightColor will mul shadow in defered shading)
+    output.GBuffer2 = half4(packedNormalWS, smoothness);            // encoded-normal       encoded-normal      encoded-normal      smoothness      (normal1212)
+    output.GBuffer3 = half4(indirectColor, 1);                      // indirect             indirect            indirect            unused          (shadowColor with occlusion applied)
 
     return output;
 }
 
 // This decodes the Gbuffer into a SurfaceData struct
-BRDFData CharacterDataFromGbuffer(half4 gbuffer0, half4 gbuffer1, half4 gbuffer2)
+CharacterData CharacterDataFromGbuffer(half4 gbuffer0, half4 gbuffer1, half4 gbuffer2)
 {
     half3 albedo = gbuffer0.rgb;
-    half3 specular = gbuffer1.rgb;
-    uint materialFlags = UnpackMaterialFlags(gbuffer0.a);
+    half3 directColor = gbuffer1.rgb;
+
+    half useShadow = gbuffer0.a;
+    half metallic = gbuffer1.a;
     half smoothness = gbuffer2.a;
 
-    BRDFData brdfData = (BRDFData)0;
-    half alpha = half(1.0); // NOTE: alpha can get modfied, forward writes it out (_ALPHAPREMULTIPLY_ON).
+    half3 normalWS = normalize(UnpackNormal(gbuffer2.xyz));
 
-    half3 brdfDiffuse;
-    half3 brdfSpecular;
-    half reflectivity;
-    half oneMinusReflectivity;
-
-    if ((materialFlags & kMaterialFlagSpecularSetup) != 0)
-    {
-        // Specular setup
-        reflectivity = ReflectivitySpecular(specular);
-        oneMinusReflectivity = half(1.0) - reflectivity;
-        brdfDiffuse = albedo * oneMinusReflectivity;
-        brdfSpecular = specular;
-    }
-    else
-    {
-        // Metallic setup
-        reflectivity = specular.r;
-        oneMinusReflectivity = 1.0 - reflectivity;
-        half metallic = MetallicFromReflectivity(reflectivity);
-        brdfDiffuse = albedo * oneMinusReflectivity;
-        brdfSpecular = lerp(kDieletricSpec.rgb, albedo, metallic);
-    }
-    InitializeBRDFDataDirect(albedo, brdfDiffuse, brdfSpecular, reflectivity, oneMinusReflectivity, smoothness, alpha, brdfData);
-
-    return brdfData;
+    CharacterData data;
+    data.albedo = albedo;
+    data.directColor = UnPackColorFromR8G8B8(directColor);
+    data.normalWS = normalWS;
+    data.useShadow = useShadow;
+    data.metallic = metallic;
+    data.smoothness = smoothness;
+    return data;
 }
 
 #endif // UNIVERSAL_GBUFFERUTIL_INCLUDED

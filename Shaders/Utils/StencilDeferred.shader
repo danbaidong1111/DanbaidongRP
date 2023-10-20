@@ -379,16 +379,64 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         #endif
         #endif
 
-        half surfaceDataOcclusion = gbuffer1.a;
-        uint materialFlags = UnpackMaterialFlags(gbuffer0.a);
+        // half surfaceDataOcclusion = gbuffer1.a;
+        // uint materialFlags = UnpackMaterialFlags(gbuffer0.a);
+        half surfaceDataOcclusion = 1;
+        uint materialFlags = gbuffer0.a == 0 ? kMaterialFlagReceiveShadowsOff : 0;
 
         half3 color = 0.0.xxx;
         half alpha = 1.0;
 
-        color = gbuffer0.xyz * 10;
-        // color = pow(gbuffer1.xyz, 2) * 20;
+        #if defined(_DEFERRED_MIXED_LIGHTING)
+        // If both lights and geometry are static, then no realtime lighting to perform for this combination.
+        [branch] if ((_LightFlags & materialFlags) == kMaterialFlagSubtractiveMixedLighting)
+            return half4(color, alpha); // Cannot discard because stencil must be updated.
+        #endif
 
-        return half4(color, alpha);
+        #if defined(_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
+        input.positionCS.xy = undistorted_screen_uv * _ScreenSize.xy;
+        #endif
+
+        #if defined(USING_STEREO_MATRICES)
+        int eyeIndex = unity_StereoEyeIndex;
+        #else
+        int eyeIndex = 0;
+        #endif
+        float4 positionWS = mul(_ScreenToWorld[eyeIndex], float4(input.positionCS.xy, d, 1.0));
+        positionWS.xyz *= rcp(positionWS.w);
+
+        Light unityLight = GetStencilLight(positionWS.xyz, screen_uv, shadowMask, materialFlags);
+
+        #ifdef _LIGHT_LAYERS
+        float4 renderingLayers = SAMPLE_TEXTURE2D_X_LOD(MERGE_NAME(_, GBUFFER_LIGHT_LAYERS), my_point_clamp_sampler, screen_uv, 0);
+        uint meshRenderingLayers = DecodeMeshRenderingLayer(renderingLayers.r);
+        [branch] if (!IsMatchingLightLayer(unityLight.layerMask, meshRenderingLayers))
+            return half4(color, alpha); // Cannot discard because stencil must be updated.
+        #endif
+
+        #if defined(_SCREEN_SPACE_OCCLUSION) && !defined(_SURFACE_TYPE_TRANSPARENT)
+            AmbientOcclusionFactor aoFactor = GetScreenSpaceAmbientOcclusion(screen_uv);
+            unityLight.color *= aoFactor.directAmbientOcclusion;
+            #if defined(_DIRECTIONAL) && defined(_DEFERRED_FIRST_LIGHT)
+            // What we want is really to apply the mininum occlusion value between the baked occlusion from surfaceDataOcclusion and real-time occlusion from SSAO.
+            // But we already applied the baked occlusion during gbuffer pass, so we have to cancel it out here.
+            // We must also avoid divide-by-0 that the reciprocal can generate.
+            half occlusion = aoFactor.indirectAmbientOcclusion < surfaceDataOcclusion ? aoFactor.indirectAmbientOcclusion * rcp(surfaceDataOcclusion) : 1.0;
+            alpha = occlusion;
+            #endif
+        #endif
+
+        // VectorPrepare
+        float3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS.xyz);
+        CharacterData data;// albedo.rgb directColor.rgb normalWS.xyz useShadow metallic smoothness
+
+
+        data = CharacterDataFromGbuffer(gbuffer0, gbuffer1, gbuffer2);
+
+
+        alpha = unityLight.shadowAttenuation * unityLight.distanceAttenuation;
+
+        return half4(data.directColor, alpha);
     }
 
     half4 FragFog(Varyings input) : SV_Target
@@ -679,7 +727,8 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ZTest NotEqual
             ZWrite Off
             Cull Off
-            Blend One SrcAlpha, Zero One
+            // BlendOut = SrcAlpha * SrcDirectCol + One * DstIndirectCol
+            Blend SrcAlpha One, Zero One
             BlendOp Add, Add
 
             Stencil

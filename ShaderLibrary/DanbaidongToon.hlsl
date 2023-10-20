@@ -6,6 +6,36 @@
 // InDirect diffuse is different from URP
 //-----------------------------------------------------------------------------
 
+
+///////////////////////////////////////////////////////////////////////////////
+//                  Vertex and Fragment functions                            //
+///////////////////////////////////////////////////////////////////////////////
+
+struct MY_PBR_DATA
+{
+    float metallic;
+    float occlusion;
+    float smoothness;
+    float3 positionWS;
+    float3 normalWS;
+    float4 albedo;
+};
+
+struct CharacterData
+{
+    half3 albedo;
+    half3 directColor;
+
+    half3 normalWS;
+
+    half useShadow;
+    half metallic;
+    half smoothness;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+//                          Toon PBR functions                              //
+///////////////////////////////////////////////////////////////////////////////
 /*
  * 
  * Cook-Torrance BRDF:
@@ -174,20 +204,10 @@ half4 SampleDirectSpecularRamp(TEXTURE2D_PARAM(RampTex, RampSampler), float spec
 //                  Vertex and Fragment functions                            //
 ///////////////////////////////////////////////////////////////////////////////
 
-struct MY_PBR_DATA
-{
-    float metallic;
-    float occlusion;
-    float smoothness;
-    float3 positionWS;
-    float3 normalWS;
-    float4 albedo;
-};
-
 /*
  * PBR函数反射率方程见https://learnopengl-cn.github.io/07%20PBR/02%20Lighting/
  */
-real3 FragLigthingPBR(Light mainLight, MY_PBR_DATA pbrData)
+real3 FragLigthingPBR(Light mainLight, MY_PBR_DATA pbrData, out half3 dirResult, out half3 indirResult)
 {
     float3 lightDirWS = normalize(mainLight.direction);
     float3 viewDirWS = normalize(_WorldSpaceCameraPos.xyz - pbrData.positionWS);
@@ -267,7 +287,8 @@ real3 FragLigthingPBR(Light mainLight, MY_PBR_DATA pbrData)
         }
     #endif
     float3 addLightResult = addDiffColor * albedo + addSpecColor;
-
+    dirResult = directLightResult;
+    indirResult = indirColor + 0.3 * addLightResult;
 
     return directLightResult + indirColor + 0.3 * addLightResult;
 }
