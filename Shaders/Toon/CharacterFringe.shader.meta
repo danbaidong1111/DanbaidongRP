@@ -1,0 +1,17 @@
+fileFormatVersion: 2
+guid: 6875981d5aee46e41a2056b6b8dd3140
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures:
+  - _BaseMap: {instanceID: 0}
+  - _PBRMask: {instanceID: 0}
+  - _ILMMapSpecType: {instanceID: 0}
+  - _ILMMapAO: {instanceID: 0}
+  - _ILMMapSpecMask: {instanceID: 0}
+  - _NormalMap: {instanceID: 0}
+  - _IndirSpecCubemap: {instanceID: 0}
+  - _IndirSpecMatcap: {instanceID: 0}
+  nonModifiableTextures: []
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
