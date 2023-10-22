@@ -14,6 +14,10 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         _SimpleLitPunctualStencilReadMask ("SimpleLitPunctualStencilReadMask", Int) = 0
         _SimpleLitPunctualStencilWriteMask ("SimpleLitPunctualStencilWriteMask", Int) = 0
 
+        _CharacterLitPunctualStencilRef ("CharacterLitPunctualStencilWriteMask", Int) = 0
+        _CharacterLitPunctualStencilReadMask ("CharacterLitPunctualStencilReadMask", Int) = 0
+        _CharacterLitPunctualStencilWriteMask ("CharacterLitPunctualStencilWriteMask", Int) = 0
+
         _LitDirStencilRef ("LitDirStencilRef", Int) = 0
         _LitDirStencilReadMask ("LitDirStencilReadMask", Int) = 0
         _LitDirStencilWriteMask ("LitDirStencilWriteMask", Int) = 0
@@ -429,14 +433,21 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         // VectorPrepare
         float3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS.xyz);
         CharacterData data;// albedo.rgb directColor.rgb normalWS.xyz useShadow metallic smoothness
-
-
         data = CharacterDataFromGbuffer(gbuffer0, gbuffer1, gbuffer2);
+
+
+        float NdotL = saturate(dot(unityLight.direction, data.normalWS));
 
 
         alpha = unityLight.shadowAttenuation * unityLight.distanceAttenuation;
 
-        return half4(data.directColor, alpha);
+        #if defined(_DIRECTIONAL)
+            return half4(data.directColor, alpha);
+        #else
+            half3 resultCol = data.albedo * unityLight.color * NdotL * unityLight.shadowAttenuation * unityLight.distanceAttenuation;
+            return half4(resultCol, 1);
+
+        #endif
     }
 
     half4 FragFog(Varyings input) : SV_Target
@@ -615,7 +626,56 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 3 - Deferred Directional Light (Lit)
+        // 3 - Deferred Punctual Light (CharacterLit)
+        Pass
+        {
+            Name "Deferred Punctual Light (CharacterLit)"
+
+            ZTest GEqual
+            ZWrite Off
+            ZClip false
+            Cull Front
+            Blend One One, Zero One
+            BlendOp Add, Add
+
+            Stencil
+            {
+                Ref [_CharacterLitPunctualStencilRef]
+                ReadMask [_CharacterLitPunctualStencilReadMask]
+                WriteMask [_CharacterLitPunctualStencilWriteMask]
+                Comp Equal
+                Pass Zero
+                Fail Keep
+                ZFail Keep
+            }
+
+            HLSLPROGRAM
+            #pragma exclude_renderers gles gles3 glcore
+            #pragma target 4.5
+
+            #pragma multi_compile _POINT _SPOT
+            #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ LIGHTMAP_SHADOW_MIXING
+            #pragma multi_compile_fragment _ SHADOWS_SHADOWMASK
+            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
+            #pragma multi_compile_fragment _ _DEFERRED_MIXED_LIGHTING
+            #pragma multi_compile_fragment _ _SCREEN_SPACE_OCCLUSION
+            #pragma multi_compile_fragment _ _LIGHT_LAYERS
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+            #pragma multi_compile_fragment _ _LIGHT_COOKIES
+            #pragma multi_compile_fragment _ _FOVEATED_RENDERING_NON_UNIFORM_RASTER
+            // Foveated rendering currently not supported in dxc on metal
+            #pragma never_use_dxc metal
+
+            #pragma vertex Vertex
+            #pragma fragment CharacterDeferredShading
+            //#pragma enable_d3d11_debug_symbols
+
+            ENDHLSL
+        }
+
+        // 4 - Deferred Directional Light (Lit)
         Pass
         {
             Name "Deferred Directional Light (Lit)"
@@ -667,7 +727,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 4 - Deferred Directional Light (SimpleLit)
+        // 5 - Deferred Directional Light (SimpleLit)
         Pass
         {
             Name "Deferred Directional Light (SimpleLit)"
@@ -719,7 +779,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 5 - Deferred Directional Light (CharacterLit)
+        // 6 - Deferred Directional Light (CharacterLit)
         Pass
         {
             Name "Deferred Directional Light (CharacterLit)"
@@ -769,7 +829,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 6 - Legacy fog
+        // 7 - Legacy fog
         Pass
         {
             Name "Fog"
@@ -795,7 +855,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 7 - Clear stencil partial
+        // 8 - Clear stencil partial
         // This pass clears stencil between camera stacks rendering.
         // This is because deferred renderer encodes material properties in the 4 highest bits of the stencil buffer,
         // but we don't want to keep this information between camera stacks.
@@ -830,7 +890,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             ENDHLSL
         }
 
-        // 8 - SSAO Only
+        // 9 - SSAO Only
         // This pass only runs when there is no fullscreen deferred light rendered (no directional light). It will adjust indirect/baked lighting with realtime occlusion
         // by rendering just before deferred shading pass.
         // This pass is also completely discarded from vertex shader when SSAO renderer feature is not enabled.
