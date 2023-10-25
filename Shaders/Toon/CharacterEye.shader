@@ -385,7 +385,8 @@ Shader "Character/LitEye"
 				half3 emissResult = emission * albedo * _EmissionCol.rgb * _EmissionCol.a;
 				half3 lightingResult = directLightResult + indirectLightResult + emissResult;
 
-				return CharacterDataToGbuffer(albedo, directLightResult, indirectLightResult + emissResult, smoothness, metallic, normalWS, 0.0);
+				half isFace = 1.0;
+				return CharacterDataToGbuffer(albedo, directLightResult, indirectLightResult + emissResult, smoothness, metallic, normalWS, isFace);
             }
             ENDHLSL
 

@@ -245,6 +245,12 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         return unityLight;
     }
 
+    Light CharacterGetStencilLight(float3 posWS, float2 screen_uv, half4 shadowMask, half useShadow)
+    {
+        uint materialFlags = useShadow == 1.0 ? 0 : 1;
+        return GetStencilLight(posWS, screen_uv, shadowMask, materialFlags);
+    }
+
     half4 DeferredShading(Varyings input) : SV_Target
     {
         UNITY_SETUP_INSTANCE_ID(input);
@@ -383,19 +389,23 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         #endif
         #endif
 
+        // Extract gbuffer
+        CharacterData data;// albedo.rgb directColor.rgb normalWS.xyz rimStrength useShadow metallic smoothness
+        data = CharacterDataFromGbuffer(gbuffer0, gbuffer1, gbuffer2);
+
         // half surfaceDataOcclusion = gbuffer1.a;
         // uint materialFlags = UnpackMaterialFlags(gbuffer0.a);
         half surfaceDataOcclusion = 1;
-        uint materialFlags = gbuffer0.a == 0 ? kMaterialFlagReceiveShadowsOff : 0;
+        // uint materialFlags = gbuffer0.a == 0 ? kMaterialFlagReceiveShadowsOff : 0;
 
         half3 color = 0.0.xxx;
         half alpha = 1.0;
 
-        #if defined(_DEFERRED_MIXED_LIGHTING)
-        // If both lights and geometry are static, then no realtime lighting to perform for this combination.
-        [branch] if ((_LightFlags & materialFlags) == kMaterialFlagSubtractiveMixedLighting)
-            return half4(color, alpha); // Cannot discard because stencil must be updated.
-        #endif
+        // #if defined(_DEFERRED_MIXED_LIGHTING)
+        // // If both lights and geometry are static, then no realtime lighting to perform for this combination.
+        // [branch] if ((_LightFlags & materialFlags) == kMaterialFlagSubtractiveMixedLighting)
+        //     return half4(color, alpha); // Cannot discard because stencil must be updated.
+        // #endif
 
         #if defined(_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
         input.positionCS.xy = undistorted_screen_uv * _ScreenSize.xy;
@@ -409,7 +419,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         float4 positionWS = mul(_ScreenToWorld[eyeIndex], float4(input.positionCS.xy, d, 1.0));
         positionWS.xyz *= rcp(positionWS.w);
 
-        Light unityLight = GetStencilLight(positionWS.xyz, screen_uv, shadowMask, materialFlags);
+        Light unityLight = CharacterGetStencilLight(positionWS.xyz, screen_uv, shadowMask, data.useShadow);
 
         #ifdef _LIGHT_LAYERS
         float4 renderingLayers = SAMPLE_TEXTURE2D_X_LOD(MERGE_NAME(_, GBUFFER_LIGHT_LAYERS), my_point_clamp_sampler, screen_uv, 0);
@@ -432,17 +442,52 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
 
         // VectorPrepare
         float3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS.xyz);
-        CharacterData data;// albedo.rgb directColor.rgb normalWS.xyz useShadow metallic smoothness
-        data = CharacterDataFromGbuffer(gbuffer0, gbuffer1, gbuffer2);
-
-
         float NdotL = saturate(dot(unityLight.direction, data.normalWS));
+
 
 
         alpha = unityLight.shadowAttenuation * unityLight.distanceAttenuation;
 
         #if defined(_DIRECTIONAL)
-            return half4(data.directColor, alpha);
+
+#define _CharacterRimWidth 2.5
+#define _CharacterRimFrontColor half4(1, 1, 1, 0.8)
+#define _CharacterRimBackColor half4(0.8, 0.8, 1, 0.8)
+
+            // RimLight
+            float3 normalVS = TransformWorldToViewNormal(data.normalWS);
+            normalVS = normalize(normalVS);
+            float3 lightDirVS = TransformWorldToViewDir(unityLight.direction.xyz);
+            lightDirVS = normalize(lightDirVS);
+            float NdotLVS = dot(normalVS, lightDirVS);
+
+            float normalExtendLeftOffset = normalVS > 0 ? 1.0 : -1.0;
+            normalExtendLeftOffset *= _CharacterRimWidth * 0.0044;
+
+            float eyeDepth = LinearEyeDepth(d, _ZBufferParams);
+
+            float2 extendUV = screen_uv;
+            extendUV.x += normalExtendLeftOffset / (eyeDepth + 3.0);
+
+            float extendedRawDepth = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, my_point_clamp_sampler, extendUV, 0).x;
+            float extendedEyeDepth = LinearEyeDepth(extendedRawDepth, _ZBufferParams);
+
+            float depthOffset = extendedEyeDepth - eyeDepth;
+
+            float rimArea = saturate(depthOffset * depthOffset * 5);
+
+            float frontRim = max(NdotLVS, 0);
+            float backRim = max(-NdotLVS, 0);
+
+            float3 frontRimColor = frontRim * _CharacterRimFrontColor.rgb * _CharacterRimFrontColor.a;
+            float3 backRimColor = backRim * _CharacterRimBackColor.rgb * _CharacterRimBackColor.a;
+            float3 rimColor = frontRimColor + backRimColor;
+            float3 albedoRimColor = saturate(data.albedo.rgb * 5 + 0.3);
+
+            rimColor = rimColor * albedoRimColor * saturate(alpha + 0.5) * data.rimStrength;
+            // return half4(data.directColor * alpha, 1);
+            // return half4(rimColor.rgb * rimArea, 1);
+            return half4(data.directColor * alpha + rimColor.rgb * rimArea, 1);
         #else
             half3 resultCol = data.albedo * unityLight.color * NdotL * unityLight.shadowAttenuation * unityLight.distanceAttenuation;
             return half4(resultCol, 1);
@@ -790,6 +835,9 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             // BlendOut = SrcAlpha * SrcDirectCol + One * DstIndirectCol
             Blend SrcAlpha One, Zero One
             BlendOp Add, Add
+
+            // Blend SrcAlpha Zero, Zero One
+            // BlendOp Add, Add
 
             Stencil
             {

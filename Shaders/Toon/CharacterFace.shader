@@ -74,9 +74,9 @@ Shader "Character/LitFace"
         [FoldoutEnd]_FoldoutIndirectLightEnd("_FoldoutEnd", float) = 0
 
         [FoldoutBegin(_FoldoutOutlineEnd)]_FoldoutOutline("Outline", float) = 0
-            _OutlineWidth("OutlineWidth", Range(0, 10))         = 1.0
-            _OutlineClampScale("OutlineClampScale", Range(0.01, 5)) = 1
-            _OutlineColor("Outline Color", Color)               = (0, 0, 0, 0.8)
+			_OutlineColor					("Outline Color", Color)				= (0, 0, 0, 0.8)
+            _OutlineWidth					("OutlineWidth", Range(0, 10))			= 1.0
+            _OutlineClampScale				("OutlineClampScale", Range(0.01, 5)) 	= 1
         [FoldoutEnd]_FoldoutOutlineEnd("_FoldoutEnd", float) = 0
 
 
@@ -454,7 +454,8 @@ Shader "Character/LitFace"
 
 				// Current face not receive all(self, scene) dynamic shadows
 				// TODO: reveive environment dynamic shadows Only
-				return CharacterDataToGbuffer(albedo, directLightResult, indirectLightResult + emissResult, smoothness, metallic, normalWS, 0);
+				half isFace = 1.0;
+				return CharacterDataToGbuffer(albedo, directLightResult, indirectLightResult + emissResult, smoothness, metallic, normalWS, isFace);
             }
             ENDHLSL
 

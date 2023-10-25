@@ -27,7 +27,7 @@ struct CharacterData
     half3 directColor;
 
     half3 normalWS;
-
+    half rimStrength;
     half useShadow;
     half metallic;
     half smoothness;

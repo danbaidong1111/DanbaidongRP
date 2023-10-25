@@ -123,7 +123,10 @@ Shader "Character/Outline"
 
                 half3 oulineColor = mainTexColor.rgb * _OutlineColor.rgb;
 				oulineColor = lerp(mainTexColor.rgb, _OutlineColor.rgb, _OutlineColor.a);
-                return CharacterDataToGbuffer(mainTexColor, half3(0,0,0), oulineColor, 0, 0, i.normalWS);
+
+                half isFace = 0.0;
+                half isOutline = 1.0;
+                return CharacterDataToGbuffer(mainTexColor, half3(0,0,0), oulineColor, 0, 0, i.normalWS, isFace, isOutline);
             }
 
             ENDHLSL
