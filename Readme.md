@@ -1,4 +1,4 @@
-![image](https://github.com/danbaidong1111/DanbaidongRP/assets/28555354/c3434192-d9c8-4442-adb3-cfbb45c95a31)<div align="center">
+<div align="center">
   
    # **Danbaidong Render Pipeline**
 
