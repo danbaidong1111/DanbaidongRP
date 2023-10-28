@@ -34,19 +34,52 @@ Shader "Character/Outline"
             // Deferred Rendering Path does not support the OpenGL-based graphics API:
             // Desktop OpenGL, OpenGL ES 3.0, WebGL 2.0.
             #pragma exclude_renderers gles3 glcore
+
+            // -------------------------------------
+            // Shader Stages
+            #pragma vertex ToonOutlineVert
+            #pragma fragment ToonOutlineFrag
+
+			// -------------------------------------
+            // Material Keywords
+
+
+			// -------------------------------------
+            // Universal Pipeline keywords
+			// #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            //#pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+            //#pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
+            // #pragma multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
+            // #pragma multi_compile_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
+            // #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ _DBUFFER_MRT1 _DBUFFER_MRT2 _DBUFFER_MRT3
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+            #include_with_pragmas "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/RenderingLayers.hlsl"
+
+            // -------------------------------------
+            // Unity defined keywords
+			// #pragma multi_compile _ LIGHTMAP_SHADOW_MIXING
+            // #pragma multi_compile _ SHADOWS_SHADOWMASK
+            // #pragma multi_compile _ DIRLIGHTMAP_COMBINED
+            // #pragma multi_compile _ LIGHTMAP_ON
+            // #pragma multi_compile _ DYNAMICLIGHTMAP_ON
+            #pragma multi_compile_fragment _ LOD_FADE_CROSSFADE
+            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
+
+            //--------------------------------------
+            // GPU Instancing
             #pragma multi_compile_instancing
-			// #pragma multi_compile _ LOD_FADE_CROSSFADE
-			// #pragma multi_compile_fog
-			#pragma exclude_renderers d3d11_9x
+            #pragma instancing_options renderinglayer
+            #include_with_pragmas "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DOTS.hlsl"
 
-
+            // -------------------------------------
+            // Includes
             #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 			#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
 			#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
 			#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
+            #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DanbaidongToon.hlsl"
 
-            #pragma vertex ToonOutlineVert
-            #pragma fragment ToonOutlineFrag
 
 			CBUFFER_START(UnityPerMaterial)
             float4 _BaseMap_ST;
@@ -121,12 +154,14 @@ Shader "Character/Outline"
                 clip(mainTexColor.a - _AlphaClip);
             #endif
 
+                float3 normalWS = SafeNormalize(i.normalWS);
+
                 half3 oulineColor = mainTexColor.rgb * _OutlineColor.rgb;
 				oulineColor = lerp(mainTexColor.rgb, _OutlineColor.rgb, _OutlineColor.a);
 
                 half isFace = 0.0;
                 half isOutline = 1.0;
-                return CharacterDataToGbuffer(mainTexColor, half3(0,0,0), oulineColor, 0, 0, i.normalWS, isFace, isOutline);
+                return CharacterDataToGbuffer(mainTexColor, half3(0,0,0), oulineColor, 0, 0, normalWS, isFace, isOutline);
             }
 
             ENDHLSL

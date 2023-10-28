@@ -390,7 +390,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         #endif
 
         // Extract gbuffer
-        CharacterData data;// albedo.rgb directColor.rgb normalWS.xyz rimStrength useShadow metallic smoothness
+        CharacterData data;// albedo.rgb directColor.rgb normalWS.xyz rimStrength useShadow metallic smoothness materialFlags
         data = CharacterDataFromGbuffer(gbuffer0, gbuffer1, gbuffer2);
 
         // half surfaceDataOcclusion = gbuffer1.a;
@@ -420,6 +420,11 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         positionWS.xyz *= rcp(positionWS.w);
 
         Light unityLight = CharacterGetStencilLight(positionWS.xyz, screen_uv, shadowMask, data.useShadow);
+    #if defined(_DIRECTIONAL)
+    #else
+            // Limit too-close lights intensity
+            unityLight.distanceAttenuation = min(unityLight.distanceAttenuation, 15);
+    #endif
 
         #ifdef _LIGHT_LAYERS
         float4 renderingLayers = SAMPLE_TEXTURE2D_X_LOD(MERGE_NAME(_, GBUFFER_LIGHT_LAYERS), my_point_clamp_sampler, screen_uv, 0);
@@ -441,26 +446,52 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         #endif
 
         // VectorPrepare
-        float3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS.xyz);
-        float NdotL = saturate(dot(unityLight.direction, data.normalWS));
+        float3 lightDirWS   = unityLight.direction;
+        float3 normalWS     = data.normalWS;
+        float3 viewDirWS    = GetWorldSpaceNormalizeViewDir(positionWS.xyz);
+        float3 halfDir      = SafeNormalize(lightDirWS + viewDirWS);
+        float3 normalVS     = TransformWorldToViewNormal(data.normalWS);
+        normalVS            = SafeNormalize(normalVS);
+        float3 lightDirVS   = TransformWorldToViewDir(lightDirWS);
+        lightDirVS          = SafeNormalize(lightDirVS);
 
+        float NdotL         = saturate(dot(normalWS, lightDirWS));
+        float NdotV         = saturate(dot(normalWS, viewDirWS));
+        float NdotH         = saturate(dot(normalWS, halfDir));
+        float NdotLVS       = dot(normalVS, lightDirVS);
+        float HdotV         = saturate(dot(halfDir,  viewDirWS));
+
+        // Property prepare
+		half metallic  	    = data.metallic;
+		half smoothness     = lerp(data.smoothness, 0, 5);
+		half3 albedo        = data.albedo;
 
 
         alpha = unityLight.shadowAttenuation * unityLight.distanceAttenuation;
 
+
+        // Outline
+        if ((data.materialFlags & kCharacterMaterialFlagOutline) != 0)
+        {
+            float lightMask = 1 - smoothstep(0.5, 0.8, abs(lightDirVS.z));
+            float outLineLightResult = step(0.8, NdotL * NdotL) * alpha * lightMask;
+
+            
         #if defined(_DIRECTIONAL)
+
+            return half4(unityLight.color * outLineLightResult, 1);
+        #else
+            outLineLightResult = step(0.8, pow(NdotL, 3)) * alpha;
+            return half4(unityLight.color * outLineLightResult, 1);
+        #endif
+
+        }
 
 #define _CharacterRimWidth 2.5
 #define _CharacterRimFrontColor half4(1, 1, 1, 0.8)
-#define _CharacterRimBackColor half4(0.8, 0.8, 1, 0.8)
+#define _CharacterRimBackColor half4(0.8, 0.8, 1, 0.4)
 
             // RimLight
-            float3 normalVS = TransformWorldToViewNormal(data.normalWS);
-            normalVS = normalize(normalVS);
-            float3 lightDirVS = TransformWorldToViewDir(unityLight.direction.xyz);
-            lightDirVS = normalize(lightDirVS);
-            float NdotLVS = dot(normalVS, lightDirVS);
-
             float normalExtendLeftOffset = normalVS > 0 ? 1.0 : -1.0;
             normalExtendLeftOffset *= _CharacterRimWidth * 0.0044;
 
@@ -474,7 +505,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
 
             float depthOffset = extendedEyeDepth - eyeDepth;
 
-            float rimArea = saturate(depthOffset * depthOffset * 5);
+            float rimArea = saturate(depthOffset * 5);
 
             float frontRim = max(NdotLVS, 0);
             float backRim = max(-NdotLVS, 0);
@@ -485,13 +516,32 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             float3 albedoRimColor = saturate(data.albedo.rgb * 5 + 0.3);
 
             rimColor = rimColor * albedoRimColor * saturate(alpha + 0.5) * data.rimStrength;
-            // return half4(data.directColor * alpha, 1);
-            // return half4(rimColor.rgb * rimArea, 1);
+
+        #if defined(_DIRECTIONAL)
             return half4(data.directColor * alpha + rimColor.rgb * rimArea, 1);
         #else
-            half3 resultCol = data.albedo * unityLight.color * NdotL * unityLight.shadowAttenuation * unityLight.distanceAttenuation;
-            return half4(resultCol, 1);
 
+			float perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(smoothness);
+			float roughness           = max(PerceptualRoughnessToRoughness(perceptualRoughness), HALF_MIN_SQRT);
+			float roughnessSquare     = max(roughness * roughness, HALF_MIN);
+			float3 F0 = lerp(0.04, albedo, metallic);
+
+			float NDF = DistributionGGX(NdotH, roughnessSquare);
+			float G = GeometrySmith(NdotL, NdotV, pow(roughness + 1.0, 2.0) / 8.0);
+			float3 F = fresnelSchlick(HdotV, F0);
+
+			float3 kSpec = F;
+			float3 kDiff = ((1.0 - F) * 0.5 + 0.5) * (1.0 - metallic);
+
+			float3 nom = NDF * G * F;
+			float3 denom = 4.0 * NdotV * NdotL + 0.0001;
+			float3 BRDFSpec = nom / denom;
+
+			float3 diffColor = kDiff * albedo;
+			float3 specColor = BRDFSpec * PI;
+
+            half3 resultCol = (diffColor + specColor) * unityLight.color * NdotL * alpha;
+            return half4(resultCol, 1);
         #endif
     }
 

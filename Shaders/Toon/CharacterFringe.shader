@@ -549,46 +549,53 @@ Shader "Character/LitFringe"
             // Desktop OpenGL, OpenGL ES 3.0, WebGL 2.0.
             #pragma exclude_renderers gles3 glcore
 
-			#pragma multi_compile_instancing
-			#pragma multi_compile _ LOD_FADE_CROSSFADE
-			#pragma multi_compile_fog
-			#pragma exclude_renderers d3d11_9x
+			// -------------------------------------
+            // Shader Stages
+            #pragma vertex DanbaidongToonVert
+            #pragma fragment frag
 
-			#pragma multi_compile _ _SCREEN_SPACE_OCCLUSION
-			#pragma multi_compile _ _MAIN_LIGHT_SHADOWS
-			#pragma multi_compile _ _MAIN_LIGHT_SHADOWS_CASCADE
-			#pragma multi_compile _ _HBAO_SCREENSPACE_SHADOWS
-			#pragma multi_compile _ _CLOUDLAYER_SHADOWS
-			#pragma multi_compile _ Anti_Aliasing_ON
-			//#pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS _ADDITIONAL_LIGHTS_CLUSTER_CULL
-			//#pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
-			//#pragma multi_compile _ _MIXED_LIGHTING_SUBTRACTIVE
-			//#pragma multi_compile _ _SHADOWS_SOFT
-			
-			//#pragma multi_compile _ LIGHTMAP_SHADOW_MIXING
-			//#pragma multi_compile _ SHADOWS_SHADOWMASK
-
-			#pragma multi_compile _ DIRLIGHTMAP_COMBINED
-			#pragma multi_compile _ LIGHTMAP_ON
-
-			// #pragma shader_feature_local _DIRECT_BLINNPHONG
-            #pragma shader_feature_local _SHADOW_RAMP
+			// -------------------------------------
+            // Material Keywords
+			#pragma shader_feature_local _SHADOW_RAMP
 			#pragma shader_feature_local _INDIR_CUBEMAP
 			#pragma shader_feature_local _INDIR_MATCAP
 
+			// -------------------------------------
+            // Universal Pipeline keywords
+			#pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
+            //#pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
+            //#pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
+            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
+            #pragma multi_compile_fragment _ _REFLECTION_PROBE_BOX_PROJECTION
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+            #pragma multi_compile_fragment _ _DBUFFER_MRT1 _DBUFFER_MRT2 _DBUFFER_MRT3
+            #pragma multi_compile_fragment _ _RENDER_PASS_ENABLED
+            #include_with_pragmas "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/RenderingLayers.hlsl"
+
+			// -------------------------------------
+            // Unity defined keywords
+			// #pragma multi_compile _ LIGHTMAP_SHADOW_MIXING
+            // #pragma multi_compile _ SHADOWS_SHADOWMASK
+            // #pragma multi_compile _ DIRLIGHTMAP_COMBINED
+            // #pragma multi_compile _ LIGHTMAP_ON
+            // #pragma multi_compile _ DYNAMICLIGHTMAP_ON
+            #pragma multi_compile_fragment _ LOD_FADE_CROSSFADE
+            #pragma multi_compile_fragment _ _GBUFFER_NORMALS_OCT
+
+			//--------------------------------------
+            // GPU Instancing
+            #pragma multi_compile_instancing
+            #pragma instancing_options renderinglayer
+            #include_with_pragmas "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DOTS.hlsl"
+
+			// -------------------------------------
+            // Includes
 			#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
-			#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Input.hlsl"
 			#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
-			#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
 			#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
 			#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
 			#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DanbaidongToon.hlsl"
-
-			#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/BSDF.hlsl"
-           
-            #pragma vertex vert
-            #pragma fragment frag
-
+			// #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/BSDF.hlsl"
 
             CBUFFER_START(UnityPerMaterial)
             float4 _BaseMap_ST;
@@ -654,17 +661,10 @@ Shader "Character/LitFringe"
 			SAMPLER(sampler_PBRMask);
 		    TEXTURE2D(_NormalMap);
 			SAMPLER(sampler_NormalMap);	
-			
-			// TEXTURE2D(_OcclusionMap);
-			// SAMPLER(sampler_OcclusionMap);
 
 			TEXTURE2D(_ILMMapSpecType);
 			TEXTURE2D(_ILMMapAO);
-			SAMPLER(sampler_ILMMapAO);
 			TEXTURE2D(_ILMMapSpecMask);
-
-			TEXTURE2D(_FaceMap);
-			SAMPLER(sampler_FaceMap);
 
             TEXTURE2D(_ShadowRampTex);
 			SAMPLER(sampler_ShadowRampTex);
@@ -676,29 +676,6 @@ Shader "Character/LitFringe"
 
 			TEXTURE2D(_HairSpecTex);
 
-			struct a2v 
-			{
-				float4 vertex 	:POSITION;
-				float3 normal 	:NORMAL;
-				float4 tangent 	:TANGENT;
-				float4 color  	:COLOR;
-				float4 uv0 		:TEXCOORD0;
-				float4 uv1 		:TEXCOORD1;
-				UNITY_VERTEX_INPUT_INSTANCE_ID 
-			};
-			struct v2f 
-			{
-				float4 positionHCS		:SV_POSITION;
-                float3 positionWS   	:TEXCOORD0;
-                float3 normalWS     	:TEXCOORD1;
-                float3 tangentWS    	:TEXCOORD2;
-                float3 biTangentWS  	:TEXCOORD3;
-				float4 color 			:TEXCOORD4;
-				float2 uv				:TEXCOORD5;
-				float2 uv1				:TEXCOORD6;
-				UNITY_VERTEX_INPUT_INSTANCE_ID
-			};
-
 			struct FringeOuter_fragOut
 			{
 				half4 GBuffer0 : SV_Target0;
@@ -707,31 +684,12 @@ Shader "Character/LitFringe"
 				half4 GBuffer3 : SV_Target3;
 			};
 
-            v2f vert (a2v v)
-			{
-				v2f o;
-                UNITY_SETUP_INSTANCE_ID(v); 
-                UNITY_TRANSFER_INSTANCE_ID(v,o); 
 
-				o.positionHCS = TransformObjectToHClip(v.vertex);
-                o.positionWS = TransformObjectToWorld(v.vertex);
-
-				o.normalWS = TransformObjectToWorldNormal(v.normal);
-                o.tangentWS = TransformObjectToWorldDir(v.tangent.xyz);
-                o.biTangentWS = cross(o.normalWS,o.tangentWS) * v.tangent.w * GetOddNegativeScale();
-				o.color = v.color;
-
-				o.uv  = v.uv0;
-				o.uv1 = v.uv1;
-
-				return o;
-			}
-
-
-            FringeOuter_fragOut frag(v2f i)
+            FringeOuter_fragOut frag(Toon_v2f i)
             {
                 UNITY_SETUP_INSTANCE_ID(i);
-                half2  UV = i.uv;
+                float2 UV = i.uv.xy;
+				float2 UV1 = i.uv.zw;
 				float3 positionWS = i.positionWS;
 				float4 shadowCoords = TransformWorldToShadowCoord(positionWS);
 				Light mainLight = GetMainLight();
@@ -741,11 +699,9 @@ Shader "Character/LitFringe"
                 half4 mainTex = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, UV);
                 half4 pbrMask = SAMPLE_TEXTURE2D(_PBRMask, sampler_PBRMask, UV);
 				half3 bumpTS = UnpackNormalScale(SAMPLE_TEXTURE2D(_NormalMap, sampler_NormalMap,UV), _NormalScale);
-				// half  occlusionTex = SAMPLE_TEXTURE2D(_OcclusionMap, sampler_OcclusionMap, UV).r;
 				half  ilmSpecMask = SAMPLE_TEXTURE2D(_ILMMapSpecMask, sampler_LinearClamp, UV).r;
-				half  ilmAO = SAMPLE_TEXTURE2D(_ILMMapAO, sampler_ILMMapAO, UV).r;
+				half  ilmAO = SAMPLE_TEXTURE2D(_ILMMapAO, sampler_LinearClamp, UV).r;
 				ilmAO = lerp(1 - _SecShadowStrength, 1, ilmAO);
-
 
 				// VectorPrepare
 				float3 lightDirWS = SafeNormalize(mainLight.direction);
@@ -764,8 +720,6 @@ Shader "Character/LitFringe"
 				float NdotH = saturate(dot(normalWS, halfDir));
 				float HdotV = saturate(dot(halfDir,  viewDirWS));
 
-
-
 				// Property prepare
 					half emission			= 1 - mainTex.a;
 					half metallic  			= lerp(0, _Metallic, pbrMask.r);
@@ -780,11 +734,7 @@ Shader "Character/LitFringe"
                     //Remap NdotL for PBR Spec
                     half NdotLRemap = 1 - shadowArea;
                 #if _SHADOW_RAMP
-                    float2 shadowRampUV = float2(1 - shadowArea, 0.125);
-                    half4 shadowRampCol = SAMPLE_TEXTURE2D(_ShadowRampTex, sampler_ShadowRampTex, shadowRampUV);
-
-
-                    shadowRamp = shadowRampCol.rgb;
+                    shadowRamp = SampleDirectShadowRamp(TEXTURE2D_ARGS(_ShadowRampTex, sampler_ShadowRampTex), 1.0 - shadowArea);
                 #endif
 					
                     // NdotV modify fresnel
@@ -795,12 +745,9 @@ Shader "Character/LitFringe"
 
 
 
-
 				// Direct
 					float3 directDiffColor = albedo.rgb;
 
-
-					// PBR Specular TODO: GGX specArea ramap;
 					float perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(smoothness);
 					float roughness           = max(PerceptualRoughnessToRoughness(perceptualRoughness), HALF_MIN_SQRT);
 					float roughnessSquare     = max(roughness * roughness, HALF_MIN);
@@ -809,12 +756,12 @@ Shader "Character/LitFringe"
 					float NDF = DistributionGGX(NdotH, roughnessSquare);
 					float G = GeometrySmith(NdotLRemap, NdotV, pow(roughness + 1.0, 2.0) / 8.0);
 					float3 F = fresnelSchlick(HdotV, F0);
-
+                    
+					// GGX specArea remap
 					NDF = NDF * ilmSpecMask;
 
-
 					float3 kSpec = F;
-					// (1.0 - F) Diff too dark
+					// LightUpDiff: (1.0 - F) => (1.0 - F) * 0.5 + 0.5
 					float3 kDiff = ((1.0 - F) * 0.5 + 0.5) * (1.0 - metallic);
 
 					float3 nom = NDF * G * F;
@@ -825,24 +772,15 @@ Shader "Character/LitFringe"
 					float3 directSpecColor = BRDFSpec * PI;
 
 
-				// #if _DIRECT_BLINNPHONG
-				// 	// Blinn-Phong
-				// 	// smoothness to Blinn-Phong Specular "Gloss" from CalculateBlinnPhong in Lighting.hlsl
-				// 	half blinnPhongSpec = pow(NdotH, exp2(10 * smoothness + 1));
-
-				// 	directSpecColor = F0 * blinnPhongSpec * _BlinnPhongSpecStrength * ilmSpecMask;
-				// #endif /* _DIRECT_BLINNPHONG */
-
                 #if _SHADOW_RAMP
-                    half blinnPhongSpec = pow(NdotH, exp2(7 * smoothness + 1));
-                    float2 specRampUV = float2(saturate(NDF * G / denom.x), 0.375);
-                    half4 specRampCol = SAMPLE_TEXTURE2D(_ShadowRampTex, sampler_ShadowRampTex, specRampUV);
+                    float specRange= saturate(NDF * G / denom.x);
+                    half4 specRampCol = SampleDirectSpecularRamp(TEXTURE2D_ARGS(_ShadowRampTex, sampler_ShadowRampTex), specRange);
                     directSpecColor = clamp(specRampCol.rgb * 3 + BRDFSpec * PI / F, 0, 10) * F * shadowRamp;
                 #endif
 
 					// Hair Spec
 					float anisotropicOffsetV = - viewDirWS.y * _AnisotropicSlide + _AnisotropicOffset;
-					half3 hairSpecTex = SAMPLE_TEXTURE2D(_HairSpecTex, sampler_LinearClamp, float2(i.uv1.x, i.uv1.y + anisotropicOffsetV));
+					half3 hairSpecTex = SAMPLE_TEXTURE2D(_HairSpecTex, sampler_LinearClamp, float2(UV1.x, UV1.y + anisotropicOffsetV));
 					float hairSpecStrength = _SpecMinimum + pow(NdotH, _BlinnPhongPow) * NdotLRemap;
 					half3 hairSpecColor = hairSpecTex * _SpecColor * hairSpecStrength;
 
@@ -851,18 +789,9 @@ Shader "Character/LitFringe"
 												* mainLight.color * mainLight.shadowAttenuation * directOcclusion;
 
 
-
-
-
 				// Indirect
 					// Diffuse
-					float3 SHNormal = lerp(normalWS, float3(1,1,1), _IndirDiffUpDirSH);
-					float3 SHColor = SampleSH(SHNormal);
-                    float3 envColor = lerp(SHColor, _SelfEnvColor, _EnvColorLerp);
-					
-					float3 indirKs = fresnelSchlickIndirect(NdotV, F0, roughness);
-					float3 indirKd = (1 - indirKs) * (1 - metallic);
-					float3 indirDiffColor = envColor * indirKd * albedo * occlusion;
+					float3 indirDiffColor = IndirectDiffuse(normalWS, _IndirDiffUpDirSH, half4(_SelfEnvColor.rgb, _EnvColorLerp), albedo, F0, NdotV, roughness, metallic, occlusion);
 
 
 					// Specular
@@ -880,34 +809,23 @@ Shader "Character/LitFringe"
 					float2 matcapUV = (normalVS.xy * _IndirSpecMatcapTile) * 0.5 + 0.5;
 					additionalIndirSpec = SAMPLE_TEXTURE2D(_IndirSpecMatcap, sampler_IndirSpecMatcap, matcapUV);
 				#endif /* _INDIR_CUBEMAP _INDIR_MATCAP */
-
 					float3 indirSpecColor = lerp(indirSpecCubeColor, additionalIndirSpec, _IndirSpecLerp) * indirSpecCubeFactor;
 
-
+					// Compose indirect lighting
 					float3 indirectLightResult = indirDiffColor * _IndirDiffIntensity + indirSpecColor * _IndirSpecIntensity;
-
-
-				//RimDir 
-				// float4 Rim = float4(0,0,0,0); 
-				// half Vec = 1-i.Ver.x;
-				// float rim = 1.0 - NdotV;//法线与视线垂直的地方边缘光强度最强 
-				//       rim = smoothstep(1-_RimWidth, 1, rim); 
-				//       rim = smoothstep(0, _RimSmoothness, rim); 
-				//       Rim = rim * _RimColor * _RimIntensity;
-				// 	  Rim = Rim *(1-NdotL)*saturate(normalWS.y)*saturate(pow(Vec,2)/2) * Occlusion * shadow * smoothness;
-
-
 
 				half3 emissResult = emission * albedo * _EmissionCol.rgb * _EmissionCol.a;
 				half3 lightingResult = directLightResult + indirectLightResult + emissResult;
 
 
 				FringeOuter_fragOut output;
+				// Pack normal
+    			half3 packedNormalWS = PackNormal(normalWS);
 
 				output.GBuffer0 = half4(albedo.rgb, 0);
-				output.GBuffer1 = half4(PackColorToR8G8B8(lightingResult.rgb), _OuterAlpha);
-				output.GBuffer2 = half4(0, 0, 0 , 0);
-				output.GBuffer3 = half4(0, 0, 0 , 0);
+				output.GBuffer1 = half4(PackColorToR8G8B8(directLightResult.rgb), _OuterAlpha);
+				output.GBuffer2 = half4(packedNormalWS, 0);
+				output.GBuffer3 = half4(indirectLightResult, _OuterAlpha);
 				
 				return output;
 

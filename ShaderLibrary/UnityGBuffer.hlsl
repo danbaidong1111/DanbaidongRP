@@ -352,7 +352,7 @@ CharacterData CharacterDataFromGbuffer(half4 gbuffer0, half4 gbuffer1, half4 gbu
     }
     if ((materialFlags & kCharacterMaterialFlagOutline) != 0)
     {
-        useShadow = 0.0;
+        // useShadow = 0.0;
         rimStrength = 0.0;
     }
 
@@ -364,6 +364,7 @@ CharacterData CharacterDataFromGbuffer(half4 gbuffer0, half4 gbuffer1, half4 gbu
     data.useShadow = useShadow;
     data.metallic = metallic;
     data.smoothness = smoothness;
+    data.materialFlags = materialFlags;
     return data;
 }
 

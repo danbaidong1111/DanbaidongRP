@@ -31,6 +31,7 @@ struct CharacterData
     half useShadow;
     half metallic;
     half smoothness;
+    uint materialFlags;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
