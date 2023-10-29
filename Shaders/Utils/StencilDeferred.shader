@@ -355,6 +355,99 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         return half4(color, alpha);
     }
 
+    
+    half3 CharacterPunctualLighting(half smoothness, half metallic, half3 albedo, float3 lightDirWS, float3 normalWS, float3 viewDirWS, Light unityLight)
+    {
+        float3 halfDir      = SafeNormalize(lightDirWS + viewDirWS);
+
+        float NdotL         = saturate(dot(normalWS, lightDirWS));
+        float NdotV         = saturate(dot(normalWS, viewDirWS));
+        float NdotH         = saturate(dot(normalWS, halfDir));
+        float HdotV         = saturate(dot(halfDir,  viewDirWS));
+
+		float perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(smoothness);
+		float roughness           = max(PerceptualRoughnessToRoughness(perceptualRoughness), HALF_MIN_SQRT);
+		float roughnessSquare     = max(roughness * roughness, HALF_MIN);
+		float3 F0 = lerp(0.04, albedo, metallic);
+
+		float NDF = DistributionGGX(NdotH, roughnessSquare);
+		float G = GeometrySmith(NdotL, NdotV, pow(roughness + 1.0, 2.0) / 8.0);
+		float3 F = fresnelSchlick(HdotV, F0);
+
+		float3 kSpec = F;
+		float3 kDiff = ((1.0 - F) * 0.5 + 0.5) * (1.0 - metallic);
+
+		float3 nom = NDF * G * F;
+		float3 denom = 4.0 * NdotV * NdotL + 0.0001;
+		float3 BRDFSpec = nom / denom;
+
+		float3 diffColor = kDiff * albedo;
+		float3 specColor = BRDFSpec * PI;
+
+        half3 resultCol = (diffColor + specColor) * unityLight.color * NdotL * unityLight.shadowAttenuation * unityLight.distanceAttenuation;
+
+        return resultCol;
+    }
+
+    half4 CharacterDirectRimLight(float3 albedo, float rimStrength, float3 normalVS, float3 lightDirVS, float2 screen_uv, float d, float shadow,
+                                    float rimWidth, float4 frontColor, float4 backColor)
+    {
+        float NdotLVS = dot(normalVS, lightDirVS);
+
+        // RimLight
+        float normalExtendLeftOffset = normalVS > 0 ? 1.0 : -1.0;
+        normalExtendLeftOffset *= rimWidth * 0.0044;
+
+        float eyeDepth = LinearEyeDepth(d, _ZBufferParams);
+
+        float2 extendUV = screen_uv;
+        extendUV.x += normalExtendLeftOffset / (eyeDepth + 3.0);
+
+        float extendedRawDepth = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, my_point_clamp_sampler, extendUV, 0).x;
+        float extendedEyeDepth = LinearEyeDepth(extendedRawDepth, _ZBufferParams);
+
+        float depthOffset = extendedEyeDepth - eyeDepth;
+
+        float rimArea = saturate(depthOffset * 5);
+
+        float frontRim = max(NdotLVS, 0);
+        float backRim = max(-NdotLVS, 0);
+
+        float3 frontRimColor = frontRim * frontColor.rgb * frontColor.a;
+        float3 backRimColor = backRim * backColor.rgb * backColor.a;
+        float3 albedoRimColor = saturate(albedo * 5 + 0.3);
+
+        float3 rimColor = (frontRimColor + backRimColor) * albedoRimColor * saturate(shadow + 0.5) * rimStrength;
+        return half4(rimColor, rimArea);
+    }
+
+    half4 CharacterPunctualRimLight(float3 albedo, float rimStrength, float3 normalVS, float3 lightDirVS, float2 screen_uv, float d, float shadow,
+                                    float rimWidth, float3 lightColor)
+    {
+        normalVS = normalize(normalVS);
+        float NdotLVS = dot(normalVS, lightDirVS);
+
+        // RimLight
+        float2 normalExtendDirVS = normalize(lightDirVS.xy);
+        normalExtendDirVS *= rimWidth * 0.0044;
+
+        float eyeDepth = LinearEyeDepth(d, _ZBufferParams);
+
+        float2 extendUV = screen_uv;
+        extendUV.xy += normalExtendDirVS.xy / (eyeDepth + 3.0);
+
+        float extendedRawDepth = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, my_point_clamp_sampler, extendUV, 0).x;
+        float extendedEyeDepth = LinearEyeDepth(extendedRawDepth, _ZBufferParams);
+
+        float depthOffset = extendedEyeDepth - eyeDepth;
+        float rimArea = saturate(depthOffset * 1);
+
+        float3 albedoRimColor = saturate(albedo * 5 + 0.3);
+
+        float3 rimColor = albedoRimColor * lightColor * saturate(NdotLVS) * shadow * rimStrength;
+        return half4(rimColor, rimArea);
+    }
+    
     half4 CharacterDeferredShading(Varyings input) : SV_Target
     {
         UNITY_SETUP_INSTANCE_ID(input);
@@ -449,21 +542,18 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
         float3 lightDirWS   = unityLight.direction;
         float3 normalWS     = data.normalWS;
         float3 viewDirWS    = GetWorldSpaceNormalizeViewDir(positionWS.xyz);
-        float3 halfDir      = SafeNormalize(lightDirWS + viewDirWS);
+
         float3 normalVS     = TransformWorldToViewNormal(data.normalWS);
         normalVS            = SafeNormalize(normalVS);
         float3 lightDirVS   = TransformWorldToViewDir(lightDirWS);
         lightDirVS          = SafeNormalize(lightDirVS);
 
         float NdotL         = saturate(dot(normalWS, lightDirWS));
-        float NdotV         = saturate(dot(normalWS, viewDirWS));
-        float NdotH         = saturate(dot(normalWS, halfDir));
-        float NdotLVS       = dot(normalVS, lightDirVS);
-        float HdotV         = saturate(dot(halfDir,  viewDirWS));
+
 
         // Property prepare
 		half metallic  	    = data.metallic;
-		half smoothness     = lerp(data.smoothness, 0, 5);
+		half smoothness     = lerp(data.smoothness, 0, 0.2);
 		half3 albedo        = data.albedo;
 
 
@@ -476,9 +566,7 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
             float lightMask = 1 - smoothstep(0.5, 0.8, abs(lightDirVS.z));
             float outLineLightResult = step(0.8, NdotL * NdotL) * alpha * lightMask;
 
-            
         #if defined(_DIRECTIONAL)
-
             return half4(unityLight.color * outLineLightResult, 1);
         #else
             outLineLightResult = step(0.8, pow(NdotL, 3)) * alpha;
@@ -491,59 +579,23 @@ Shader "Hidden/Universal Render Pipeline/StencilDeferred"
 #define _CharacterRimFrontColor half4(1, 1, 1, 0.8)
 #define _CharacterRimBackColor half4(0.8, 0.8, 1, 0.4)
 
-            // RimLight
-            float normalExtendLeftOffset = normalVS > 0 ? 1.0 : -1.0;
-            normalExtendLeftOffset *= _CharacterRimWidth * 0.0044;
 
-            float eyeDepth = LinearEyeDepth(d, _ZBufferParams);
-
-            float2 extendUV = screen_uv;
-            extendUV.x += normalExtendLeftOffset / (eyeDepth + 3.0);
-
-            float extendedRawDepth = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, my_point_clamp_sampler, extendUV, 0).x;
-            float extendedEyeDepth = LinearEyeDepth(extendedRawDepth, _ZBufferParams);
-
-            float depthOffset = extendedEyeDepth - eyeDepth;
-
-            float rimArea = saturate(depthOffset * 5);
-
-            float frontRim = max(NdotLVS, 0);
-            float backRim = max(-NdotLVS, 0);
-
-            float3 frontRimColor = frontRim * _CharacterRimFrontColor.rgb * _CharacterRimFrontColor.a;
-            float3 backRimColor = backRim * _CharacterRimBackColor.rgb * _CharacterRimBackColor.a;
-            float3 rimColor = frontRimColor + backRimColor;
-            float3 albedoRimColor = saturate(data.albedo.rgb * 5 + 0.3);
-
-            rimColor = rimColor * albedoRimColor * saturate(alpha + 0.5) * data.rimStrength;
 
         #if defined(_DIRECTIONAL)
-            return half4(data.directColor * alpha + rimColor.rgb * rimArea, 1);
+            // RimLight
+            half4 rimColor = CharacterDirectRimLight(albedo, data.rimStrength, normalVS, lightDirVS, screen_uv, d, alpha,
+                                                    _CharacterRimWidth, _CharacterRimFrontColor, _CharacterRimBackColor);
+            return half4(data.directColor * alpha + rimColor.rgb * rimColor.a, 1);
         #else
-
-			float perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(smoothness);
-			float roughness           = max(PerceptualRoughnessToRoughness(perceptualRoughness), HALF_MIN_SQRT);
-			float roughnessSquare     = max(roughness * roughness, HALF_MIN);
-			float3 F0 = lerp(0.04, albedo, metallic);
-
-			float NDF = DistributionGGX(NdotH, roughnessSquare);
-			float G = GeometrySmith(NdotL, NdotV, pow(roughness + 1.0, 2.0) / 8.0);
-			float3 F = fresnelSchlick(HdotV, F0);
-
-			float3 kSpec = F;
-			float3 kDiff = ((1.0 - F) * 0.5 + 0.5) * (1.0 - metallic);
-
-			float3 nom = NDF * G * F;
-			float3 denom = 4.0 * NdotV * NdotL + 0.0001;
-			float3 BRDFSpec = nom / denom;
-
-			float3 diffColor = kDiff * albedo;
-			float3 specColor = BRDFSpec * PI;
-
-            half3 resultCol = (diffColor + specColor) * unityLight.color * NdotL * alpha;
-            return half4(resultCol, 1);
+            // PunctualLighting
+            half3 resultCol = CharacterPunctualLighting(smoothness, metallic, albedo, lightDirWS, normalWS, viewDirWS, unityLight);
+            // RimLight
+            half4 rimColor = CharacterPunctualRimLight(albedo, data.rimStrength, normalVS, lightDirVS, screen_uv, d, alpha,
+                                                    _CharacterRimWidth * 1.1, unityLight.color);
+            return half4(resultCol.rgb + rimColor.rgb * rimColor.a, 1);
         #endif
     }
+
 
     half4 FragFog(Varyings input) : SV_Target
     {
