@@ -34,3 +34,4 @@ MonoBehaviour:
     particleLit: {fileID: 2100000, guid: 967975fd3c927404f8cfc63dedbd5b14, type: 2}
     terrainLit: {fileID: 2100000, guid: 9e5910564648af448a992695f507b880, type: 2}
     decal: {fileID: 2100000, guid: cadf8cffc0e96104ebfb0fcee5d9d834, type: 2}
+    perObjectShadow: {fileID: 2100000, guid: dc23a92623888a243a8ed06e31cdc9b5, type: 2}

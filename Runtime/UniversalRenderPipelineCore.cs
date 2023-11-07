@@ -1242,6 +1242,8 @@ namespace UnityEngine.Rendering.Universal
 
         /// <summary> Keyword used for Drawing procedurally.</summary>
         public const string UseDrawProcedural = "_USE_DRAW_PROCEDURAL";
+
+        public const string PerObjectScreenSpaceShadow = "_PEROBJECT_SCREEN_SPACE_SHADOW";
     }
 
     public sealed partial class UniversalRenderPipeline

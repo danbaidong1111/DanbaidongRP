@@ -96,6 +96,12 @@ namespace UnityEngine.Rendering.Universal
             /// </summary>
             [Reload("Runtime/Materials/Decal.mat")]
             public Material decal;
+
+            /// <summary>
+            /// PerObjectShadow material.
+            /// </summary>
+            [Reload("Runtime/Materials/PerObjectShadow.mat")]
+            public Material perObjectShadow;
         }
 
         /// <summary>
