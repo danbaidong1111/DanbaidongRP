@@ -2,9 +2,6 @@ Shader "PerObjectShadow/ShadowProjector"
 {
     Properties
     {
-        [MainTexture] _BaseMap("Albedo", 2D) = "white" {}
-        [MainColor] _BaseColor("Color", Color) = (1,1,1,1)
-
         _ColorMask("Color Mask", Float) = 15
         _Cutoff("Alpha Cutoff", Range(0.0, 1.0)) = 0.5
     }
