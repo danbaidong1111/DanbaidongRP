@@ -114,6 +114,7 @@ namespace UnityEngine.Rendering.Universal
         CopyDepthPass m_CopyDepthPass;
         CopyColorPass m_CopyColorPass;
         GPUCopyPass m_GPUCopyPass;
+        DepthPyramidPass m_DepthPyramidPass;
         TransparentSettingsPass m_TransparentSettingsPass;
         DrawObjectsPass m_RenderTransparentForwardPass;
         InvokeOnRenderObjectCallbackPass m_OnRenderObjectCallbackPass;
@@ -288,6 +289,7 @@ namespace UnityEngine.Rendering.Universal
                 int forwardOnlyStencilRef = stencilData.stencilReference | (int)StencilUsage.MaterialUnlit;
                 m_GBufferCopyDepthPass = new CopyDepthPass(RenderPassEvent.BeforeRenderingGbuffer + 1, m_CopyDepthMaterial, true);
                 m_GPUCopyPass = new GPUCopyPass(RenderPassEvent.BeforeRenderingGbuffer + 1, data.shaders.copyChannelCS, true);
+                m_DepthPyramidPass = new DepthPyramidPass(RenderPassEvent.BeforeRenderingGbuffer + 2, data.shaders.depthPyramidCS);
                 m_DeferredPass = new DeferredPass(RenderPassEvent.BeforeRenderingDeferredLights, m_DeferredLights);
                 m_RenderOpaqueForwardOnlyPass = new DrawObjectsPass("Render Opaques Forward Only", forwardOnlyShaderTagIds, true, RenderPassEvent.BeforeRenderingOpaques, RenderQueueRange.opaque, data.opaqueLayerMask, forwardOnlyStencilState, forwardOnlyStencilRef);
             }
@@ -1371,6 +1373,9 @@ namespace UnityEngine.Rendering.Universal
 
                 m_GPUCopyPass.Setup(m_CameraDepthAttachment, m_CameraDepthBufferMipChain);
                 EnqueuePass(m_GPUCopyPass);
+
+                m_DepthPyramidPass.Setup(m_CameraDepthBufferMipChain, m_DepthBufferMipChainInfo);
+                EnqueuePass(m_DepthPyramidPass);
             }
 
             EnqueuePass(m_DeferredPass);

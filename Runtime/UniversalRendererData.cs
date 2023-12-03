@@ -153,8 +153,17 @@ namespace UnityEngine.Rendering.Universal
             [Reload("Shaders/PostProcessing/LensFlareDataDriven.shader")]
             public Shader dataDrivenLensFlare;
 
+            /// <summary>
+            /// GPUCopy compute shader.
+            /// </summary>
             [Reload("Shaders/Utils/GPUCopy.compute")]
             public ComputeShader copyChannelCS;
+
+            /// <summary>
+            /// DepthPyramid compute shader.
+            /// </summary>
+            [Reload("Shaders/Utils/DepthPyramid.compute")]
+            public ComputeShader depthPyramidCS;
         }
 
         /// <summary>

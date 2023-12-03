@@ -817,5 +817,12 @@ namespace UnityEngine.Rendering.Universal
             }
         }
 
+        /// <summary>
+        /// Compute kernel size.
+        /// </summary>
+        /// <param name="x"></param>
+        /// <param name="y"></param>
+        /// <returns></returns>
+        internal static int DivRoundUp(int x, int y) => (x + y - 1) / y;
     }
 }

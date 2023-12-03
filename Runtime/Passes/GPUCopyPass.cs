@@ -15,8 +15,8 @@ namespace UnityEngine.Rendering.Universal.Internal
     /// </summary>
     public class GPUCopyPass : ScriptableRenderPass
     {
-        private RTHandle source { get; set; }
-        private RTHandle destination { get; set; }
+        private RTHandle m_Source { get; set; }
+        private RTHandle m_Destination { get; set; }
 
         internal bool m_ShouldClear;
 
@@ -53,8 +53,8 @@ namespace UnityEngine.Rendering.Universal.Internal
         /// <param name="destination">Destination Render Target</param>
         public void Setup(RTHandle source, RTHandle destination)
         {
-            this.source = source;
-            this.destination = destination;
+            this.m_Source = source;
+            this.m_Destination = destination;
         }
 
         void SampleCopyChannel(
@@ -143,7 +143,7 @@ namespace UnityEngine.Rendering.Universal.Internal
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
             var descriptor = renderingData.cameraData.cameraTargetDescriptor;
-            var isDepth = (destination.rt && destination.rt.graphicsFormat == GraphicsFormat.None);
+            var isDepth = (m_Destination.rt && m_Destination.rt.graphicsFormat == GraphicsFormat.None);
             descriptor.graphicsFormat = isDepth ? GraphicsFormat.D32_SFloat_S8_UInt : GraphicsFormat.R32_SFloat;
             descriptor.msaaSamples = 1;
             // This is a temporary workaround for Editor as not setting any depth here
@@ -152,10 +152,10 @@ namespace UnityEngine.Rendering.Universal.Internal
             // This is a temporary workaround for Editor as not setting any depth here
             // would lead to overwriting depth in certain scenarios (reproducable while running DX11 tests)
             if (SystemInfo.graphicsDeviceType == GraphicsDeviceType.Direct3D11)
-                ConfigureTarget(destination, destination);
+                ConfigureTarget(m_Destination, m_Destination);
             else
 #endif
-                ConfigureTarget(destination);
+                ConfigureTarget(m_Destination);
             if (m_ShouldClear)
                 ConfigureClear(ClearFlag.All, Color.black);
         }
@@ -163,7 +163,7 @@ namespace UnityEngine.Rendering.Universal.Internal
         /// <inheritdoc/>
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            renderingData.commandBuffer.SetGlobalTexture("_CameraDepthAttachment", source.nameID);
+            renderingData.commandBuffer.SetGlobalTexture("_CameraDepthAttachment", m_Source.nameID);
             var computeShader = m_Shader;
 
 
@@ -177,7 +177,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             var cameraData = renderingData.cameraData;
             using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.GPUCopy)))
             {
-                SampleCopyChannel_xyzw2x(cmd, this.source, this.destination, new RectInt(0, 0, cameraData.pixelWidth, cameraData.pixelHeight));
+                SampleCopyChannel_xyzw2x(cmd, this.m_Source, this.m_Destination, new RectInt(0, 0, cameraData.pixelWidth, cameraData.pixelHeight));
             }
         }
 
@@ -188,7 +188,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             if (cmd == null)
                 throw new ArgumentNullException("cmd");
 
-            destination = k_CameraTarget;
+            m_Destination = k_CameraTarget;
         }
 
         // RenderGraph Not Supported
