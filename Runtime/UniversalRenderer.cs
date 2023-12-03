@@ -88,6 +88,14 @@ namespace UnityEngine.Rendering.Universal
 #if ADAPTIVE_PERFORMANCE_2_1_0_OR_NEWER
         internal bool needTransparencyPass { get { return !UniversalRenderPipeline.asset.useAdaptivePerformance || !AdaptivePerformance.AdaptivePerformanceRenderSettings.SkipTransparentObjects;; } }
 #endif
+
+        /// <summary>
+        /// DepthBufferMipChain
+        /// </summary>
+        internal RenderingUtils.PackedMipChainInfo m_DepthBufferMipChainInfo = new RenderingUtils.PackedMipChainInfo();
+        internal ref RenderingUtils.PackedMipChainInfo depthBufferMipChainInfo => ref m_DepthBufferMipChainInfo;
+        internal Vector2Int depthMipChainSize => m_DepthBufferMipChainInfo.textureSize;
+
         /// <summary>Property to control the depth priming behavior of the forward rendering path.</summary>
         public DepthPrimingMode depthPrimingMode { get { return m_DepthPrimingMode; } set { m_DepthPrimingMode = value; } }
         DepthOnlyPass m_DepthPrepass;
@@ -105,6 +113,7 @@ namespace UnityEngine.Rendering.Universal
         DrawSkyboxPass m_DrawSkyboxPass;
         CopyDepthPass m_CopyDepthPass;
         CopyColorPass m_CopyColorPass;
+        GPUCopyPass m_GPUCopyPass;
         TransparentSettingsPass m_TransparentSettingsPass;
         DrawObjectsPass m_RenderTransparentForwardPass;
         InvokeOnRenderObjectCallbackPass m_OnRenderObjectCallbackPass;
@@ -126,6 +135,7 @@ namespace UnityEngine.Rendering.Universal
         RTHandle m_ColorFrontBuffer;
         internal RTHandle m_ActiveCameraDepthAttachment;
         internal RTHandle m_CameraDepthAttachment;
+        internal RTHandle m_CameraDepthBufferMipChain;
         RTHandle m_XRTargetHandleAlias;
         internal RTHandle m_DepthTexture;
         RTHandle m_NormalsTexture;
@@ -228,6 +238,9 @@ namespace UnityEngine.Rendering.Universal
 #else
             this.m_DepthPrimingRecommended = true;
 #endif
+            // DepthBufferMipChain Allocate
+            m_DepthBufferMipChainInfo.Allocate();
+
 
             // Note: Since all custom render passes inject first and we have stable sort,
             // we inject the builtin passes in the before events.
@@ -274,6 +287,7 @@ namespace UnityEngine.Rendering.Universal
                 };
                 int forwardOnlyStencilRef = stencilData.stencilReference | (int)StencilUsage.MaterialUnlit;
                 m_GBufferCopyDepthPass = new CopyDepthPass(RenderPassEvent.BeforeRenderingGbuffer + 1, m_CopyDepthMaterial, true);
+                m_GPUCopyPass = new GPUCopyPass(RenderPassEvent.BeforeRenderingGbuffer + 1, data.shaders.copyChannelCS, true);
                 m_DeferredPass = new DeferredPass(RenderPassEvent.BeforeRenderingDeferredLights, m_DeferredLights);
                 m_RenderOpaqueForwardOnlyPass = new DrawObjectsPass("Render Opaques Forward Only", forwardOnlyShaderTagIds, true, RenderPassEvent.BeforeRenderingOpaques, RenderQueueRange.opaque, data.opaqueLayerMask, forwardOnlyStencilState, forwardOnlyStencilRef);
             }
@@ -387,6 +401,7 @@ namespace UnityEngine.Rendering.Universal
 
             m_CameraDepthAttachment?.Release();
             m_DepthTexture?.Release();
+            m_CameraDepthBufferMipChain?.Release();
             m_NormalsTexture?.Release();
             m_DecalLayersTexture?.Release();
             m_OpaqueColor?.Release();
@@ -839,6 +854,19 @@ namespace UnityEngine.Rendering.Universal
 
                 depthDescriptor.msaaSamples = 1;// Depth-Only pass don't use MSAA
                 RenderingUtils.ReAllocateIfNeeded(ref m_DepthTexture, depthDescriptor, FilterMode.Point, wrapMode: TextureWrapMode.Clamp, name: "_CameraDepthTexture");
+
+                // DepthBufferMipChain Allocate
+                int actualWidth = cameraData.cameraTargetDescriptor.width;
+                int actualHeight = cameraData.cameraTargetDescriptor.height;
+                Vector2Int nonScaledViewport = new Vector2Int(actualWidth, actualHeight);
+
+                m_DepthBufferMipChainInfo.ComputePackedMipChainInfo(nonScaledViewport);
+
+                var depthMipChainDescriptor = depthDescriptor;
+                depthMipChainDescriptor.width = depthMipChainSize.x;
+                depthMipChainDescriptor.height = depthMipChainSize.y;
+                depthMipChainDescriptor.enableRandomWrite = true;
+                RenderingUtils.ReAllocateIfNeeded(ref m_CameraDepthBufferMipChain, depthMipChainDescriptor, FilterMode.Point, wrapMode: TextureWrapMode.Clamp, name: "_CameraDepthBufferMipChain");
 
                 cmd.SetGlobalTexture(m_DepthTexture.name, m_DepthTexture.nameID);
                 context.ExecuteCommandBuffer(cmd);
@@ -1340,6 +1368,9 @@ namespace UnityEngine.Rendering.Universal
             {
                 m_GBufferCopyDepthPass.Setup(m_CameraDepthAttachment, m_DepthTexture);
                 EnqueuePass(m_GBufferCopyDepthPass);
+
+                m_GPUCopyPass.Setup(m_CameraDepthAttachment, m_CameraDepthBufferMipChain);
+                EnqueuePass(m_GPUCopyPass);
             }
 
             EnqueuePass(m_DeferredPass);

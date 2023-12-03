@@ -152,6 +152,9 @@ namespace UnityEngine.Rendering.Universal
             /// </summary>
             [Reload("Shaders/PostProcessing/LensFlareDataDriven.shader")]
             public Shader dataDrivenLensFlare;
+
+            [Reload("Shaders/Utils/GPUCopy.compute")]
+            public ComputeShader copyChannelCS;
         }
 
         /// <summary>
