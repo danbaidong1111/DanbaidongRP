@@ -1,9 +1,7 @@
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEditor.SearchService;
 using UnityEngine.Jobs;
-using UnityEngine.Rendering.Universal.UTess;
 
 namespace UnityEngine.Rendering.Universal
 {
