@@ -74,7 +74,7 @@ namespace UnityEngine.Rendering.Universal
 
         [SerializeField]
         [HideInInspector]
-        [Reload("Shaders/Utils/ScreenSpaceAmbientOcclusion.shader")]
+        [Reload("Shaders/ScreenSpaceLighting/ScreenSpaceAmbientOcclusion.shader")]
         private Shader m_Shader;
 
         // Private Fields

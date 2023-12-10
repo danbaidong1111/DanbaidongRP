@@ -96,6 +96,8 @@ namespace UnityEngine.Rendering.Universal
         internal ref RenderingUtils.PackedMipChainInfo depthBufferMipChainInfo => ref m_DepthBufferMipChainInfo;
         internal Vector2Int depthMipChainSize => m_DepthBufferMipChainInfo.textureSize;
 
+        internal ComputeBuffer depthPyramidMipLevelOffsetsBuffer = null;
+
         /// <summary>Property to control the depth priming behavior of the forward rendering path.</summary>
         public DepthPrimingMode depthPrimingMode { get { return m_DepthPrimingMode; } set { m_DepthPrimingMode = value; } }
         DepthOnlyPass m_DepthPrepass;
@@ -241,7 +243,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
             // DepthBufferMipChain Allocate
             m_DepthBufferMipChainInfo.Allocate();
-
+            depthPyramidMipLevelOffsetsBuffer = new ComputeBuffer(15, sizeof(int) * 2);
 
             // Note: Since all custom render passes inject first and we have stable sort,
             // we inject the builtin passes in the before events.
@@ -385,6 +387,8 @@ namespace UnityEngine.Rendering.Universal
             CoreUtils.Destroy(m_StencilDeferredMaterial);
             CoreUtils.Destroy(m_CameraMotionVecMaterial);
             CoreUtils.Destroy(m_ObjectMotionVecMaterial);
+
+            CoreUtils.SafeRelease(depthPyramidMipLevelOffsetsBuffer);
 
             CleanupRenderGraphResources();
 

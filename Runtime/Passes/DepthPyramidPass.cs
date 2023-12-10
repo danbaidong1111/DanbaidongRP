@@ -109,6 +109,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.DepthPyramid)))
             {
                 RenderMinDepthPyramid(cmd, m_DepthMipChainTexture, m_PackedMipChainInfo, m_Mip1AlreadyComputed);
+                cmd.SetGlobalTexture(m_DepthMipChainTexture.name, m_DepthMipChainTexture);
             }
         }
 
