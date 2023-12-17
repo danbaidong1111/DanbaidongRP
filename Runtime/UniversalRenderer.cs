@@ -897,9 +897,7 @@ namespace UnityEngine.Rendering.Universal
             }
 
             // Handle history buffers allocation
-            /*
-            isHistoryColorPyramidRequired = false;
-            var curCameraHistoryRTSystem = cameraData.historyFrameRTSystem;
+            var curCameraHistoryRTSystem = HistoryFrameRTSystem.GetOrCreate(camera);
             if (curCameraHistoryRTSystem != null && ((this.renderingModeActual == RenderingMode.Deferred && !this.useRenderPassEnabled) || isCurrentColorPyramidRequired || isHistoryColorPyramidRequired))
             {
 
@@ -930,7 +928,7 @@ namespace UnityEngine.Rendering.Universal
                     if (forceReallocHistorySystem)
                     {
                         curCameraHistoryRTSystem.Dispose();
-                        curCameraHistoryRTSystem = new HistoryFrameRTSystem();
+                        curCameraHistoryRTSystem = HistoryFrameRTSystem.GetOrCreate(camera);
                     }
                     else
                     {
@@ -948,14 +946,14 @@ namespace UnityEngine.Rendering.Universal
                         {
                             curCameraHistoryRTSystem.AllocHistoryFrameRT((int)HistoryFrameType.ColorBufferMipChain, cameraData.camera.name,
                                                                         HistoryBufferAllocatorFunction, cameraTargetDescriptor.graphicsFormat, numColorPyramidBuffersRequired);
-                            Debug.Log(cameraData.cameraType + ": " + cameraTargetDescriptor.graphicsFormat);
+                            Debug.Log("AllocHistoryFrameRT " + cameraData.cameraType + ": " + cameraTargetDescriptor.graphicsFormat);
                         }
 
                     }
 
                 }
             }
-            */
+            
             if (requiresRenderingLayer || (renderingModeActual == RenderingMode.Deferred && m_DeferredLights.UseRenderingLayers))
             {
                 ref var renderingLayersTexture = ref m_DecalLayersTexture;

@@ -79,6 +79,7 @@ namespace UnityEngine.Rendering.Universal
         {
             this.camera = camera;
             this.name = camera.name;
+            m_BufferedRTHandleSystem = new BufferedRTHandleSystem();
         }
 
         /// <summary>
@@ -118,6 +119,25 @@ namespace UnityEngine.Rendering.Universal
         public RTHandle GetCurrentFrameRT(int id)
         {
             return m_BufferedRTHandleSystem.GetFrameRT(id, 0);
+        }
+
+        /// <summary>
+        /// Queries the number of RT handle buffers allocated for a buffer ID.
+        /// </summary>
+        /// <param name="bufferId">The buffer ID to query.</param>
+        /// <returns>The num of frames allocated</returns>
+        public int GetNumFramesAllocated(int bufferId)
+        {
+            return m_BufferedRTHandleSystem.GetNumFramesAllocated(bufferId);
+        }
+
+        /// <summary>
+        /// Release a buffer
+        /// </summary>
+        /// <param name="bufferId">Id of the buffer that needs to be released.</param>
+        public void ReleaseBuffer(int bufferId)
+        {
+            m_BufferedRTHandleSystem.ReleaseBuffer(bufferId);
         }
 
         void ReleaseAllHistoryFrameRT()
@@ -166,7 +186,7 @@ namespace UnityEngine.Rendering.Universal
                 if (camera.cameraType == CameraType.Game || camera.cameraType == CameraType.VR)
                     camera.gameObject.TryGetComponent(out additionalCameraData);
 
-                bool hasPersistentHistory = additionalCameraData != null && (additionalCameraData.motionVectorsPersistentData != null || additionalCameraData.taaPersistentData != null);
+                bool hasPersistentHistory = additionalCameraData != null && additionalCameraData.hasPersistentHistory;
                 // We keep preview camera around as they are generally disabled/enabled every frame. They will be destroyed later when camera.camera is null
                 // TODO: Add "isPersistent", it will Mark the Camera as persistant so it won't be destroyed if the camera is disabled.
                 if (!camera.isActiveAndEnabled && camera.cameraType != CameraType.Preview && !hasPersistentHistory)
@@ -175,6 +195,7 @@ namespace UnityEngine.Rendering.Universal
 
             foreach (var cam in s_Cleanup)
             {
+                Debug.Log("Clean cameras: " + cam);
                 s_Cameras[cam].Dispose();
                 s_Cameras.Remove(cam);
             }
@@ -182,7 +203,7 @@ namespace UnityEngine.Rendering.Universal
             s_Cleanup.Clear();
         }
 
-        void Dispose()
+        internal void Dispose()
         {
             m_BufferedRTHandleSystem?.Dispose();
             m_BufferedRTHandleSystem = null;
@@ -192,8 +213,10 @@ namespace UnityEngine.Rendering.Universal
         /// Allocates a history RTHandle with the unique identifier id.
         /// </summary>
         /// <param name="id">Unique id for this history buffer.</param>
+        /// <param name="cameraName">Prefix of RT name</param>
         /// <param name="allocator">Allocator function for the history RTHandle.</param>
-        /// <param name="bufferCount">Number of buffer that should be allocated.</param>
+        /// <param name="graphicsFormat">graphicsFormat</param>
+        /// <param name="bufferCount">umber of buffer that should be allocated.</param>
         /// <returns>A new RTHandle.</returns>
         public RTHandle AllocHistoryFrameRT(int id, string cameraName, Func<GraphicsFormat, string, int, RTHandleSystem, RTHandle> allocator, GraphicsFormat graphicsFormat, int bufferCount)
         {

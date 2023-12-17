@@ -364,8 +364,6 @@ namespace UnityEngine.Rendering.Universal
 
                 HistoryFrameRTSystem.CleanUnused();
             }
-
-
 #if UNITY_EDITOR
             // We do not want to start rendering if URP global settings are not ready (m_globalSettings is null)
             // or been deleted/moved (m_globalSettings is not necessarily null)

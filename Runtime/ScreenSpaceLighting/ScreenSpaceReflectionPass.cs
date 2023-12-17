@@ -52,6 +52,8 @@ namespace UnityEngine.Rendering.Universal
             var stack = VolumeManager.instance.stack;
             m_volumeSettings = stack.GetComponent<ScreenSpaceReflection>();
 
+            ConfigureInput(ScriptableRenderPassInput.HistoryColor);
+
             return m_Compute != null && m_volumeSettings != null;
         }
 
