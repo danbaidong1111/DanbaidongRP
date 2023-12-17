@@ -37,9 +37,14 @@ namespace UnityEngine.Rendering.Universal
         Color = 1 << 2,
 
         /// <summary>
+        /// Used when a <c>ScriptableRenderPass</c> requires a history color texture.
+        /// </summary>
+        HistoryColor = 1 << 3,
+
+        /// <summary>
         /// Used when a <c>ScriptableRenderPass</c> requires a motion vectors texture.
         /// </summary>
-        Motion = 1 << 3,
+        Motion = 1 << 4,
     }
 
     // Note: Spaced built-in events so we can add events in between them

@@ -416,6 +416,19 @@ namespace UnityEngine.Rendering.Universal
             hasReleasedRTs = true;
         }
 
+        // BufferedRTHandleSystem API expects an allocator function. We define it here.
+        /// <summary>
+        /// Allocator for cameraColorBufferMipChain
+        /// </summary>
+        static RTHandle HistoryBufferAllocatorFunction(GraphicsFormat graphicsFormat, string viewName, int frameIndex, RTHandleSystem rtHandleSystem)
+        {
+            frameIndex &= 1;
+
+            return rtHandleSystem.Alloc(Vector2.one, TextureXR.slices, colorFormat: graphicsFormat,
+                dimension: TextureXR.dimension, enableRandomWrite: true, useMipMap: true, autoGenerateMips: false, useDynamicScale: true,
+                name: string.Format("{0}_CameraColorBufferMipChain{1}", viewName, frameIndex));
+        }
+
         private void SetupFinalPassDebug(ref CameraData cameraData)
         {
             if ((DebugHandler != null) && DebugHandler.IsActiveForCamera(ref cameraData))
@@ -574,6 +587,10 @@ namespace UnityEngine.Rendering.Universal
 
             // Gather render passe input requirements
             RenderPassInputSummary renderPassInputs = GetRenderPassInputs(ref renderingData);
+
+            // Handle history buffers input requirements.
+            bool isCurrentColorPyramidRequired = renderPassInputs.requiresColorTexture &= !isPreviewCamera;
+            bool isHistoryColorPyramidRequired = renderPassInputs.requiresHistoryColorTexture &= !isPreviewCamera;
 
             // Gather render pass require rendering layers event and mask size
             bool requiresRenderingLayer = RenderingLayerUtils.RequireRenderingLayers(this, rendererFeatures,
@@ -879,6 +896,66 @@ namespace UnityEngine.Rendering.Universal
                 cmd.Clear();
             }
 
+            // Handle history buffers allocation
+            /*
+            isHistoryColorPyramidRequired = false;
+            var curCameraHistoryRTSystem = cameraData.historyFrameRTSystem;
+            if (curCameraHistoryRTSystem != null && ((this.renderingModeActual == RenderingMode.Deferred && !this.useRenderPassEnabled) || isCurrentColorPyramidRequired || isHistoryColorPyramidRequired))
+            {
+
+                bool forceReallocHistorySystem = false;
+                int historyColorBufferID = (int)HistoryFrameType.ColorBufferMipChain;
+                int numColorPyramidBuffersAllocated = curCameraHistoryRTSystem.GetNumFramesAllocated(historyColorBufferID);
+                if (numColorPyramidBuffersAllocated > 0)
+                {
+                    var currPyramid = curCameraHistoryRTSystem.GetCurrentFrameRT(historyColorBufferID);
+                    if (currPyramid != null && currPyramid.rt.graphicsFormat != cameraTargetDescriptor.graphicsFormat)
+                    {
+                        forceReallocHistorySystem = true;
+                    }
+                }
+
+                int numColorPyramidBuffersRequired = 0;
+                if (isCurrentColorPyramidRequired)
+                    numColorPyramidBuffersRequired = 1;
+                if (isHistoryColorPyramidRequired) // Superset of case above
+                    numColorPyramidBuffersRequired = 2;
+
+                // Handle the color buffers
+                if (numColorPyramidBuffersAllocated != numColorPyramidBuffersRequired || forceReallocHistorySystem)
+                {
+                    // Reinit the system.
+                    cameraData.colorPyramidHistoryIsValid = false;
+
+                    if (forceReallocHistorySystem)
+                    {
+                        curCameraHistoryRTSystem.Dispose();
+                        curCameraHistoryRTSystem = new HistoryFrameRTSystem();
+                    }
+                    else
+                    {
+                        // We only need to release all the ColorBufferMipChain buffers (and they will potentially be allocated just under if needed).
+                        curCameraHistoryRTSystem.ReleaseBuffer((int)HistoryFrameType.ColorBufferMipChain);
+                    }
+
+
+                    if (numColorPyramidBuffersRequired != 0 || forceReallocHistorySystem)
+                    {
+                        // Make sure we don't try to allocate a history target with zero buffers
+                        bool needColorPyramid = numColorPyramidBuffersRequired > 0;
+
+                        if (needColorPyramid)
+                        {
+                            curCameraHistoryRTSystem.AllocHistoryFrameRT((int)HistoryFrameType.ColorBufferMipChain, cameraData.camera.name,
+                                                                        HistoryBufferAllocatorFunction, cameraTargetDescriptor.graphicsFormat, numColorPyramidBuffersRequired);
+                            Debug.Log(cameraData.cameraType + ": " + cameraTargetDescriptor.graphicsFormat);
+                        }
+
+                    }
+
+                }
+            }
+            */
             if (requiresRenderingLayer || (renderingModeActual == RenderingMode.Deferred && m_DeferredLights.UseRenderingLayers))
             {
                 ref var renderingLayersTexture = ref m_DecalLayersTexture;
@@ -1394,6 +1471,7 @@ namespace UnityEngine.Rendering.Universal
             internal bool requiresNormalsTexture;
             internal bool requiresColorTexture;
             internal bool requiresColorTextureCreated;
+            internal bool requiresHistoryColorTexture;
             internal bool requiresMotionVectors;
             internal RenderPassEvent requiresDepthNormalAtEvent;
             internal RenderPassEvent requiresDepthTextureEarliestEvent;
@@ -1412,6 +1490,7 @@ namespace UnityEngine.Rendering.Universal
                 bool needsDepth = (pass.input & ScriptableRenderPassInput.Depth) != ScriptableRenderPassInput.None;
                 bool needsNormals = (pass.input & ScriptableRenderPassInput.Normal) != ScriptableRenderPassInput.None;
                 bool needsColor = (pass.input & ScriptableRenderPassInput.Color) != ScriptableRenderPassInput.None;
+                bool needsHistoryColor = (pass.input & ScriptableRenderPassInput.HistoryColor) != ScriptableRenderPassInput.None;
                 bool needsMotion = (pass.input & ScriptableRenderPassInput.Motion) != ScriptableRenderPassInput.None;
                 bool eventBeforeMainRendering = pass.renderPassEvent <= beforeMainRenderingEvent;
 
@@ -1426,6 +1505,7 @@ namespace UnityEngine.Rendering.Universal
                 inputSummary.requiresDepthPrepass |= needsNormals || needsDepth && eventBeforeMainRendering;
                 inputSummary.requiresNormalsTexture |= needsNormals;
                 inputSummary.requiresColorTexture |= needsColor;
+                inputSummary.requiresHistoryColorTexture |= needsHistoryColor;
                 inputSummary.requiresMotionVectors |= needsMotion;
                 if (needsDepth)
                     inputSummary.requiresDepthTextureEarliestEvent = (RenderPassEvent)Mathf.Min((int)pass.renderPassEvent, (int)inputSummary.requiresDepthTextureEarliestEvent);

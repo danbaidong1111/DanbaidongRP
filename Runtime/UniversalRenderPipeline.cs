@@ -182,6 +182,9 @@ namespace UnityEngine.Rendering.Universal
         // asset.
         private readonly UniversalRenderPipelineAsset pipelineAsset;
 
+        // Use to detect frame changes (for accurate frame count in editor, consider using hdCamera.GetCameraFrameCount)
+        int m_FrameCount;
+
         /// <inheritdoc/>
         public override string ToString() => pipelineAsset?.ToString();
 
@@ -263,6 +266,8 @@ namespace UnityEngine.Rendering.Universal
             s_RenderGraph.Cleanup();
             s_RenderGraph = null;
 
+            HistoryFrameRTSystem.ClearAll();
+
 #if UNITY_EDITOR
             SceneViewDrawMode.ResetDrawMode();
 #endif
@@ -335,6 +340,31 @@ namespace UnityEngine.Rendering.Universal
             GraphicsSettings.defaultRenderingLayerMask = k_DefaultRenderingLayerMask;
             SetupPerFrameShaderConstants();
             XRSystem.SetDisplayMSAASamples((MSAASamples)asset.msaaSampleCount);
+
+            // For CleanHistoryFrameRTSystem to remove unused Cameras
+            // Copy from HDRenderPipeline, which is HDCamera.CleanUnused()
+            // TODO: Should I handle for m_ProbeCameraCache as HDRP?
+            // TODO: Should I handle for m_FrameCount <= 1 skipped RenderSteps as HDRP?
+#if UNITY_EDITOR
+            int newCount = m_FrameCount;
+            foreach (var c in cameras)
+            {
+                if (c.cameraType != CameraType.Preview)
+                {
+                    newCount++;
+                    break;
+                }
+            }
+#else
+            int newCount = Time.frameCount;
+#endif
+            if (newCount != m_FrameCount)
+            {
+                m_FrameCount = newCount;
+
+                HistoryFrameRTSystem.CleanUnused();
+            }
+
 
 #if UNITY_EDITOR
             // We do not want to start rendering if URP global settings are not ready (m_globalSettings is null)

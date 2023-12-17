@@ -644,6 +644,10 @@ namespace UnityEngine.Rendering.Universal
         // TAA settings.
         internal TemporalAA.Settings taaSettings;
 
+        // HistoryRT contains history RTHandle
+        internal HistoryFrameRTSystem historyFrameRTSystem;
+        internal bool colorPyramidHistoryIsValid;
+
         // Post-process history reset has been triggered for this camera.
         internal bool resetHistory
         {
