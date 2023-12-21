@@ -130,7 +130,8 @@ namespace UnityEngine.Rendering.Universal
                 cmd.ClearRenderTarget(RTClearFlags.Color, new Color(0,0,0,0), 0, 0);
 
                 cmd.SetComputeTextureParam(m_Compute, m_SSRReprojectionKernel, "_SSRHitPointTexture", m_SSRHitPointTexture);
-                cmd.SetComputeTextureParam(m_Compute, m_SSRReprojectionKernel, "_ColorPyramidTexture", renderingData.cameraData.renderer.cameraColorTargetHandle);
+                cmd.SetComputeIntParam(m_Compute, "_SsrColorPyramidMaxMip", m_Renderer.colorPyramidHistoryMipCount - 1);
+                cmd.SetComputeTextureParam(m_Compute, m_SSRReprojectionKernel, "_ColorPyramidTexture", HistoryFrameRTSystem.GetOrCreate(renderingData.cameraData.camera).GetCurrentFrameRT(HistoryFrameType.ColorBufferMipChain));
                 cmd.SetComputeTextureParam(m_Compute, m_SSRReprojectionKernel, "_SSRAccumTexture", m_SSRAccumTexture);
 
                 // Constant Params

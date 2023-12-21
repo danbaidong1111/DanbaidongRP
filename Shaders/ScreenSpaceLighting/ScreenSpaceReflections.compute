@@ -83,7 +83,7 @@ float _SsrRoughnessFadeEndTimesRcpLength;
 float _SsrEdgeFadeRcpLength;
 // float4 _ColorPyramidUvScaleAndLimitPrevFrame;
 int _SsrDepthPyramidMaxMip;
-// int _SsrColorPyramidMaxMip;
+int _SsrColorPyramidMaxMip;
 int _SsrReflectsSky;
 // float _SsrAccumulationAmount;
 // float _SsrPBRSpeedRejection;
@@ -342,8 +342,7 @@ void ScreenSpaceReflectionsReprojection(uint3 dispatchThreadId : SV_DispatchThre
     // TODO: MotionVector
 
     // TODO: filtering is quite awful. Needs to be non-Gaussian, bilateral and anisotropic.
-    // float  mipLevel = lerp(0, _SsrColorPyramidMaxMip, perceptualRoughness);
-    float  mipLevel = 0;
+    float  mipLevel = lerp(0, _SsrColorPyramidMaxMip, perceptualRoughness);
 
 
     float opacity = EdgeOfScreenFade(hitPositionNDC, _SsrEdgeFadeRcpLength)

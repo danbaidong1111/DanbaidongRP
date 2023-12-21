@@ -21,18 +21,6 @@ struct MY_PBR_DATA
     float4 albedo;
 };
 
-struct CharacterData
-{
-    half3 albedo;
-    half3 directColor;
-
-    half3 normalWS;
-    half rimStrength;
-    half useShadow;
-    half metallic;
-    half smoothness;
-    uint materialFlags;
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 //                          Toon PBR functions                              //

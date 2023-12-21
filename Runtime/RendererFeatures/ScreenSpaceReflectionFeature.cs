@@ -34,7 +34,7 @@ namespace UnityEngine.Rendering.Universal
             if (m_SSRPass == null)
                 m_SSRPass = new ScreenSpaceReflectionPass(m_Shader);
 
-            m_SSRPass.renderPassEvent = RenderPassEvent.AfterRenderingDeferredLights;
+            m_SSRPass.renderPassEvent = RenderPassEvent.BeforeRenderingTransparents;
         }
 
         /// <inheritdoc/>

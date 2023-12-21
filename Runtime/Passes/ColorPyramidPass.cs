@@ -338,7 +338,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 srcMipHeight >>= 1;
             }
 
-            return -1;
+            return srcMipLevel + 1;
         }
 
         /// <inheritdoc/>
@@ -377,16 +377,17 @@ namespace UnityEngine.Rendering.Universal.Internal
             var cmd = renderingData.commandBuffer;
             using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.ColorPyramid)))
             {
-                
+                int mipCount = 1;
                 if (m_useCompute)
                 {
-                    ComputeColorGaussianPyramid(cmd, m_PyramidSize, m_SourceColorTexture, m_ColorPyramidTexture);
+                    mipCount = ComputeColorGaussianPyramid(cmd, m_PyramidSize, m_SourceColorTexture, m_ColorPyramidTexture);
                 }
                 else
                 {
-                    RenderColorGaussianPyramid(cmd, m_PyramidSize, m_SourceColorTexture, m_ColorPyramidTexture);
+                    mipCount = RenderColorGaussianPyramid(cmd, m_PyramidSize, m_SourceColorTexture, m_ColorPyramidTexture);
                 }
 
+                ((UniversalRenderer)(renderingData.cameraData.renderer)).colorPyramidHistoryMipCount = mipCount;
                 cmd.SetGlobalTexture(m_ColorPyramidTexture.name, m_ColorPyramidTexture);
             }
 

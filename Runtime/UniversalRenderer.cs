@@ -98,6 +98,8 @@ namespace UnityEngine.Rendering.Universal
 
         internal ComputeBuffer depthPyramidMipLevelOffsetsBuffer = null;
 
+        internal int colorPyramidHistoryMipCount = 0;
+
         /// <summary>Property to control the depth priming behavior of the forward rendering path.</summary>
         public DepthPrimingMode depthPrimingMode { get { return m_DepthPrimingMode; } set { m_DepthPrimingMode = value; } }
         DepthOnlyPass m_DepthPrepass;

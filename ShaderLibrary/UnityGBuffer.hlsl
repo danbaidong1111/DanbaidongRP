@@ -3,7 +3,6 @@
 
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/SurfaceData.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Lighting.hlsl"
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DanbaidongToon.hlsl"
 
 // inspired from [builtin_shaders]/CGIncludes/UnityGBuffer.cginc
 
@@ -299,6 +298,19 @@ half3 UnPackColorFromR8G8B8(half3 color)
     color *= 15;
     return color;
 }
+
+struct CharacterData
+{
+    half3 albedo;
+    half3 directColor;
+
+    half3 normalWS;
+    half rimStrength;
+    half useShadow;
+    half metallic;
+    half smoothness;
+    uint materialFlags;
+};
 
 // This will encode SurfaceData into GBuffer
 FragmentOutput CharacterDataToGbuffer(half3 albedo, half3 directColor, half3 indirectColor, half smoothness, half metallic, float3 normalWS, half isFace = 0.0, half isOutLine = 0.0)
