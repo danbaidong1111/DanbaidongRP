@@ -96,7 +96,7 @@ namespace UnityEngine.Rendering.Universal.Internal
         {
             if (m_Shader == null)
             {
-                Debug.LogErrorFormat("Missing {0}. GPU Copy Depth render pass will not execute. Check for missing reference in the renderer resources.", m_Shader);
+                Debug.LogErrorFormat("Missing {0}. DepthPyramid render pass will not execute. Check for missing reference in the renderer resources.", m_Shader);
                 return;
             }
             if (m_DepthMipChainTexture == null || !m_DepthMipChainTexture.rt.IsCreated())

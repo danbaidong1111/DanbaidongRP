@@ -1693,6 +1693,7 @@ namespace UnityEngine.Rendering.Universal
         CopyColor,
         CopyDepth,
         GPUCopy,
+        ColorPyramid,
         DepthPyramid,
         DepthNormalPrepass,
         DepthPrepass,

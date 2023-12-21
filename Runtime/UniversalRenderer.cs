@@ -117,6 +117,7 @@ namespace UnityEngine.Rendering.Universal
         CopyColorPass m_CopyColorPass;
         GPUCopyPass m_GPUCopyPass;
         DepthPyramidPass m_DepthPyramidPass;
+        ColorPyramidPass m_ColorPyramidPass;
         TransparentSettingsPass m_TransparentSettingsPass;
         DrawObjectsPass m_RenderTransparentForwardPass;
         InvokeOnRenderObjectCallbackPass m_OnRenderObjectCallbackPass;
@@ -310,6 +311,7 @@ namespace UnityEngine.Rendering.Universal
 
             m_DrawSkyboxPass = new DrawSkyboxPass(RenderPassEvent.BeforeRenderingSkybox);
             m_CopyColorPass = new CopyColorPass(RenderPassEvent.AfterRenderingSkybox, m_SamplingMaterial, m_BlitMaterial);
+            m_ColorPyramidPass = new ColorPyramidPass(RenderPassEvent.AfterRenderingSkybox, data.shaders.colorPyramidCS);
 #if ADAPTIVE_PERFORMANCE_2_1_0_OR_NEWER
             if (needTransparencyPass)
 #endif
@@ -370,6 +372,7 @@ namespace UnityEngine.Rendering.Universal
         {
             m_ForwardLights.Cleanup();
             m_GBufferPass?.Dispose();
+            m_ColorPyramidPass?.Dispose();
             m_PostProcessPasses.Dispose();
             m_FinalBlitPass?.Dispose();
             m_DrawOffscreenUIPass?.Dispose();
@@ -418,14 +421,15 @@ namespace UnityEngine.Rendering.Universal
 
         // BufferedRTHandleSystem API expects an allocator function. We define it here.
         /// <summary>
-        /// Allocator for cameraColorBufferMipChain
+        /// Allocator for cameraColorBufferMipChain.
+        /// TODO: dimension configured
         /// </summary>
         static RTHandle HistoryBufferAllocatorFunction(GraphicsFormat graphicsFormat, string viewName, int frameIndex, RTHandleSystem rtHandleSystem)
         {
             frameIndex &= 1;
 
             return rtHandleSystem.Alloc(Vector2.one, TextureXR.slices, colorFormat: graphicsFormat,
-                dimension: TextureXR.dimension, enableRandomWrite: true, useMipMap: true, autoGenerateMips: false, useDynamicScale: true,
+                enableRandomWrite: true, useMipMap: true, autoGenerateMips: false, useDynamicScale: true,
                 name: string.Format("{0}_CameraColorBufferMipChain{1}", viewName, frameIndex));
         }
 
@@ -589,8 +593,13 @@ namespace UnityEngine.Rendering.Universal
             RenderPassInputSummary renderPassInputs = GetRenderPassInputs(ref renderingData);
 
             // Handle history buffers input requirements.
-            bool isCurrentColorPyramidRequired = renderPassInputs.requiresColorTexture &= !isPreviewCamera;
-            bool isHistoryColorPyramidRequired = renderPassInputs.requiresHistoryColorTexture &= !isPreviewCamera;
+            bool isReflectionCamera = cameraData.cameraType == CameraType.Reflection;
+            bool generateColorPyramidCamera = !isPreviewCamera && !isReflectionCamera;
+            bool isCurrentColorPyramidRequired = renderPassInputs.requiresColorTexture && generateColorPyramidCamera;
+            bool isHistoryColorPyramidRequired = renderPassInputs.requiresHistoryColorTexture && generateColorPyramidCamera;
+
+            // GetCameraHistoryRTSystem before all passes.Note that the RTs might be null at first frame.
+            HistoryFrameRTSystem curCameraHistoryRTSystem = HistoryFrameRTSystem.GetOrCreate(camera);
 
             // Gather render pass require rendering layers event and mask size
             bool requiresRenderingLayer = RenderingLayerUtils.RequireRenderingLayers(this, rendererFeatures,
@@ -897,16 +906,14 @@ namespace UnityEngine.Rendering.Universal
             }
 
             // Handle history buffers allocation
-            var curCameraHistoryRTSystem = HistoryFrameRTSystem.GetOrCreate(camera);
             if (curCameraHistoryRTSystem != null && ((this.renderingModeActual == RenderingMode.Deferred && !this.useRenderPassEnabled) || isCurrentColorPyramidRequired || isHistoryColorPyramidRequired))
             {
 
                 bool forceReallocHistorySystem = false;
-                int historyColorBufferID = (int)HistoryFrameType.ColorBufferMipChain;
-                int numColorPyramidBuffersAllocated = curCameraHistoryRTSystem.GetNumFramesAllocated(historyColorBufferID);
+                int numColorPyramidBuffersAllocated = curCameraHistoryRTSystem.GetNumFramesAllocated(HistoryFrameType.ColorBufferMipChain);
                 if (numColorPyramidBuffersAllocated > 0)
                 {
-                    var currPyramid = curCameraHistoryRTSystem.GetCurrentFrameRT(historyColorBufferID);
+                    var currPyramid = curCameraHistoryRTSystem.GetCurrentFrameRT(HistoryFrameType.ColorBufferMipChain);
                     if (currPyramid != null && currPyramid.rt.graphicsFormat != cameraTargetDescriptor.graphicsFormat)
                     {
                         forceReallocHistorySystem = true;
@@ -946,7 +953,7 @@ namespace UnityEngine.Rendering.Universal
                         {
                             curCameraHistoryRTSystem.AllocHistoryFrameRT((int)HistoryFrameType.ColorBufferMipChain, cameraData.camera.name,
                                                                         HistoryBufferAllocatorFunction, cameraTargetDescriptor.graphicsFormat, numColorPyramidBuffersRequired);
-                            Debug.Log("AllocHistoryFrameRT " + cameraData.cameraType + ": " + cameraTargetDescriptor.graphicsFormat);
+                            Debug.Log("AllocHistoryFrameRT " + cameraData.cameraType + ": " + cameraTargetDescriptor.graphicsFormat + ", buffers:" + numColorPyramidBuffersRequired);
                         }
 
                     }
@@ -1203,6 +1210,18 @@ namespace UnityEngine.Rendering.Universal
                 RenderingUtils.ReAllocateIfNeeded(ref m_OpaqueColor, descriptor, filterMode, TextureWrapMode.Clamp, name: "_CameraOpaqueTexture");
                 m_CopyColorPass.Setup(m_ActiveCameraColorAttachment, m_OpaqueColor, downsamplingMethod);
                 EnqueuePass(m_CopyColorPass);
+            }
+            
+            // ColorPyramid Pass
+            if (copyColorPass || isCurrentColorPyramidRequired || isHistoryColorPyramidRequired)
+            {
+                int actualWidth = cameraData.cameraTargetDescriptor.width;
+                int actualHeight = cameraData.cameraTargetDescriptor.height;
+
+                Vector2Int pyramidSize = new Vector2Int(actualWidth, actualHeight);
+                RTHandle colorpyramidRTHandle = curCameraHistoryRTSystem.GetCurrentFrameRT(HistoryFrameType.ColorBufferMipChain);
+                m_ColorPyramidPass.Setup(m_ActiveCameraColorAttachment, colorpyramidRTHandle, pyramidSize);
+                EnqueuePass(m_ColorPyramidPass);
             }
 
             // Motion vectors

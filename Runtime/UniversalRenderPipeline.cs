@@ -655,6 +655,14 @@ namespace UnityEngine.Rendering.Universal
 
                 RTHandles.SetReferenceSize(cameraData.cameraTargetDescriptor.width, cameraData.cameraTargetDescriptor.height);
 
+                /* 
+                 * TODO: We must check this Security, HDCamera doing this at every begining in "BeginRender" function.
+                 * "Updating RTHandle needs to be done at the beginning of rendering (not during update of HDCamera which happens in batches)
+                 * The reason is that RTHandle will hold data necessary to setup RenderTargets and viewports properly."
+                 */
+                var historyFrameRTSystem = HistoryFrameRTSystem.GetOrCreate(camera);
+                historyFrameRTSystem.SetReferenceSize(cameraData.cameraTargetDescriptor.width, cameraData.cameraTargetDescriptor.height);
+
                 // Do NOT use cameraData after 'InitializeRenderingData'. CameraData state may diverge otherwise.
                 // RenderingData takes a copy of the CameraData.
                 var cullResults = context.Cull(ref cullingParameters);

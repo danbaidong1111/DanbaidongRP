@@ -164,6 +164,18 @@ namespace UnityEngine.Rendering.Universal
             /// </summary>
             [Reload("Shaders/Utils/DepthPyramid.compute")]
             public ComputeShader depthPyramidCS;
+
+            /// <summary>
+            /// ColorPyramid pixel shader.Current we use computeshader instead.
+            /// </summary>
+            [Reload("Shaders/Utils/ColorPyramid.shader")]
+            public Shader colorPyramid;
+
+            /// <summary>
+            /// ColorPyramid compute shader.
+            /// </summary>
+            [Reload("Shaders/Utils/ColorPyramid.compute")]
+            public ComputeShader colorPyramidCS;
         }
 
         /// <summary>

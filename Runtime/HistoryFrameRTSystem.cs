@@ -102,13 +102,23 @@ namespace UnityEngine.Rendering.Universal
         }
 
         /// <summary>
+        /// Set the RTHandle scale to the actual camera size (can be scaled)
+        /// </summary>
+        /// <param name="actualWidth"></param>
+        /// <param name="actualHeight"></param>
+        public void SetReferenceSize(int actualWidth, int actualHeight)
+        {
+            m_BufferedRTHandleSystem.SwapAndSetReferenceSize(actualWidth, actualHeight);
+        }
+
+        /// <summary>
         /// Returns the id RTHandle from the previous frame.
         /// </summary>
         /// <param name="id">Id of the history RTHandle.</param>
         /// <returns>The RTHandle from previous frame.</returns>
-        public RTHandle GetPreviousFrameRT(int id)
+        public RTHandle GetPreviousFrameRT(HistoryFrameType id)
         {
-            return m_BufferedRTHandleSystem.GetFrameRT(id, 1);
+            return m_BufferedRTHandleSystem.GetFrameRT((int)id, 1);
         }
 
         /// <summary>
@@ -116,9 +126,9 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         /// <param name="id">Id of the history RTHandle.</param>
         /// <returns>The RTHandle of the current frame.</returns>
-        public RTHandle GetCurrentFrameRT(int id)
+        public RTHandle GetCurrentFrameRT(HistoryFrameType id)
         {
-            return m_BufferedRTHandleSystem.GetFrameRT(id, 0);
+            return m_BufferedRTHandleSystem.GetFrameRT((int)id, 0);
         }
 
         /// <summary>
@@ -126,18 +136,18 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         /// <param name="bufferId">The buffer ID to query.</param>
         /// <returns>The num of frames allocated</returns>
-        public int GetNumFramesAllocated(int bufferId)
+        public int GetNumFramesAllocated(HistoryFrameType bufferId)
         {
-            return m_BufferedRTHandleSystem.GetNumFramesAllocated(bufferId);
+            return m_BufferedRTHandleSystem.GetNumFramesAllocated((int)bufferId);
         }
 
         /// <summary>
         /// Release a buffer
         /// </summary>
         /// <param name="bufferId">Id of the buffer that needs to be released.</param>
-        public void ReleaseBuffer(int bufferId)
+        public void ReleaseBuffer(HistoryFrameType bufferId)
         {
-            m_BufferedRTHandleSystem.ReleaseBuffer(bufferId);
+            m_BufferedRTHandleSystem.ReleaseBuffer((int)bufferId);
         }
 
         void ReleaseAllHistoryFrameRT()
@@ -145,9 +155,9 @@ namespace UnityEngine.Rendering.Universal
             m_BufferedRTHandleSystem.ReleaseAll();
         }
 
-        public void ReleaseHistoryFrameRT(int id)
+        public void ReleaseHistoryFrameRT(HistoryFrameType id)
         {
-            m_BufferedRTHandleSystem.ReleaseBuffer(id);
+            m_BufferedRTHandleSystem.ReleaseBuffer((int)id);
         }
 
         internal static void ClearAll()
