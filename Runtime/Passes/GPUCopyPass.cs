@@ -175,9 +175,14 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             var cmd = renderingData.commandBuffer;
             var cameraData = renderingData.cameraData;
+
+            // we must use actual size instead of cameraData.pixelWidth/pixelHeight
+            int actualWidth = cameraData.cameraTargetDescriptor.width;
+            int actualHeight = cameraData.cameraTargetDescriptor.height;
+
             using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.GPUCopy)))
             {
-                SampleCopyChannel_xyzw2x(cmd, this.m_Source, this.m_Destination, new RectInt(0, 0, cameraData.pixelWidth, cameraData.pixelHeight));
+                SampleCopyChannel_xyzw2x(cmd, this.m_Source, this.m_Destination, new RectInt(0, 0, actualWidth, actualHeight));
             }
         }
 
