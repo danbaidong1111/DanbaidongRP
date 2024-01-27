@@ -303,14 +303,18 @@ struct Toon_v2f
     float3 biTangentWS  	:TEXCOORD3;
 	float4 color 			:TEXCOORD4;
 	float4 uv				:TEXCOORD5;// xy:uv0 zw:uv1
-	UNITY_VERTEX_INPUT_INSTANCE_ID
+    UNITY_VERTEX_INPUT_INSTANCE_ID
+    UNITY_VERTEX_OUTPUT_STEREO
 };
 
 Toon_v2f DanbaidongToonVert(Toon_a2v v)
 {
 	Toon_v2f o;
+    
     UNITY_SETUP_INSTANCE_ID(v); 
     UNITY_TRANSFER_INSTANCE_ID(v,o); 
+    UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+
 	o.positionHCS = TransformObjectToHClip(v.vertex);
     o.positionWS = TransformObjectToWorld(v.vertex);
 	o.normalWS = TransformObjectToWorldNormal(v.normal);

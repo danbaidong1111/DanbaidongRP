@@ -253,7 +253,7 @@ Shader "Character/LitFace"
 				float4 color  	:COLOR;
 				float4 uv0 		:TEXCOORD0;
 				float4 uv1 		:TEXCOORD1;
-				UNITY_VERTEX_INPUT_INSTANCE_ID 
+				UNITY_VERTEX_INPUT_INSTANCE_ID
 			};
 			struct v2f 
 			{
@@ -266,14 +266,16 @@ Shader "Character/LitFace"
 				float4 uv				:TEXCOORD5;
 				float2 faceLightDot		:TEXCOORD6;
 				UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
 			};
 
 
             v2f vert (a2v v)
 			{
-				v2f o;
-                UNITY_SETUP_INSTANCE_ID(v); 
-                UNITY_TRANSFER_INSTANCE_ID(v,o); 
+				v2f o = (v2f)0;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
 
 				o.positionHCS = TransformObjectToHClip(v.vertex);
                 o.positionWS = TransformObjectToWorld(v.vertex);
@@ -302,6 +304,8 @@ Shader "Character/LitFace"
             FragmentOutput frag(v2f i)
             {
                 UNITY_SETUP_INSTANCE_ID(i);
+				UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
                 half2  UV = i.uv.xy;
 				half2  UV1 = i.uv.zw;
 				float3 positionWS = i.positionWS;
@@ -611,6 +615,8 @@ Shader "Character/LitFace"
             FragmentOutput frag(Toon_v2f i)
             {
                 UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
                 half2  UV = i.uv.xy;
 				half2  UV1 = i.uv.zw;
 				float3 positionWS = i.positionWS;

@@ -225,6 +225,8 @@ Shader "Character/LitPBRToon"
             FragmentOutput frag(Toon_v2f i)
             {
                 UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+                
                 float2 UV = i.uv.xy;
 				float3 positionWS = i.positionWS;
 				float4 shadowCoords = TransformWorldToShadowCoord(positionWS);

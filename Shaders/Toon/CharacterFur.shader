@@ -266,14 +266,16 @@ Shader "Character/LitFur"
 				float4 uv				:TEXCOORD5;
 				float  clipThreshold	:TEXCOORD6;
 				UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
 			};
 
 
             v2f vert (a2v v)
 			{
-				v2f o;
-                UNITY_SETUP_INSTANCE_ID(v); 
-                UNITY_TRANSFER_INSTANCE_ID(v,o); 
+				v2f o = (v2f)0;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
 
 				float offsetDist = _MULTIPASS_PARAMS.z * _FurLength;
 				float3 offsetPositionWS = TransformObjectToWorld(v.vertex);
@@ -300,6 +302,7 @@ Shader "Character/LitFur"
             FragmentOutput frag(v2f i)
             {
                 UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
 				// Fur Clip
 				half furNoise = SAMPLE_TEXTURE2D(_FurNoise, sampler_FurNoise, i.uv.zw);

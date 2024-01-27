@@ -99,6 +99,7 @@ Shader "Character/Outline"
                 float4 tangent  :TANGENT;
                 float4 color    :COLOR; // rgb:SmoothNormal a:outlineWidth
                 float4 uv       :TEXCOORD0;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct ToonOutline_v2f
@@ -108,14 +109,21 @@ Shader "Character/Outline"
                 float3 normalWS     :TEXCOORD1;
                 float4 uv           :TEXCOORD2;
                 float4 color        :TEXCOORD3;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+                UNITY_VERTEX_OUTPUT_STEREO
             };
 
             ToonOutline_v2f ToonOutlineVert(ToonOutline_a2v v)
             {
+                ToonOutline_v2f o = (ToonOutline_v2f)0;
+
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_TRANSFER_INSTANCE_ID(v, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+
                 float4 scaledScreenParams = GetScaledScreenParams();
                 float ScaleX = abs(scaledScreenParams.x / scaledScreenParams.y);
 
-                ToonOutline_v2f o;
                 o.positionHCS = TransformObjectToHClip(v.vertex);
                 o.positionWS = TransformObjectToWorld(v.vertex);
 
@@ -149,6 +157,9 @@ Shader "Character/Outline"
 
             FragmentOutput ToonOutlineFrag(ToonOutline_v2f i):SV_Target
             {
+                UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
                 half4 mainTexColor = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap,i.uv);
             #if _USE_ALPHA_CLIPPING
                 clip(mainTexColor.a - _AlphaClip);

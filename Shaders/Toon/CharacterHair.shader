@@ -244,6 +244,8 @@ Shader "Character/LitHair"
             FragmentOutput frag(Toon_v2f i)
             {
                 UNITY_SETUP_INSTANCE_ID(i);
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+				
                 float2 UV = i.uv.xy;
 				float2 UV1 = i.uv.zw;
 				float3 positionWS = i.positionWS;
