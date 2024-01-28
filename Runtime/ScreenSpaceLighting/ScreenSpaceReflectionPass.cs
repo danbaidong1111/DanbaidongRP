@@ -105,9 +105,24 @@ namespace UnityEngine.Rendering.Universal
                 cmd.SetComputeTextureParam(m_Compute, m_SSRTracingKernel, "_SSRHitPointTexture", m_SSRHitPointTexture);
 
                 // Constant Params
-                // Should use ConstantBuffer
+                // TODO: Should use ConstantBuffer
                 // ConstantBuffer.Push(ctx.cmd, data.cb, cs, HDShaderIDs._ShaderVariablesScreenSpaceReflection);
                 {
+                    // Wtf? It seems that Unity has not setted this jittered matrix (or changed by something)?
+                    // We will transfer our own Temporal AA jittered matrices and use it in SSR compute.
+                    Matrix4x4 viewMatrix = renderingData.cameraData.GetViewMatrix();
+                    // Jittered, non-gpu
+                    //Matrix4x4 projectionMatrix = renderingData.cameraData.GetProjectionMatrix();
+                    // Jittered, gpu
+                    Matrix4x4 gpuProjectionMatrix = renderingData.cameraData.GetGPUProjectionMatrix(renderingData.cameraData.IsCameraProjectionMatrixFlipped());
+                    Matrix4x4 viewAndProjectionMatrix = gpuProjectionMatrix * viewMatrix;
+                    Matrix4x4 inverseViewMatrix = Matrix4x4.Inverse(viewMatrix);
+                    Matrix4x4 inverseProjectionMatrix = Matrix4x4.Inverse(gpuProjectionMatrix);
+                    Matrix4x4 inverseViewProjection = inverseViewMatrix * inverseProjectionMatrix;
+
+                    cmd.SetComputeMatrixParam(m_Compute, "_SSR_MATRIX_VP", viewAndProjectionMatrix);
+                    cmd.SetComputeMatrixParam(m_Compute, "_SSR_MATRIX_I_VP", inverseViewProjection);
+
                     cmd.SetComputeIntParam(m_Compute, "_SsrStencilBit", (int)(1 << 3));
                     cmd.SetComputeFloatParam(m_Compute, "_SsrRoughnessFadeEnd", 1 - m_volumeSettings.minSmoothness);
                     cmd.SetComputeIntParam(m_Compute, "_SsrDepthPyramidMaxMip", m_Renderer.depthBufferMipChainInfo.mipLevelCount - 1);
