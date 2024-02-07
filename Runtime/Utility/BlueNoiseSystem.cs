@@ -1,9 +1,7 @@
 using System;
 using UnityEngine.Assertions;
-using UnityEngine.Experimental.Rendering;
-using UnityEngine.Rendering.Universal;
 
-namespace UnityEngine.Rendering.HighDefinition
+namespace UnityEngine.Rendering.Universal
 {
     /// <summary>
     /// A bank of nvidia pre-generated spatiotemporal blue noise textures.
