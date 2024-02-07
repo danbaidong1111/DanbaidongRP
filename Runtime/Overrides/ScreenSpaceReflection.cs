@@ -133,7 +133,7 @@ namespace UnityEngine.Rendering.Universal
         /// For PBR: Controls the bias of accumulation (0 no bias, 1 bias ssr)
         /// </summary>
         [AdditionalProperty]
-        public ClampedFloatParameter biasFactor = new ClampedFloatParameter(0.5f, 0.0f, 1.0f);
+        public ClampedFloatParameter biasFactor = new ClampedFloatParameter(0.0f, 0.0f, 1.0f);
 
         /// <summary>
         /// Controls the likelihood history will be rejected based on the previous frame motion vectors of both the surface and the hit object in world space.

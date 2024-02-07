@@ -1,7 +1,9 @@
 using System;
-using System.Collections.Generic;
+
+#if UNITY_EDITOR
+using UnityEditorInternal;
 using UnityEditor;
-using UnityEngine.Serialization;
+#endif
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -9,6 +11,7 @@ namespace UnityEngine.Rendering.Universal
     /// Universal Render Pipeline's Global Settings.
     /// Global settings are unique per Render Pipeline type. In URP, Global Settings contain:
     /// - light layer names
+    /// - Runtime shaders
     /// </summary>
     [URPHelpURL("urp-global-settings")]
     partial class UniversalRenderPipelineGlobalSettings : RenderPipelineGlobalSettings, ISerializationCallbackReceiver
@@ -176,6 +179,9 @@ namespace UnityEngine.Rendering.Universal
                 AssetDatabase.Refresh();
             }
 
+            // ensure resources are here
+            assetCreated.EnsureRuntimeResources(forceReload: true);
+
             return assetCreated;
         }
 
@@ -283,6 +289,137 @@ namespace UnityEngine.Rendering.Universal
         }
 
         #endregion
+
+        #region Resource Common
+#if UNITY_EDITOR
+        // Yes it is stupid to retry right away but making it called in EditorApplication.delayCall
+        // from EnsureResources create GC
+        void DelayedNullReload<T>(string resourcePath)
+            where T : UniversalRenderPipelineResources
+        {
+            T resourcesDelayed = AssetDatabase.LoadAssetAtPath<T>(resourcePath);
+            if (resourcesDelayed == null)
+                EditorApplication.delayCall += () => DelayedNullReload<T>(resourcePath);
+            else
+                ResourceReloader.ReloadAllNullIn(resourcesDelayed, URPUtils.GetURPRenderPipelinePath());
+        }
+        void EnsureResources<T>(bool forceReload, ref T resources, string resourcePath, Func<UniversalRenderPipelineGlobalSettings, bool> checker)
+            where T : UniversalRenderPipelineResources
+        {
+            T resourceChecked = null;
+
+            if (checker(this))
+            {
+                if (!EditorUtility.IsPersistent(resources)) // if not loaded from the Asset database
+                {
+                    // try to load from AssetDatabase if it is ready
+                    resourceChecked = AssetDatabase.LoadAssetAtPath<T>(resourcePath);
+                    if (resourceChecked && !resourceChecked.Equals(null))
+                        resources = resourceChecked;
+                }
+                if (forceReload)
+                    ResourceReloader.ReloadAllNullIn(resources, URPUtils.GetURPRenderPipelinePath());
+                return;
+            }
+
+            resourceChecked = AssetDatabase.LoadAssetAtPath<T>(resourcePath);
+            if (resourceChecked != null && !resourceChecked.Equals(null))
+            {
+                resources = resourceChecked;
+                if (forceReload)
+                    ResourceReloader.ReloadAllNullIn(resources, URPUtils.GetURPRenderPipelinePath());
+            }
+            else
+            {
+                // Asset database may not be ready
+                var objs = InternalEditorUtility.LoadSerializedFileAndForget(resourcePath);
+                resources = (objs != null && objs.Length > 0) ? objs[0] as T : null;
+                if (forceReload)
+                {
+                    try
+                    {
+                        if (ResourceReloader.ReloadAllNullIn(resources, URPUtils.GetURPRenderPipelinePath()))
+                        {
+                            InternalEditorUtility.SaveToSerializedFileAndForget(
+                                new Object[] { resources },
+                                resourcePath,
+                                true);
+                        }
+                    }
+                    catch (System.Exception e)
+                    {
+                        // This can be called at a time where AssetDatabase is not available for loading.
+                        // When this happens, the GUID can be get but the resource loaded will be null.
+                        // Using the ResourceReloader mechanism in CoreRP, it checks this and add InvalidImport data when this occurs.
+                        if (!(e.Data.Contains("InvalidImport") && e.Data["InvalidImport"] is int dii && dii == 1))
+                            Debug.LogException(e);
+                        else
+                            DelayedNullReload<T>(resourcePath);
+                    }
+                }
+            }
+            Debug.Assert(checker(this), $"Could not load {typeof(T).Name}.");
+        }
+#endif
+
+        #endregion //Resource Common
+
+        #region Runtime Resources
+        [SerializeField]
+        UniversalRenderPipelineRuntimeResources m_RenderPipelineRuntimeResources;
+
+        internal UniversalRenderPipelineRuntimeResources renderPipelineRuntimeResources
+        {
+            get
+            {
+#if UNITY_EDITOR
+                EnsureRuntimeResources(forceReload: false);
+#endif
+                return m_RenderPipelineRuntimeResources;
+            }
+        }
+
+#if UNITY_EDITOR
+        // be sure to cach result for not using GC in a frame after first one.
+        static readonly string runtimeResourcesPath = URPUtils.GetURPRenderPipelinePath() + "Runtime/Data/UniversalRenderPipelineRuntimeResources.asset";
+
+        internal void EnsureRuntimeResources(bool forceReload)
+            => EnsureResources(forceReload, ref m_RenderPipelineRuntimeResources, runtimeResourcesPath, AreRuntimeResourcesCreated_Internal);
+
+        // Passing method in a Func argument create a functor that create GC
+        // If it is static it is then only computed once but the Ensure is called after first frame which will make our GC check fail
+        // So create it once and store it here.
+        // Expected usage: UniversalRenderPipelineGlobalSettings.AreRuntimeResourcesCreated(anyUniversalRenderPipelineRenderPipelineGlobalSettings) that will return a bool
+        static Func<UniversalRenderPipelineGlobalSettings, bool> AreRuntimeResourcesCreated_Internal = global
+            => global.m_RenderPipelineRuntimeResources != null && !global.m_RenderPipelineRuntimeResources.Equals(null);
+
+        internal bool AreRuntimeResourcesCreated() => AreRuntimeResourcesCreated_Internal(this);
+
+        internal void EnsureShadersCompiled()
+        {
+            // We iterate over all compute shader to verify if they are all compiled, if it's not the case
+            // then we throw an exception to avoid allocating resources and crashing later on by using a null
+            // compute kernel.
+            foreach (var computeShader in m_RenderPipelineRuntimeResources.shaders.GetAllComputeShaders())
+            {
+                foreach (var message in UnityEditor.ShaderUtil.GetComputeShaderMessages(computeShader))
+                {
+                    if (message.severity == UnityEditor.Rendering.ShaderCompilerMessageSeverity.Error)
+                    {
+                        // Will be catched by the try in HDRenderPipelineAsset.CreatePipeline()
+                        throw new System.Exception(System.String.Format(
+                            "Compute Shader compilation error on platform {0} in file {1}:{2}: {3}{4}\n" +
+                            "HDRP will not run until the error is fixed.\n",
+                            message.platform, message.file, message.line, message.message, message.messageDetails
+                        ));
+                    }
+                }
+            }
+        }
+
+#endif //UNITY_EDITOR
+
+        #endregion // Runtime Resources
 
         #region Misc Settings
 

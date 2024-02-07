@@ -196,6 +196,8 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         public ShaderResources shaders = null;
 
+        public UniversalRenderPipelineRuntimeResources defaultRuntimeReources = null;
+
         const int k_LatestAssetVersion = 2;
         [SerializeField] int m_AssetVersion = 0;
         [SerializeField] LayerMask m_OpaqueLayerMask = -1;
@@ -366,6 +368,9 @@ namespace UnityEngine.Rendering.Universal
             // serialized resources in a different format. Early returning here when OnEnable is called
             // upon asset creation is fine because we guarantee new assets get created with all resources initialized.
             if (shaders == null)
+                return;
+
+            if (defaultRuntimeReources == null)
                 return;
 
             ReloadAllNullProperties();

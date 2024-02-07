@@ -168,6 +168,8 @@ namespace UnityEngine.Rendering.Universal
         /// </summary>
         public override RenderPipelineGlobalSettings defaultSettings => m_GlobalSettings;
 
+        internal UniversalRenderPipelineRuntimeResources defaultRuntimeResources { get { return m_GlobalSettings.renderPipelineRuntimeResources; } }
+
         // flag to keep track of depth buffer requirements by any of the cameras in the stack
         internal static bool cameraStackRequiresDepthForPostprocessing = false;
 
@@ -203,6 +205,8 @@ namespace UnityEngine.Rendering.Universal
 #endif
             SetSupportedRenderingFeatures(pipelineAsset);
 
+            SetRendererDataDefaultRuntimeResources(pipelineAsset);
+
             // Initial state of the RTHandle system.
             // We initialize to screen width/height to avoid multiple realloc that can lead to inflated memory usage (as releasing of memory is delayed).
             RTHandles.Initialize(Screen.width, Screen.height);
@@ -219,11 +223,24 @@ namespace UnityEngine.Rendering.Universal
                 QualitySettings.antiAliasing = asset.msaaSampleCount;
             }
 
+#if UNITY_EDITOR
+            UpgradeResourcesIfNeeded();
+
+            //In case we are loading element in the asset pipeline (occurs when library is not fully constructed) the creation of the URPRenderPipeline is done at a time we cannot access resources.
+            //So in this case, the reloader would fail and the resources cannot be validated. So skip validation here.
+            //The URPRenderPipeline will be reconstructed in a few frame which will fix this issue.
+            if (m_GlobalSettings.AreRuntimeResourcesCreated() == false)
+                return;
+
+            m_GlobalSettings.EnsureShadersCompiled();
+#endif
 
             // Configure initial XR settings
             MSAASamples msaaSamples = (MSAASamples)Mathf.Clamp(Mathf.NextPowerOfTwo(QualitySettings.antiAliasing), (int)MSAASamples.None, (int)MSAASamples.MSAA8x);
             XRSystem.SetDisplayMSAASamples(msaaSamples);
             XRSystem.SetRenderScale(asset.renderScale);
+
+            BlueNoiseSystem.Initialize(defaultRuntimeResources);
 
             Shader.globalRenderPipeline = k_ShaderTagName;
 
@@ -246,6 +263,16 @@ namespace UnityEngine.Rendering.Universal
             QualitySettings.enableLODCrossFade = asset.enableLODCrossFade;
         }
 
+#if UNITY_EDITOR
+        void UpgradeResourcesIfNeeded()
+        {
+            // Check that the serialized Resources are not broken
+            m_GlobalSettings.EnsureRuntimeResources(forceReload: true);
+
+
+        }
+#endif
+
         /// <inheritdoc/>
         protected override void Dispose(bool disposing)
         {
@@ -262,6 +289,8 @@ namespace UnityEngine.Rendering.Universal
             SupportedRenderingFeatures.active = new SupportedRenderingFeatures();
             ShaderData.instance.Dispose();
             XRSystem.Dispose();
+
+            BlueNoiseSystem.ClearAll();
 
             s_RenderGraph.Cleanup();
             s_RenderGraph = null;
@@ -370,7 +399,8 @@ namespace UnityEngine.Rendering.Universal
             if (m_GlobalSettings == null || UniversalRenderPipelineGlobalSettings.instance == null)
             {
                 m_GlobalSettings = UniversalRenderPipelineGlobalSettings.Ensure();
-                if(m_GlobalSettings == null) return;
+                m_GlobalSettings.EnsureShadersCompiled();
+                if (m_GlobalSettings == null) return;
             }
 #endif
 
@@ -1044,6 +1074,18 @@ namespace UnityEngine.Rendering.Universal
 #endif
 
             SupportedRenderingFeatures.active.supportsHDR = pipelineAsset.supportsHDR;
+        }
+
+        void SetRendererDataDefaultRuntimeResources(UniversalRenderPipelineAsset pipelineAsset)
+        {
+            foreach (var data in pipelineAsset.m_RendererDataList)
+            {
+                if (data.GetType() == typeof(UniversalRendererData))
+                {
+                    var uData = data as UniversalRendererData;
+                    uData.defaultRuntimeReources = defaultRuntimeResources;
+                }
+            }
         }
 
         static void InitializeCameraData(Camera camera, UniversalAdditionalCameraData additionalCameraData, bool resolveFinalTarget, out CameraData cameraData)

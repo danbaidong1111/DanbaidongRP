@@ -1,7 +1,8 @@
 // Definitions
 //--------------------------------------------------------------------------------------------------
 
-// #pragma enable_d3d11_debug_symbols
+// TODO: delete
+#pragma enable_d3d11_debug_symbols
 #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
 
 #pragma kernel ScreenSpaceReflectionsTracing                                                SSR_TRACE
@@ -60,6 +61,8 @@ StructuredBuffer<int2>  _DepthPyramidMipLevelOffsets;
 
 TEXTURE2D_X_HALF(_GBuffer2);
 
+TEXTURE2D(_STBNTexture);
+
 #ifdef SSR_TRACE
     Texture2D<uint2> _StencilTexture;
     RW_TEXTURE2D(float2, _SSRHitPointTexture);
@@ -90,7 +93,7 @@ int _SsrColorPyramidMaxMip;
 int _SsrReflectsSky;
 // float _SsrAccumulationAmount;
 // float _SsrPBRSpeedRejection;
-// float _SsrPBRBias;
+float _SsrPBRBias;
 // float _SsrPRBSpeedRejectionScalerFactor;
 // float _SsrPBRPad0;
 
@@ -129,7 +132,7 @@ void ScreenSpaceReflectionsTracing(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     float  deviceDepth = LOAD_TEXTURE2D(_CameraDepthTexture, positionSS).r;
 
-// #ifdef SSR_APPROX
+#ifdef SSR_APPROX
     float2 positionNDC = positionSS * _ScreenSize.zw + (0.5 * _ScreenSize.zw);
     float3 positionWS = ComputeWorldSpacePosition(positionNDC, deviceDepth, _SSR_MATRIX_I_VP); // Jittered
     float3 V = GetWorldSpaceNormalizeViewDir(positionWS);
@@ -139,10 +142,39 @@ void ScreenSpaceReflectionsTracing(uint3 dispatchThreadId : SV_DispatchThreadID)
     GetNormalAndPerceptualRoughness(positionSS, N, perceptualRoughness);
 
     float3 R = reflect(-V, N);
-// #else
-//     // PBR
+#else
+    // PBR
+    float2 positionNDC = positionSS * _ScreenSize.zw + (0.5 * _ScreenSize.zw);
+    float3 positionWS = ComputeWorldSpacePosition(positionNDC, deviceDepth, _SSR_MATRIX_I_VP); // Jittered
+    float3 V = GetWorldSpaceNormalizeViewDir(positionWS);
 
-// #endif
+    float3 N;
+    float perceptualRoughness;
+    GetNormalAndPerceptualRoughness(positionSS, N, perceptualRoughness);
+    
+
+    float2 blueNoiseRandom = 0;
+    blueNoiseRandom.xy = _STBNTexture[float2(positionSS.x % 128, positionSS.y % 128)].xy;
+    // Bias will make the sampled points cluster more towards the top of the hemisphere.
+    blueNoiseRandom.x = lerp(blueNoiseRandom.x, 0.0f, _SsrPBRBias);
+
+    float3 R = reflect(-V, N);
+
+    float NdotL, NdotH, VdotH, NdotV;
+    float3x3 localToWorld = GetLocalFrame(N);
+    float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
+    SampleGGXDir(blueNoiseRandom, V, localToWorld, roughness, R, NdotL, NdotH, VdotH);
+
+    NdotV = dot(N, V);
+    float Vg = V_SmithJointGGX(NdotL, NdotV, roughness);
+
+    float weight = 4.0f * NdotL * VdotH * Vg / NdotH;
+
+    if (NdotL < 0.001f || weight < 0.001f)
+    {
+        return;
+    }
+#endif /* SSR_PBR */
 
     float3 camPosWS = GetCurrentViewPosition();
     
@@ -365,6 +397,19 @@ void ScreenSpaceReflectionsReprojection(uint3 dispatchThreadId : SV_DispatchThre
     _SSRAccumTexture[positionSS] = float4(color, 1.0f) * opacity;
 #else
     // PBR Accum
+
+    // Note that the color pyramid uses it's own viewport scale, since it lives on the camera.
+    float3 color   = SAMPLE_TEXTURE2D_X_LOD(_ColorPyramidTexture, ssr_trilinear_clamp_sampler, hitPositionNDC, mipLevel).rgb;
+
+    // Disable SSR for negative, infinite and NaN history values.
+    uint3 intCol   = asuint(color);
+    bool  isPosFin = Max3(intCol.r, intCol.g, intCol.b) < 0x7F800000;
+
+    color   = isPosFin ? color   : 0;
+    opacity = isPosFin ? opacity : 0;
+
+
+    _SSRAccumTexture[positionSS] = float4(color, 1.0f) * opacity;
 #endif
 
 }

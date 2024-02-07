@@ -293,8 +293,8 @@ namespace UnityEngine.Rendering.Universal
                 };
                 int forwardOnlyStencilRef = stencilData.stencilReference | (int)StencilUsage.MaterialUnlit;
                 m_GBufferCopyDepthPass = new CopyDepthPass(RenderPassEvent.BeforeRenderingGbuffer + 1, m_CopyDepthMaterial, true);
-                m_GPUCopyPass = new GPUCopyPass(RenderPassEvent.BeforeRenderingGbuffer + 1, data.shaders.copyChannelCS, true);
-                m_DepthPyramidPass = new DepthPyramidPass(RenderPassEvent.BeforeRenderingGbuffer + 2, data.shaders.depthPyramidCS);
+                m_GPUCopyPass = new GPUCopyPass(RenderPassEvent.BeforeRenderingGbuffer + 1, data.defaultRuntimeReources.shaders.copyChannelCS, true);
+                m_DepthPyramidPass = new DepthPyramidPass(RenderPassEvent.BeforeRenderingGbuffer + 2, data.defaultRuntimeReources.shaders.depthPyramidCS);
                 m_DeferredPass = new DeferredPass(RenderPassEvent.BeforeRenderingDeferredLights, m_DeferredLights);
                 m_RenderOpaqueForwardOnlyPass = new DrawObjectsPass("Render Opaques Forward Only", forwardOnlyShaderTagIds, true, RenderPassEvent.BeforeRenderingOpaques, RenderQueueRange.opaque, data.opaqueLayerMask, forwardOnlyStencilState, forwardOnlyStencilRef);
             }
@@ -313,7 +313,7 @@ namespace UnityEngine.Rendering.Universal
 
             m_DrawSkyboxPass = new DrawSkyboxPass(RenderPassEvent.BeforeRenderingSkybox);
             m_CopyColorPass = new CopyColorPass(RenderPassEvent.AfterRenderingSkybox, m_SamplingMaterial, m_BlitMaterial);
-            m_ColorPyramidPass = new ColorPyramidPass(RenderPassEvent.AfterRenderingSkybox, data.shaders.colorPyramidCS);
+            m_ColorPyramidPass = new ColorPyramidPass(RenderPassEvent.AfterRenderingSkybox, data.defaultRuntimeReources.shaders.colorPyramidCS);
 #if ADAPTIVE_PERFORMANCE_2_1_0_OR_NEWER
             if (needTransparencyPass)
 #endif

@@ -16,6 +16,7 @@ namespace UnityEngine.Rendering.Universal
         // Private Variables
         private ComputeShader m_Compute;
         private ScreenSpaceReflectionSettings m_CurrentSettings;
+        private int m_BlueNoiseTexArrayIndex;
 
         private RTHandle m_SSRHitPointTexture;
         private RTHandle m_SSRAccumTexture;
@@ -36,6 +37,8 @@ namespace UnityEngine.Rendering.Universal
 
             m_SSRTracingKernel = m_Compute.FindKernel("ScreenSpaceReflectionsTracing");
             m_SSRReprojectionKernel = m_Compute.FindKernel("ScreenSpaceReflectionsReprojection");
+
+            m_BlueNoiseTexArrayIndex = 0;
         }
 
         /// <summary>
@@ -99,8 +102,23 @@ namespace UnityEngine.Rendering.Universal
                 float thicknessScale = 1.0f / (1.0f + thickness);
                 float thicknessBias = -n / (f - n) * (thickness * thicknessScale);
 
-                cmd.EnableShaderKeyword("SSR_APPROX");
-                //cmd.SetComputeTextureParam(m_Compute, m_SSRTracingKernel, "_StencilTexture", stencilBuffer, 0, RenderTextureSubElement.Stencil);
+                if (m_volumeSettings.usedAlgorithm == ScreenSpaceReflectionAlgorithm.Approximation)
+                {
+                    cmd.EnableShaderKeyword("SSR_APPROX");
+                }
+                else
+                {
+                    // TODO: Clear accum and accum prev
+
+                    cmd.DisableShaderKeyword("SSR_APPROX");
+                }
+
+                var blueNoise = BlueNoiseSystem.TryGetInstance();
+                if (blueNoise != null)
+                {
+                    m_BlueNoiseTexArrayIndex = (m_BlueNoiseTexArrayIndex + 1) % BlueNoiseSystem.blueNoiseArraySize;
+                    blueNoise.BindSTBNVec2Texture(cmd, m_BlueNoiseTexArrayIndex);
+                }
 
                 cmd.SetComputeTextureParam(m_Compute, m_SSRTracingKernel, "_SSRHitPointTexture", m_SSRHitPointTexture);
 
@@ -130,6 +148,7 @@ namespace UnityEngine.Rendering.Universal
                     cmd.SetComputeIntParam(m_Compute, "_SsrIterLimit", m_volumeSettings.rayMaxIterations);
                     cmd.SetComputeFloatParam(m_Compute, "_SsrThicknessScale", thicknessScale);
                     cmd.SetComputeFloatParam(m_Compute, "_SsrThicknessBias", thicknessBias);
+                    cmd.SetComputeFloatParam(m_Compute, "_SsrPBRBias", m_volumeSettings.biasFactor.value);
 
                     cmd.SetComputeBufferParam(m_Compute, m_SSRTracingKernel, "_DepthPyramidMipLevelOffsets", m_Renderer.depthBufferMipChainInfo.GetOffsetBufferData(m_Renderer.depthPyramidMipLevelOffsetsBuffer));
                 }
