@@ -817,6 +817,30 @@ namespace UnityEngine.Rendering.Universal
             }
         }
 
+        internal static float ComputeViewportScale(int viewportSize, int bufferSize)
+        {
+            float rcpBufferSize = 1.0f / bufferSize;
+
+            // Scale by (vp_dim / buf_dim).
+            return viewportSize * rcpBufferSize;
+        }
+
+        internal static float ComputeViewportLimit(int viewportSize, int bufferSize)
+        {
+            float rcpBufferSize = 1.0f / bufferSize;
+
+            // Clamp to (vp_dim - 0.5) / buf_dim.
+            return (viewportSize - 0.5f) * rcpBufferSize;
+        }
+
+        internal static Vector4 ComputeViewportScaleAndLimit(Vector2Int viewportSize, Vector2Int bufferSize)
+        {
+            return new Vector4(ComputeViewportScale(viewportSize.x, bufferSize.x),  // Scale(x)
+                ComputeViewportScale(viewportSize.y, bufferSize.y),                 // Scale(y)
+                ComputeViewportLimit(viewportSize.x, bufferSize.x),                 // Limit(x)
+                ComputeViewportLimit(viewportSize.y, bufferSize.y));                // Limit(y)
+        }
+
         /// <summary>
         /// Compute kernel size.
         /// </summary>

@@ -1,3 +1,11 @@
+#ifndef UNITY_SCREENSPACE_LIGHTING_INCLUDED
+#define UNITY_SCREENSPACE_LIGHTING_INCLUDED
+
+// We always need NoueNoise
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Utils/BlueNoise.hlsl"
+
+TEXTURE2D_X(_CameraMotionVectorsTexture);
+
 // Performs fading at the edge of the screen.
 float EdgeOfScreenFade(float2 coordNDC, float fadeRcpLength)
 {
@@ -19,3 +27,14 @@ bool HasClearCoatMask(float4 packedMask)
     UnpackFloatInt8bit(packedMask.a, 8, coatMask, materialFeatureId);
     return coatMask > 0.001; // If coat mask is positive, it mean we use clear coat
 }
+
+
+// Per-pixel camera backwards velocity
+// historyUV = uv + velocity;
+float2 SampleMotionVectorOffset(float2 uv, float4 screenSize)
+{
+    // Unity motion vectors are forward motion vectors in screen UV space
+    float2 offsetUV = SAMPLE_TEXTURE2D_X_LOD(_CameraMotionVectorsTexture, sampler_LinearClamp, min(uv, 1.0f - 0.5f * screenSize.zw), 0).xy;
+    return offsetUV;
+}
+#endif //UNITY_SCREENSPACE_LIGHTING_INCLUDED

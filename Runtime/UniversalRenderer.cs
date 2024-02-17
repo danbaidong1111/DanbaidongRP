@@ -147,8 +147,8 @@ namespace UnityEngine.Rendering.Universal
         RTHandle m_NormalsTexture;
         RTHandle m_DecalLayersTexture;
         RTHandle m_OpaqueColor;
-        RTHandle m_MotionVectorColor;
-        RTHandle m_MotionVectorDepth;
+        internal RTHandle m_MotionVectorColor;
+        internal RTHandle m_MotionVectorDepth;
 
         ForwardLights m_ForwardLights;
         DeferredLights m_DeferredLights;
@@ -1523,7 +1523,7 @@ namespace UnityEngine.Rendering.Universal
                 inputSummary.requiresDepthTexture |= needsDepth;
                 inputSummary.requiresDepthPrepass |= needsNormals || needsDepth && eventBeforeMainRendering;
                 inputSummary.requiresNormalsTexture |= needsNormals;
-                inputSummary.requiresColorTexture |= needsColor;
+                inputSummary.requiresColorTexture |= needsColor || needsHistoryColor;
                 inputSummary.requiresHistoryColorTexture |= needsHistoryColor;
                 inputSummary.requiresMotionVectors |= needsMotion;
                 if (needsDepth)

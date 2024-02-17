@@ -29,7 +29,8 @@ namespace UnityEngine.Rendering.Universal
         #region Constructors
         internal MotionVectorRenderPass(Material cameraMaterial, Material objectMaterial)
         {
-            renderPassEvent = RenderPassEvent.BeforeRenderingPostProcessing;
+            // Render motion vector after we handled opaque depth, renderer depth is RenderPassEvent.BeforeRenderingGbuffer + 2
+            renderPassEvent = RenderPassEvent.BeforeRenderingGbuffer + 3;
             m_CameraMaterial = cameraMaterial;
             m_ObjectMaterial = objectMaterial;
             m_PassData = new PassData();

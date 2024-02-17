@@ -60,12 +60,13 @@ Shader "Hidden/Universal Render Pipeline/CameraMotionVectors"
                 // since uv remap functions use floats
                 #define POS_NDC_TYPE float2 
             #else
-                #define POS_NDC_TYPE half2
+                //#define POS_NDC_TYPE half2
+                #define POS_NDC_TYPE float2
             #endif
 
             // -------------------------------------
             // Fragment
-            half4 frag(Varyings input, out float outDepth : SV_Depth) : SV_Target
+            void frag(Varyings input, out float outDepth : SV_Depth, out float4 outColor : SV_Target0)
             {
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(input);
 
@@ -96,17 +97,17 @@ Shader "Hidden/Universal Render Pipeline/CameraMotionVectors"
                 #if defined(_FOVEATED_RENDERING_NON_UNIFORM_RASTER)
                     // Convert velocity from NDC space (-1..1) to screen UV 0..1 space since FoveatedRendering remap needs that range.
                     // Also return both position in non-uniform UV space to get the right velocity vector
-                    half2 posUV = RemapFoveatedRenderingResolve(posNDC * 0.5f + 0.5f);
-                    half2 prevPosUV = RemapFoveatedRenderingPrevFrameResolve(prevPosNDC * 0.5f + 0.5f);
+                    float2 posUV = RemapFoveatedRenderingResolve(posNDC * 0.5f + 0.5f);
+                    float2 prevPosUV = RemapFoveatedRenderingPrevFrameResolve(prevPosNDC * 0.5f + 0.5f);
 
                     // Calculate forward velocity
-                    half2 velocity = (posUV - prevPosUV);
+                    float2 velocity = (posUV - prevPosUV);
                     #if UNITY_UV_STARTS_AT_TOP
                         velocity.y = -velocity.y;
                     #endif
                 #else
                     // Calculate forward velocity
-                    half2 velocity = (posNDC - prevPosNDC);
+                    float2 velocity = (posNDC - prevPosNDC);
 
                     // TODO: test that velocity.y is correct
                     #if UNITY_UV_STARTS_AT_TOP
@@ -118,7 +119,9 @@ Shader "Hidden/Universal Render Pipeline/CameraMotionVectors"
                     // Note: ((posNDC * 0.5 + 0.5) - (prevPosNDC * 0.5 + 0.5)) = (velocity * 0.5)
                     velocity.xy *= 0.5;
                 #endif
-                return half4(velocity, 0, 0);
+
+                // RT - 16:16 float
+                outColor = float4(velocity, 0, 0);
             }
 
             ENDHLSL

@@ -80,7 +80,15 @@ namespace UnityEngine.Rendering.Universal
 
             // A camera could be rendered multiple times per frame, only update the view projections if needed
             bool aspectChanged = m_PrevAspectRatio[idx] != cameraData.aspectRatio;
+
+
+            // Here is a bug.
+            // We want to update SceneView motionVectors during our dragging, but Time.frameCount only increase after dragging.
+#if UNITY_EDITOR
+            if (m_LastFrameIndex[idx] != Time.frameCount || aspectChanged || camera.cameraType == CameraType.SceneView)
+#else
             if (m_LastFrameIndex[idx] != Time.frameCount || aspectChanged)
+#endif
             {
 #if ENABLE_VR && ENABLE_XR_MODULE
                 if (cameraData.xr.enabled && cameraData.xr.singlePassEnabled)

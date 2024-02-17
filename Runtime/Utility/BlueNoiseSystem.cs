@@ -31,7 +31,8 @@ namespace UnityEngine.Rendering.Universal
         public Texture2DArray textureArray128R { get { return m_TextureArray128R; } }
         public Texture2DArray textureArray128RG { get { return m_TextureArray128RG; } }
 
-        private static readonly int s_STBNTexture = Shader.PropertyToID("_STBNTexture");
+        private static readonly int s_STBNVec1Texture = Shader.PropertyToID("_STBNVec1Texture");
+        private static readonly int s_STBNVec2Texture = Shader.PropertyToID("_STBNVec2Texture");
 
         UniversalRenderPipelineRuntimeResources m_RenderPipelineRuntimeResources;
         private BlueNoiseSystem(UniversalRenderPipelineRuntimeResources resources)
@@ -116,11 +117,11 @@ namespace UnityEngine.Rendering.Universal
         /// <param name="textureIndex"></param>
         internal void BindSTBNVec1Texture(CommandBuffer cmd, int textureIndex)
         {
-            cmd.SetGlobalTexture(s_STBNTexture, textures128R[textureIndex]);
+            cmd.SetGlobalTexture(s_STBNVec1Texture, textures128R[textureIndex]);
         }
         internal void BindSTBNVec2Texture(CommandBuffer cmd, int textureIndex)
         {
-            cmd.SetGlobalTexture(s_STBNTexture, textures128RG[textureIndex]);
+            cmd.SetGlobalTexture(s_STBNVec2Texture, textures128RG[textureIndex]);
         }
     }
 }

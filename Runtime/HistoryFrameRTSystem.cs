@@ -51,8 +51,8 @@ namespace UnityEngine.Rendering.Universal
         //VolumetricClouds0,
         ///// <summary>Volumetric clouds buffer 1.</summary>
         //VolumetricClouds1,
-        ///// <summary>Screen Space Reflection Accumulation.</summary>
-        //ScreenSpaceReflectionAccumulation,
+        /// <summary>Screen Space Reflection Accumulation.</summary>
+        ScreenSpaceReflectionAccumulation,
         ///// <summary>Path-traced Albedo AOV.</summary>
         //AlbedoAOV,
         ///// <summary>Path-traced Normal AOV.</summary>
@@ -63,17 +63,26 @@ namespace UnityEngine.Rendering.Universal
         //DenoiseHistory
     }
 
+    /// <summary>
+    /// Usage: 
+    /// 1. Get current camera HistoryFrameRTSystem by GetOrCreate(camera);
+    /// 2. Check scale (usually not changed) and GetCurrentFrameRT(), ReleaseHistoryFrameRT and AllocHistoryFrameRT if needed;
+    /// 3. Get your FrameRT and use it.
+    /// 4. Note that we have processed the referenceSize and the lifecycle of the cam's RTSystem, so just use it.
+    /// </summary>
     sealed internal class HistoryFrameRTSystem
     {
         static Dictionary<(Camera, int), HistoryFrameRTSystem> s_Cameras = new Dictionary<(Camera, int), HistoryFrameRTSystem>();
         static List<(Camera, int)> s_Cleanup = new List<(Camera, int)>(); // Recycled to reduce GC pressure
 
-        public Camera camera;
+        private BufferedRTHandleSystem m_BufferedRTHandleSystem;
 
+        public Camera camera;
         /// <summary>Camera name.</summary>
         public string name { get; private set; } // Needs to be cached because camera.name generates GCAllocs
 
-        private BufferedRTHandleSystem m_BufferedRTHandleSystem;
+
+        public RTHandleProperties rtHandleProperties { get { return m_BufferedRTHandleSystem.rtHandleProperties; } }
 
         internal HistoryFrameRTSystem(Camera camera)
         {
