@@ -111,12 +111,22 @@ half3 UnpackNormal(half3 pn)
     return half3(UnpackNormalOctQuadEncode(octNormalWS));              // values between [-1, +1]
 }
 
+float3 DecodeNormal(float3 pn)
+{
+    float2 remappedOctNormalWS = Unpack888ToFloat2(pn);          // values between [ 0, +1]
+    float2 octNormalWS = remappedOctNormalWS.xy * 2.0f - 1.0f;// values between [-1, +1]
+    return UnpackNormalOctQuadEncode(octNormalWS);              // values between [-1, +1]
+}
+
 #else
 half3 PackNormal(half3 n)
 { return n; }                                                         // values between [-1, +1]
 
 half3 UnpackNormal(half3 pn)
 { return pn; }                                                        // values between [-1, +1]
+
+float3 DecodeNormal(float3 pn)
+{ return pn; }
 #endif
 
 // This will encode SurfaceData into GBuffer

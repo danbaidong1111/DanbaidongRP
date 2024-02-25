@@ -107,33 +107,33 @@ float3 GetWorldSpaceViewDir(float3 positionWS)
 }
 
 // Computes the object space view direction (pointing towards the viewer).
-half3 GetObjectSpaceNormalizeViewDir(float3 positionOS)
+float3 GetObjectSpaceNormalizeViewDir(float3 positionOS)
 {
     if (IsPerspectiveProjection())
     {
         // Perspective
         float3 V = TransformWorldToObject(GetCurrentViewPosition()) - positionOS;
-        return half3(normalize(V));
+        return float3(normalize(V));
     }
     else
     {
         // Orthographic
-        return half3(TransformWorldToObjectNormal(-GetViewForwardDir()));
+        return float3(TransformWorldToObjectNormal(-GetViewForwardDir()));
     }
 }
 
-half3 GetWorldSpaceNormalizeViewDir(float3 positionWS)
+float3 GetWorldSpaceNormalizeViewDir(float3 positionWS)
 {
     if (IsPerspectiveProjection())
     {
         // Perspective
         float3 V = GetCurrentViewPosition() - positionWS;
-        return half3(normalize(V));
+        return float3(normalize(V));
     }
     else
     {
         // Orthographic
-        return half3(-GetViewForwardDir());
+        return float3(-GetViewForwardDir());
     }
 }
 
