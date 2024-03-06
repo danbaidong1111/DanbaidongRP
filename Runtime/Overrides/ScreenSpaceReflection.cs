@@ -63,7 +63,7 @@ namespace UnityEngine.Rendering.Universal
         #region General
         /// <summary>Enable Screen Space Reflections.</summary>
         [Tooltip("Enable Screen Space Reflections.")]
-        public BoolParameter enabled = new BoolParameter(true, BoolParameter.DisplayType.EnumPopup);
+        public BoolParameter enabled = new BoolParameter(false, BoolParameter.DisplayType.EnumPopup);
 
         /// <summary>Enable Transparent Screen Space Reflections.</summary>
         [Tooltip("Enable Transparent Screen Space Reflections.")]
@@ -345,7 +345,7 @@ namespace UnityEngine.Rendering.Universal
         }
 
         /// <inheritdoc/>
-        public bool IsActive() => false;
+        public bool IsActive() => enabled.value;
 
         /// <inheritdoc/>
         public bool IsTileCompatible() => false;

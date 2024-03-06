@@ -11,8 +11,8 @@ namespace UnityEngine.Rendering.Universal
 
         readonly Matrix4x4[] m_ViewProjection = new Matrix4x4[k_EyeCount];
         readonly Matrix4x4[] m_PreviousViewProjection = new Matrix4x4[k_EyeCount];
-        readonly Matrix4x4[] m_JitteredViewProjection = new Matrix4x4[k_EyeCount];
-        readonly Matrix4x4[] m_PreviousJitteredViewProjection = new Matrix4x4[k_EyeCount];
+        readonly Matrix4x4[] m_ViewProjectionJittered = new Matrix4x4[k_EyeCount];
+        readonly Matrix4x4[] m_PreviousViewProjectionJittered = new Matrix4x4[k_EyeCount];
         readonly int[] m_LastFrameIndex = new int[k_EyeCount];
         readonly float[] m_PrevAspectRatio = new float[k_EyeCount];
 
@@ -39,14 +39,19 @@ namespace UnityEngine.Rendering.Universal
             get => m_ViewProjection[0];
         }
 
+        internal Matrix4x4 viewProjectionJittered
+        {
+            get => m_ViewProjectionJittered[0];
+        }
+
         internal Matrix4x4 previousViewProjection
         {
             get => m_PreviousViewProjection[0];
         }
 
-        internal Matrix4x4 previousJitteredViewProjection
+        internal Matrix4x4 previousViewProjectionJittered
         {
-            get => m_PreviousJitteredViewProjection[0];
+            get => m_PreviousViewProjectionJittered[0];
         }
 
         internal Matrix4x4[] viewProjectionStereo
@@ -66,8 +71,8 @@ namespace UnityEngine.Rendering.Universal
             {
                 m_ViewProjection[i] = Matrix4x4.identity;
                 m_PreviousViewProjection[i] = Matrix4x4.identity;
-                m_JitteredViewProjection[i] = Matrix4x4.identity;
-                m_PreviousJitteredViewProjection[i] = Matrix4x4.identity;
+                m_ViewProjectionJittered[i] = Matrix4x4.identity;
+                m_PreviousViewProjectionJittered[i] = Matrix4x4.identity;
                 m_LastFrameIndex[i] = -1;
                 m_PrevAspectRatio[i] = -1;
             }
@@ -117,8 +122,8 @@ namespace UnityEngine.Rendering.Universal
                     m_ViewProjection[idx] = gpuVP;
 
                     var gpuVPJittered = GL.GetGPUProjectionMatrix(cameraData.GetProjectionMatrix(0), true) * cameraData.GetViewMatrix(0);
-                    m_PreviousJitteredViewProjection[idx] = aspectChanged ? gpuVPJittered : m_JitteredViewProjection[idx];
-                    m_JitteredViewProjection[idx] = gpuVPJittered;
+                    m_PreviousViewProjectionJittered[idx] = aspectChanged ? gpuVPJittered : m_ViewProjectionJittered[idx];
+                    m_ViewProjectionJittered[idx] = gpuVPJittered;
                 }
 
                 m_LastFrameIndex[idx] = Time.frameCount;

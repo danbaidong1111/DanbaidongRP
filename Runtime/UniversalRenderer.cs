@@ -1215,7 +1215,7 @@ namespace UnityEngine.Rendering.Universal
             }
             
             // ColorPyramid Pass
-            if (copyColorPass || isCurrentColorPyramidRequired || isHistoryColorPyramidRequired)
+            if (copyColorPass && (isCurrentColorPyramidRequired || isHistoryColorPyramidRequired))
             {
                 int actualWidth = cameraData.cameraTargetDescriptor.width;
                 int actualHeight = cameraData.cameraTargetDescriptor.height;

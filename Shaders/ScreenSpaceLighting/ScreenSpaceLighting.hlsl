@@ -44,35 +44,41 @@ float2 LoadMotionVectorOffset(uint2 coordSS)
     return offsetUV;
 }
 
-//Input: Position is NDC space [0, 1) (with the half-pixel offset) and velocity is screen UV 0..1 space
-float2 GetHistoryPosition(float2 positionNDC, float deviceDepth, float reprojectDeviceDepth, float2 motionVector, float4x4 clipToPrevClipMatrix)
+
+float3 GetHistoryScreenPos(float2 screenUV, float deviceDepth, float reprojectDeviceDepth, float2 motionVector, float4x4 clipToPrevClipMatrix)
 {
-    // float4 currReProjPosCS = float4(positionNDC * 2.0 - 1.0, reprojectDeviceDepth, 1.0);
-    // float4 prevReProjPosCS = mul(clipToPrevClipMatrix, currReProjPosCS);
-    // prevReProjPosCS *= rcp(prevReProjPosCS.w);
+    float4 currReProjPosCS = float4(screenUV * 2.0 - 1.0, reprojectDeviceDepth, 1.0);
+#if UNITY_UV_STARTS_AT_TOP
+    currReProjPosCS.y = -currReProjPosCS.y;
+#endif
+    float4 prevReProjPosCS = mul(clipToPrevClipMatrix, currReProjPosCS); // clipToPrevClipMatrix doesn't contain AA offsets
 
-    // float2 velocity = currReProjPosCS - prevReProjPosCS;
-    // velocity *= 0.5;
+    prevReProjPosCS *= rcp(prevReProjPosCS.w);
 
-    // // bool bIsDynamicPixel = false;
-    // // {
-    // //     bIsDynamicPixel = motionVector.x > 0.0;
-    // //     if (bIsDynamicPixel)
-    // //     {
-    // //         float4 currReferencePosCS = ComputeClipSpacePosition(positionNDC, deviceDepth);
-    // //         float4 prevReferencePosCS = mul(clipToPrevClipMatrix, currReferencePosCS);
-    // //         prevReferencePosCS *= rcp(prevReferencePosCS.w);
+    float3 historyPosScreen = float3(screenUV, reprojectDeviceDepth);
 
-    // //         float2 velocityReference = currReferencePosCS - prevReferencePosCS;
-    // //         velocityReference *= 0.5;
+    bool bIsDynamicPixel = false;
+    {
+        float3 velocity = currReProjPosCS.xyz - prevReProjPosCS.xyz;
+    #if UNITY_UV_STARTS_AT_TOP
+        velocity.y = -velocity.y;
+    #endif
+        velocity.xy *= 0.5;
+        bIsDynamicPixel = motionVector.x > 0.0;
 
-    // //         velocity += float3(motionVector.xy, 0.0) - velocityReference;
-    // //     }
+        // if (bIsDynamicPixel)
+        // {
+        //     float4 currReferencePosCS = ComputeClipSpacePosition(screenUV, deviceDepth);
+        //     float4 prevReferencePosCS = mul(clipToPrevClipMatrix, currReferencePosCS);
+        //     prevReferencePosCS *= rcp(prevReferencePosCS.w);
 
-    // // }
+        //     velocity += float3(motionVector.xy, 0.0) - (currReferencePosCS - prevReferencePosCS);
+        // }
 
-    // return positionNDC - velocity;
+        historyPosScreen -= velocity;
+    }
 
+    return historyPosScreen;
 }
 
 float3 GetHistoryScreenPos(float2 screenUV, float deviceDepth, float reprojectDeviceDepth, float2 motionVector, float4x4 invViewProjMatrix, float4x4 prevViewProjMatrix)
@@ -88,14 +94,14 @@ float3 GetHistoryScreenPos(float2 screenUV, float deviceDepth, float reprojectDe
         float3 velocity = currReProNDC - prevReProNDC;
         bIsDynamicPixel = motionVector.x > 0.0;
 
-        if (bIsDynamicPixel)
-        {
-            float3 positionRefWS = ComputeWorldSpacePosition(screenUV, deviceDepth, invViewProjMatrix);
-            float3 prevRefScreen = ComputeNormalizedDeviceCoordinatesWithZ(positionRefWS, prevViewProjMatrix);
-            float3 currRefScreen = float3(screenUV, deviceDepth);
+        // if (bIsDynamicPixel)
+        // {
+        //     float3 positionRefWS = ComputeWorldSpacePosition(screenUV, deviceDepth, invViewProjMatrix);
+        //     float3 prevRefScreen = ComputeNormalizedDeviceCoordinatesWithZ(positionRefWS, prevViewProjMatrix);
+        //     float3 currRefScreen = float3(screenUV, deviceDepth);
 
-            velocity += float3(motionVector.xy, 0.0) - (currRefScreen - prevRefScreen);
-        }
+        //     velocity += float3(motionVector.xy, 0.0) - (currRefScreen - prevRefScreen);
+        // }
 
         historyPosScreen -= velocity;
     }
