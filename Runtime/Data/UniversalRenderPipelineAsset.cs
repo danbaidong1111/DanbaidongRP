@@ -435,14 +435,14 @@ namespace UnityEngine.Rendering.Universal
         [SerializeField] internal int m_DefaultRendererIndex = 0;
 
         // General settings
-        [SerializeField] bool m_RequireDepthTexture = false;
-        [SerializeField] bool m_RequireOpaqueTexture = false;
-        [SerializeField] Downsampling m_OpaqueDownsampling = Downsampling._2xBilinear;
+        [SerializeField] bool m_RequireDepthTexture = true;
+        [SerializeField] bool m_RequireOpaqueTexture = true;
+        [SerializeField] Downsampling m_OpaqueDownsampling = Downsampling.None;
         [SerializeField] bool m_SupportsTerrainHoles = true;
 
         // Quality settings
         [SerializeField] bool m_SupportsHDR = true;
-        [SerializeField] HDRColorBufferPrecision m_HDRColorBufferPrecision = HDRColorBufferPrecision._32Bits;
+        [SerializeField] HDRColorBufferPrecision m_HDRColorBufferPrecision = HDRColorBufferPrecision._64Bits;
         [SerializeField] MsaaQuality m_MSAA = MsaaQuality.Disabled;
         [SerializeField] float m_RenderScale = 1.0f;
         [SerializeField] UpscalingFilterSelection m_UpscalingFilter = UpscalingFilterSelection.Auto;
@@ -466,12 +466,12 @@ namespace UnityEngine.Rendering.Universal
         // Main directional light Settings
         [SerializeField] LightRenderingMode m_MainLightRenderingMode = LightRenderingMode.PerPixel;
         [SerializeField] bool m_MainLightShadowsSupported = true;
-        [SerializeField] ShadowResolution m_MainLightShadowmapResolution = ShadowResolution._2048;
+        [SerializeField] ShadowResolution m_MainLightShadowmapResolution = ShadowResolution._4096;
 
         // Additional lights settings
         [SerializeField] LightRenderingMode m_AdditionalLightsRenderingMode = LightRenderingMode.PerPixel;
-        [SerializeField] int m_AdditionalLightsPerObjectLimit = 4;
-        [SerializeField] bool m_AdditionalLightShadowsSupported = false;
+        [SerializeField] int m_AdditionalLightsPerObjectLimit = 8;
+        [SerializeField] bool m_AdditionalLightShadowsSupported = true;
         [SerializeField] ShadowResolution m_AdditionalLightsShadowmapResolution = ShadowResolution._2048;
 
         [SerializeField] int m_AdditionalLightsShadowResolutionTierLow = AdditionalLightsDefaultShadowResolutionTierLow;
@@ -489,8 +489,8 @@ namespace UnityEngine.Rendering.Universal
         [SerializeField] bool m_ReflectionProbeBoxProjection = false;
 
         // Shadows Settings
-        [SerializeField] float m_ShadowDistance = 50.0f;
-        [SerializeField] int m_ShadowCascadeCount = 1;
+        [SerializeField] float m_ShadowDistance = 100.0f;
+        [SerializeField] int m_ShadowCascadeCount = 4;
         [SerializeField] float m_Cascade2Split = 0.25f;
         [SerializeField] Vector2 m_Cascade3Split = new Vector2(0.1f, 0.3f);
         [SerializeField] Vector3 m_Cascade4Split = new Vector3(0.067f, 0.2f, 0.467f);
@@ -504,10 +504,10 @@ namespace UnityEngine.Rendering.Universal
         // No option to force soft shadows -> we'll need to keep the off variant around
         [ShaderKeywordFilter.RemoveIf(false, keywordNames: ShaderKeywordStrings.SoftShadows)]
 #endif
-        [SerializeField] bool m_SoftShadowsSupported = false;
+        [SerializeField] bool m_SoftShadowsSupported = true;
         [SerializeField] bool m_ConservativeEnclosingSphere = false;
         [SerializeField] int m_NumIterationsEnclosingSphere = 64;
-        [SerializeField] SoftShadowQuality m_SoftShadowQuality = SoftShadowQuality.Medium;
+        [SerializeField] SoftShadowQuality m_SoftShadowQuality = SoftShadowQuality.High;
 
         // Light Cookie Settings
         [SerializeField] LightCookieResolution m_AdditionalLightsCookieResolution = LightCookieResolution._2048;
@@ -608,6 +608,12 @@ namespace UnityEngine.Rendering.Universal
                 instance.m_RendererDataList[0] = rendererData;
             else
                 instance.m_RendererDataList[0] = CreateInstance<UniversalRendererData>();
+
+            if (instance.m_RendererDataList[0].GetType() == typeof(UniversalRendererData))
+            {
+                var rendererDataDefault = (instance.m_RendererDataList[0]) as UniversalRendererData;
+                rendererDataDefault.defaultRuntimeReources = instance.renderPipelineRuntimeResources;
+            }
 
             // Initialize default Renderer
             instance.m_EditorResourcesAsset = instance.editorResources;
@@ -712,6 +718,18 @@ namespace UnityEngine.Rendering.Universal
             m_RendererDataList[0] = null;
             return m_RendererDataList[0];
 #endif
+        }
+
+        /// <summary>
+        /// According to HDRP, we need ensure globalSettings here.
+        /// It means that we must create URPAssets and then ensure globalSettings valid.
+        /// </summary>
+        void Reset()
+        {
+#if UNITY_EDITOR
+            UniversalRenderPipelineGlobalSettings.Ensure(canCreateNewAsset: true);
+#endif
+            OnValidate();
         }
 
         /// <summary>
@@ -820,6 +838,13 @@ namespace UnityEngine.Rendering.Universal
                 if (m_RendererDataList[i] != null)
                     m_Renderers[i] = m_RendererDataList[i].InternalCreateRenderer();
             }
+        }
+
+        UniversalRenderPipelineGlobalSettings globalSettings => UniversalRenderPipelineGlobalSettings.instance;
+
+        internal UniversalRenderPipelineRuntimeResources renderPipelineRuntimeResources
+        {
+            get { return globalSettings.renderPipelineRuntimeResources; }
         }
 
         Material GetMaterial(DefaultMaterialType materialType)

@@ -55,6 +55,16 @@ namespace UnityEngine.Rendering.Universal
             public override void Action(int instanceId, string pathName, string resourceFile)
             {
                 var instance = UniversalRenderPipelineAsset.CreateRendererAsset(pathName, RendererType.UniversalRenderer, false) as UniversalRendererData;
+                if (UniversalRenderPipeline.asset?.renderPipelineRuntimeResources ?? false)
+                {
+                    instance.defaultRuntimeReources = UniversalRenderPipeline.asset.renderPipelineRuntimeResources;
+                }
+                else
+                {
+                    Debug.LogError("Due to defaultRuntimeReources is not valid, create failed. " +
+                        "Perhaps you need to set RenderPipelineAsset in Project Settings -> Graphics -> Scriptable Render Pipeline Settings");
+                }
+                
                 Selection.activeObject = instance;
             }
         }
@@ -204,15 +214,15 @@ namespace UnityEngine.Rendering.Universal
         [SerializeField] LayerMask m_TransparentLayerMask = -1;
         [SerializeField] StencilStateData m_DefaultStencilState = new StencilStateData() { passOperation = StencilOp.Replace }; // This default state is compatible with deferred renderer.
         [SerializeField] bool m_ShadowTransparentReceive = true;
-        [SerializeField] RenderingMode m_RenderingMode = RenderingMode.Forward;
+        [SerializeField] RenderingMode m_RenderingMode = RenderingMode.Deferred;
         [SerializeField] DepthPrimingMode m_DepthPrimingMode = DepthPrimingMode.Disabled; // Default disabled because there are some outstanding issues with Text Mesh rendering.
-        [SerializeField] CopyDepthMode m_CopyDepthMode = CopyDepthMode.AfterTransparents;
+        [SerializeField] CopyDepthMode m_CopyDepthMode = CopyDepthMode.AfterOpaques;
 #if UNITY_EDITOR
         // Do not strip accurateGbufferNormals on Mobile Vulkan as some GPUs do not support R8G8B8A8_SNorm, which then force us to use accurateGbufferNormals
         [ShaderKeywordFilter.ApplyRulesIfNotGraphicsAPI(GraphicsDeviceType.Vulkan)]
         [ShaderKeywordFilter.RemoveIf(false, keywordNames: ShaderKeywordStrings._GBUFFER_NORMALS_OCT)]
 #endif
-        [SerializeField] bool m_AccurateGbufferNormals = false;
+        [SerializeField] bool m_AccurateGbufferNormals = true;
         [SerializeField] IntermediateTextureMode m_IntermediateTextureMode = IntermediateTextureMode.Always;
 
         [SerializeField] List<InsertedGBufferPassSetting> m_InsertedGbufferPasses = new List<InsertedGBufferPassSetting>();

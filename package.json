@@ -7,17 +7,20 @@
   "dependencies": {
     "com.unity.mathematics": "1.2.1",
     "com.unity.burst": "1.8.4",
-    "com.unity.render-pipelines.core": "14.0.8",
     "com.unity.shadergraph": "14.0.8"
   },
   "keywords": [
     "graphics",
     "performance",
     "rendering",
-    "mobile",
+    "Toon",
     "render",
     "pipeline"
   ],
+  "author": {
+    "name": "Danbaidong",
+    "url": "https://github.com/danbaidong1111"
+  },
   "samples": [
     {
       "displayName": "DanbaidongRP Package Samples",
