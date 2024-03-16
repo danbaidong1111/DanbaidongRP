@@ -53,6 +53,8 @@ namespace UnityEngine.Rendering.Universal
         //VolumetricClouds1,
         /// <summary>Screen Space Reflection Accumulation.</summary>
         ScreenSpaceReflectionAccumulation,
+        /// <summary>Screen Space Reflection num frames Accumulation.</summary>
+        ScreenSpaceReflectionNumFramesAccumulation,
         ///// <summary>Path-traced Albedo AOV.</summary>
         //AlbedoAOV,
         ///// <summary>Path-traced Normal AOV.</summary>

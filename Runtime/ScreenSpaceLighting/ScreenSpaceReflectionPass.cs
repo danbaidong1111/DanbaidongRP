@@ -26,6 +26,7 @@ namespace UnityEngine.Rendering.Universal
 
         private RTHandle m_SSRHitPointTexture;
         private RTHandle m_SSRRayInfoTexture;
+        private RTHandle m_SSRAvgRadianceTexture;
         private RTHandle m_SSRHitDepthTexture;
         private RTHandle m_SSRResolveVarianceTexture;
         private RTHandle m_SSRLightingTexture;
@@ -103,6 +104,28 @@ namespace UnityEngine.Rendering.Universal
 
         }
 
+        static RTHandle HistoryNumFramesAccumTextureAllocator(GraphicsFormat graphicsFormat, string viewName, int frameIndex, RTHandleSystem rtHandleSystem)
+        {
+            frameIndex &= 1;
+
+            return rtHandleSystem.Alloc(Vector2.one * s_accumulateTextureScaleFactor, TextureXR.slices, colorFormat: graphicsFormat,
+                 filterMode: FilterMode.Point, enableRandomWrite: true, useDynamicScale: true,
+                name: string.Format("{0}_SSRNumFramesAccumTexture{1}", viewName, frameIndex));
+        }
+
+        internal void ReAllocatedNumFramesAccumTextureIfNeeded(HistoryFrameRTSystem historyRTSystem, CameraData cameraData)
+        {
+            var curTexture = historyRTSystem.GetCurrentFrameRT(HistoryFrameType.ScreenSpaceReflectionNumFramesAccumulation);
+
+            if (curTexture == null)
+            {
+                historyRTSystem.ReleaseHistoryFrameRT(HistoryFrameType.ScreenSpaceReflectionNumFramesAccumulation);
+
+                historyRTSystem.AllocHistoryFrameRT((int)HistoryFrameType.ScreenSpaceReflectionNumFramesAccumulation, cameraData.camera.name
+                                                            , HistoryNumFramesAccumTextureAllocator, GraphicsFormat.R8_UNorm, 2);
+            }
+        }
+
         /// <inheritdoc/>
         public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
         {
@@ -129,6 +152,12 @@ namespace UnityEngine.Rendering.Universal
             rayInfoDesc.graphicsFormat = GraphicsFormat.R16G16_SFloat;
             RenderingUtils.ReAllocateIfNeeded(ref m_SSRRayInfoTexture, rayInfoDesc, FilterMode.Point, TextureWrapMode.Clamp, name: "_SSRRayInfoTexture");
 
+            var avgRadianceDesc = desc;
+            avgRadianceDesc.graphicsFormat = GraphicsFormat.B10G11R11_UFloatPack32;
+            avgRadianceDesc.width = RenderingUtils.DivRoundUp(desc.width, 8);
+            avgRadianceDesc.height = RenderingUtils.DivRoundUp(desc.height, 8);
+            RenderingUtils.ReAllocateIfNeeded(ref m_SSRAvgRadianceTexture, avgRadianceDesc, FilterMode.Bilinear, TextureWrapMode.Clamp, name: "_SSRAvgRadianceTexture");
+
             var hitDepthDesc = desc;
             hitDepthDesc.graphicsFormat = GraphicsFormat.R16_UNorm;
             RenderingUtils.ReAllocateIfNeeded(ref m_SSRHitDepthTexture, hitDepthDesc, FilterMode.Point, TextureWrapMode.Clamp, name: "_SSRHitDepthTexture");
@@ -140,6 +169,7 @@ namespace UnityEngine.Rendering.Universal
             if (m_volumeSettings.usedAlgorithm == ScreenSpaceReflectionAlgorithm.PBRAccumulation)
             {
                 ReAllocatedAccumulateTextureIfNeeded(m_CurCameraHistoryRTSystem, renderingData.cameraData);
+                ReAllocatedNumFramesAccumTextureIfNeeded(m_CurCameraHistoryRTSystem, renderingData.cameraData);
             }
         }
 
@@ -199,6 +229,7 @@ namespace UnityEngine.Rendering.Universal
 
                     cmd.SetComputeTextureParam(m_Compute, m_SSRTracingKernel, "_SSRHitPointTexture", m_SSRHitPointTexture);
                     cmd.SetComputeTextureParam(m_Compute, m_SSRTracingKernel, "_SSRRayInfoTexture", m_SSRRayInfoTexture);
+                    cmd.SetComputeTextureParam(m_Compute, m_SSRTracingKernel, "_CameraMotionVectorsTexture", m_Renderer.m_MotionVectorColor);
 
                     // Constant Params
                     // TODO: Should use ConstantBuffer
@@ -265,6 +296,7 @@ namespace UnityEngine.Rendering.Universal
                     cmd.SetComputeTextureParam(m_Compute, m_SSRResolveKernel, "_SSRRayInfoTexture", m_SSRRayInfoTexture);
                     cmd.SetComputeTextureParam(m_Compute, m_SSRResolveKernel, "_SSRHitDepthTexture", m_SSRHitDepthTexture);
                     cmd.SetComputeTextureParam(m_Compute, m_SSRResolveKernel, "_SSRResolveVarianceTexture", m_SSRResolveVarianceTexture);
+                    cmd.SetComputeTextureParam(m_Compute, m_SSRResolveKernel, "_SSRAvgRadianceTexture", m_SSRAvgRadianceTexture);
 
                     // Constant Params
                     {
@@ -297,14 +329,14 @@ namespace UnityEngine.Rendering.Universal
 
                     // }
 
-                    using (new ProfilingScope(cmd, m_SSRBilateralProfilingSampler))
-                    {
-                       cmd.SetComputeTextureParam(m_Compute, m_SSRBilateralKernel, "_SSRAccumTexture", currAccumHandle);
-                       cmd.SetComputeTextureParam(m_Compute, m_SSRBilateralKernel, "_SsrLightingTexture", m_SSRLightingTexture);
-                       cmd.SetComputeTextureParam(m_Compute, m_SSRBilateralKernel, "_SSRResolveVarianceTexture", m_SSRResolveVarianceTexture);
+                    //using (new ProfilingScope(cmd, m_SSRBilateralProfilingSampler))
+                    //{
+                    //    cmd.SetComputeTextureParam(m_Compute, m_SSRBilateralKernel, "_SSRAccumTexture", currAccumHandle);
+                    //    cmd.SetComputeTextureParam(m_Compute, m_SSRBilateralKernel, "_SsrLightingTexture", m_SSRLightingTexture);
+                    //    cmd.SetComputeTextureParam(m_Compute, m_SSRBilateralKernel, "_SSRResolveVarianceTexture", m_SSRResolveVarianceTexture);
 
-                       cmd.DispatchCompute(m_Compute, m_SSRBilateralKernel, RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.height, 8), 1);
-                    }
+                    //    cmd.DispatchCompute(m_Compute, m_SSRBilateralKernel, RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.height, 8), 1);
+                    //}
 
                     using (new ProfilingScope(cmd, m_SSRAccumulateProfilingSampler))
                     {
@@ -318,6 +350,10 @@ namespace UnityEngine.Rendering.Universal
                         cmd.SetComputeTextureParam(m_Compute, m_SSRAccumulateKernel, "_CameraMotionVectorsTexture", m_Renderer.m_MotionVectorColor);
                         cmd.SetComputeTextureParam(m_Compute, m_SSRAccumulateKernel, "_SSRHitDepthTexture", m_SSRHitDepthTexture);
                         cmd.SetComputeTextureParam(m_Compute, m_SSRAccumulateKernel, "_SSRResolveVarianceTexture", m_SSRResolveVarianceTexture);
+                        cmd.SetComputeTextureParam(m_Compute, m_SSRAccumulateKernel, "_SSRAvgRadianceTexture", m_SSRAvgRadianceTexture);
+
+                        cmd.SetComputeTextureParam(m_Compute, m_SSRAccumulateKernel, "_SSRPrevNumFramesAccumTexture", m_CurCameraHistoryRTSystem.GetPreviousFrameRT(HistoryFrameType.ScreenSpaceReflectionNumFramesAccumulation));
+                        cmd.SetComputeTextureParam(m_Compute, m_SSRAccumulateKernel, "_SSRNumFramesAccumTexture", m_CurCameraHistoryRTSystem.GetCurrentFrameRT(HistoryFrameType.ScreenSpaceReflectionNumFramesAccumulation));
 
 
                         cmd.DispatchCompute(m_Compute, m_SSRAccumulateKernel, RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.height, 8), 1);
