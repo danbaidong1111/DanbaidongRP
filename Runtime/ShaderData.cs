@@ -3,6 +3,9 @@ using System.Runtime.InteropServices;
 
 namespace UnityEngine.Rendering.Universal
 {
+    /// <summary>
+    /// Use it as compute buffer system.(Danbaidong, 20240317)
+    /// </summary>
     class ShaderData : IDisposable
     {
         static ShaderData m_Instance = null;
@@ -11,6 +14,10 @@ namespace UnityEngine.Rendering.Universal
 
         ComputeBuffer m_AdditionalLightShadowParamsStructuredBuffer = null;
         ComputeBuffer m_AdditionalLightShadowSliceMatricesStructuredBuffer = null;
+
+        // SSR Compute Buffer
+        ComputeBuffer m_SSRDispatchIndirectBuffer = null;
+        ComputeBuffer m_SSRTileListBuffer = null;
 
         ShaderData()
         {
@@ -33,6 +40,8 @@ namespace UnityEngine.Rendering.Universal
             DisposeBuffer(ref m_LightIndicesBuffer);
             DisposeBuffer(ref m_AdditionalLightShadowParamsStructuredBuffer);
             DisposeBuffer(ref m_AdditionalLightShadowSliceMatricesStructuredBuffer);
+            DisposeBuffer(ref m_SSRDispatchIndirectBuffer);
+            DisposeBuffer(ref m_SSRTileListBuffer);
         }
 
         internal ComputeBuffer GetLightDataBuffer(int size)
@@ -53,6 +62,16 @@ namespace UnityEngine.Rendering.Universal
         internal ComputeBuffer GetAdditionalLightShadowSliceMatricesStructuredBuffer(int size)
         {
             return GetOrUpdateBuffer<Matrix4x4>(ref m_AdditionalLightShadowSliceMatricesStructuredBuffer, size);
+        }
+
+        internal ComputeBuffer GetSSRDispatchIndirectBuffer(int size)
+        {
+            return GetOrUpdateBuffer<uint>(ref m_SSRDispatchIndirectBuffer, size);
+        }
+
+        internal ComputeBuffer GetSSRTileListBuffer(int size)
+        {
+            return GetOrUpdateBuffer<uint>(ref m_SSRTileListBuffer, size);
         }
 
         ComputeBuffer GetOrUpdateBuffer<T>(ref ComputeBuffer buffer, int size) where T : struct

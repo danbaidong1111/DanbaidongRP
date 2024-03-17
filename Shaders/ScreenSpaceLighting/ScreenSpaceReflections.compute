@@ -2,9 +2,10 @@
 //--------------------------------------------------------------------------------------------------
 
 // TODO: delete
-#pragma enable_d3d11_debug_symbols
+// #pragma enable_d3d11_debug_symbols
 #pragma only_renderers d3d11 playstation xboxone xboxseries vulkan metal switch
 
+#pragma kernel ScreenSpaceReflectionsClassifyTiles                                          SSR_CLASSIFYTILES
 #pragma kernel ScreenSpaceReflectionsTracing                                                SSR_TRACE
 #pragma kernel ScreenSpaceReflectionsResolve                                                SSR_RESOLVE
 #pragma kernel ScreenSpaceReflectionsAccumulate                                             SSR_ACCUMULATE
@@ -15,14 +16,12 @@
 #pragma multi_compile _ _GBUFFER_NORMALS_OCT
 
 // Tweak parameters.
-// #define DEBUG
 #define SSR_TRACE_BEHIND_OBJECTS
 #define SSR_TRACE_TOWARDS_EYE
 
 #define SSR_TRACE_EPS               0.000488281f // 2^-11, should be good up to 4K
 #define MIN_GGX_ROUGHNESS           0.00001f
 #define MAX_GGX_ROUGHNESS           0.99999f
-#define SSR_SPATIAL_MAX_SAMPLES     0
 //--------------------------------------------------------------------------------------------------
 // Included headers
 //--------------------------------------------------------------------------------------------------
@@ -63,8 +62,18 @@ StructuredBuffer<int2>  _DepthPyramidMipLevelOffsets;
 
 TEXTURE2D_X_FLOAT(_GBuffer2);
 
-#ifdef SSR_TRACE
-    Texture2D<uint2> _StencilTexture;
+
+#define TILE_INDEX_MASK (0xffffu)
+#define TILE_INDEX_SHIFT_X (0)
+#define TILE_INDEX_SHIFT_Y (16)
+
+RWBuffer<uint> gDispatchIndirectBuffer;
+RWStructuredBuffer<uint> gTileList;
+
+
+#ifdef SSR_CLASSIFYTILES
+
+#elif defined(SSR_TRACE)
     RW_TEXTURE2D(float2, _SSRHitPointTexture);
     RW_TEXTURE2D(float2, _SSRRayInfoTexture);
 #elif defined(SSR_RESOLVE)
@@ -112,7 +121,7 @@ float4 _ColorPyramidUvScaleAndLimitPrevFrame;
 int _SsrDepthPyramidMaxMip;
 int _SsrColorPyramidMaxMip;
 int _SsrReflectsSky;
-// float _SsrAccumulationAmount;
+float _SsrAccumulationAmount;
 // float _SsrPBRSpeedRejection;
 float _SsrPBRBias;
 // float _SsrPRBSpeedRejectionScalerFactor;
@@ -122,6 +131,26 @@ float _SsrFrameCount;
 //--------------------------------------------------------------------------------------------------
 // Helpers
 //--------------------------------------------------------------------------------------------------
+
+#define NEED_RAYTRACED_REFLECTIONS(perceptualRoughness) (perceptualRoughness < _SsrRoughnessFadeEnd)
+#define IS_MIRROR_REFLECTIONS(perceptualRoughness) (perceptualRoughness < 0.01)
+
+uint2 DecodeTileIndex(uint encoded)
+{
+    return uint2((encoded >> TILE_INDEX_SHIFT_X) & TILE_INDEX_MASK, (encoded >> TILE_INDEX_SHIFT_Y) & TILE_INDEX_MASK);
+}
+
+uint EncodeTileIndex(uint2 tileID)
+{
+    return (tileID.y << TILE_INDEX_SHIFT_Y) | (tileID.x << TILE_INDEX_SHIFT_X);
+}
+
+void InitializeDispatchThreadIdFromTileList(uint groupId, uint2 gThreadId, out uint2 dThreadId)
+{
+    uint  encodedTileIndex = gTileList[groupId];
+    uint2 tileCoord = DecodeTileIndex(encodedTileIndex);
+    dThreadId = tileCoord + gThreadId.xy;
+}
 
 float2 TransformCoordSSToScreenUV(uint2 coordSS, float4 screenSize)
 {
@@ -176,45 +205,6 @@ void SampleNormalAndPerceptualRoughness(float2 screenUV, out float3 normalWS, ou
     perceptualRoughness = PerceptualSmoothnessToPerceptualRoughness(normalGBuffer.a);
 }
 
-// float2 GetSampleInfo(uint2 coordSS, out float3 color, out float weight, out float opacity)
-// {
-//     float2 screenUV = coordSS * _ScreenSize.zw + (0.5 * _ScreenSize.zw);
-//     float2 hitScreenUV = _SSRHitPointTexture[coordSS].xy;
-
-//     float2 coordDstSS = TransformScreenUVToCoordSS(hitScreenUV, _ScreenSize);
-
-//     float  deviceDepthSrc = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
-//     float  deviceDepthDst = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordDstSS).r;
-
-//     float3 positionSrcWS = ComputeWorldSpacePosition(screenUV, deviceDepthSrc, _SSR_MATRIX_I_VP); // Jittered
-//     float3 positionDstWS = ComputeWorldSpacePosition(hitScreenUV, deviceDepthDst, _SSR_MATRIX_I_VP); // Jittered
-
-//     float3 V = GetWorldSpaceNormalizeViewDir(positionSrcWS);
-//     float3 L = normalize(positionDstWS - positionSrcWS);
-//     float3 H = normalize(V + L);
-
-//     float3 N;
-//     float perceptualRoughness;
-//     GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
-
-//     float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
-//     roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
-
-//     weight = GetSSRSampleWeight(dot(N, V), dot(N, L), roughness);
-
-//     float  mipLevel = 0;
-//     // MotionVector, colorPyramid is from last frame.
-//     float2 motionVectorOff = SampleMotionVectorOffset(hitScreenUV, _ScreenSize);
-//     float2 prevFrameNDC = hitScreenUV - motionVectorOff;
-//     float2 prevFrameUV = prevFrameNDC * _ColorPyramidUvScaleAndLimitPrevFrame.xy;
-
-//     color = SAMPLE_TEXTURE2D_X_LOD(_ColorPyramidTexture, ssr_trilinear_clamp_sampler, prevFrameUV, mipLevel).rgb;
-//     opacity = EdgeOfScreenFade(hitScreenUV, _SsrEdgeFadeRcpLength)
-//             * PerceptualRoughnessFade(perceptualRoughness, _SsrRoughnessFadeRcpLength, _SsrRoughnessFadeEndTimesRcpLength);
-
-//     return hitScreenUV;
-// }
-
 float3 SampleRadianceFromPrevColorPyramid(float2 hitScreenUV)
 {
     float3 radiance = 0;
@@ -246,6 +236,23 @@ float3 LoadUVAndSampleRadianceFromPrevColorPyramid(float2 hitScreenUV)
     return radiance;
 }
 
+float3 LoadUVAndSampleRadianceFromPrevColorPyramidWithOpacity(float2 hitScreenUV)
+{
+    float3 radiance = 0;
+
+    // MotionVector, colorPyramid is from last frame.
+    // TODO: resolve motion vector reprojection error
+    float2 motionVectorOff = LoadMotionVectorOffset(TransformScreenUVToCoordSS(hitScreenUV, _ScreenSize));
+    float2 prevFrameNDC = hitScreenUV - motionVectorOff;
+    float2 prevFrameUV = prevFrameNDC * _ColorPyramidUvScaleAndLimitPrevFrame.xy;
+
+    // mipLevel is 0 so we use bilinear
+    radiance = SAMPLE_TEXTURE2D_X_LOD(_ColorPyramidTexture, ssr_bilinear_clamp_sampler, prevFrameUV, 0).rgb;
+
+    float edgeOpacity = EdgeOfScreenFade(prevFrameNDC, _SsrEdgeFadeRcpLength);
+    return radiance * edgeOpacity;
+}
+
 //https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Weighted_incremental_algorithm
 void IncreaseVariance(float weight, float x, inout float weightSum, inout float mean, inout float varianceSum)
 {
@@ -272,21 +279,89 @@ float CalculateLocalBrdfWeight(float3 N, float3 V, float3 L, float roughness)
 
     return DV_SmithJointGGX(NdotH, saturate(NdotL), ClampNdotV(NdotV), roughness);
 }
+
+
+
+
+
 //--------------------------------------------------------------------------------------------------
 // Implementation
 //--------------------------------------------------------------------------------------------------
 
-#ifdef SSR_TRACE
+#ifdef SSR_CLASSIFYTILES
+
+groupshared uint gTileCount = 0;
+
+
+
 [numthreads(8, 8, 1)]
-void ScreenSpaceReflectionsTracing(uint3 dispatchThreadId : SV_DispatchThreadID)
+void ScreenSpaceReflectionsClassifyTiles(uint3 dispatchThreadId : SV_DispatchThreadID, uint2 groupThreadId : SV_GroupThreadID)
 {
     uint2 coordSS = dispatchThreadId.xy;
-    float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
-    
-    float  deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
-    // float  deviceDepth = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, sampler_CameraDepthTexture, screenUV, 0).r;
+    float3 N;
+    float perceptualRoughness;
 
-    if (_SsrReflectsSky == 0 && deviceDepth == UNITY_RAW_FAR_CLIP_VALUE)
+    // Dispatch 0,0 initialize gDispatchIndirectBuffer (0,1,1).
+    if ((dispatchThreadId.x == 0) && (dispatchThreadId.y == 0))
+    {
+        gDispatchIndirectBuffer[0] = 0;
+        gDispatchIndirectBuffer[1] = 1;
+        gDispatchIndirectBuffer[2] = 1;
+    }
+
+    // Disable offscreen pixels
+    float2 coordSSFloat = float2(coordSS);
+    bool needsRay = !(coordSSFloat.x >= _ScreenSize.x || coordSSFloat.y >= _ScreenSize.y);
+
+    // Don't shoot a ray on very rough surfaces depends on _SsrRoughnessFadeEnd.
+    GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
+    needsRay = needsRay && NEED_RAYTRACED_REFLECTIONS(perceptualRoughness);
+
+    // Don't shoot a ray on sky.
+    float  deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
+    needsRay = needsRay && !(deviceDepth == UNITY_RAW_FAR_CLIP_VALUE);
+
+
+
+    if (needsRay)
+    {
+        InterlockedAdd(gTileCount, 1);
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+
+
+    if ((groupThreadId.x == 0) && (groupThreadId.y == 0) && (gTileCount > 0))
+    {
+        uint tileOffset = 0;
+        InterlockedAdd(gDispatchIndirectBuffer[0], 1, tileOffset);
+        gTileList[tileOffset] = EncodeTileIndex(dispatchThreadId.xy);
+
+
+    }
+}
+
+
+
+
+
+
+
+
+#elif SSR_TRACE
+[numthreads(8, 8, 1)]
+void ScreenSpaceReflectionsTracing(uint3 dispatchThreadId : SV_DispatchThreadID, uint2 groupThreadId : SV_GroupThreadID, uint groupId : SV_GroupID)
+{
+    uint2 coordSS;
+    InitializeDispatchThreadIdFromTileList(groupId, groupThreadId, coordSS);
+    // uint2 coordSS = dispatchThreadId.xy;
+
+
+    float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
+
+    float  deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
+
+    if (deviceDepth == UNITY_RAW_FAR_CLIP_VALUE)
     {
         // Sky early return;
         return;
@@ -537,8 +612,8 @@ void ScreenSpaceReflectionsTracing(uint3 dispatchThreadId : SV_DispatchThreadID)
 
 #elif defined(SSR_RESOLVE)
 
-groupshared float4  localRadianceDistance[16][16];
-groupshared float4  localNormalDepth[16][16];
+groupshared float4  localRadianceDistance[256];
+groupshared float4       localNormalDepth[256];
 
 struct CoordData {
     float3  radiance;
@@ -547,12 +622,13 @@ struct CoordData {
     float   depth;
 };
 
-CoordData LoadFromGroupSharedMemory(uint2 gThreadID)
+CoordData LoadFromGroupSharedMemory(uint2 gThreadId)
 {
-    CoordData neighborSample = (CoordData) 0;
-    float4 encodedRadianceVariance = localRadianceDistance[gThreadID.x][gThreadID.y];
-    float4 encodedNormalDepth = localNormalDepth[gThreadID.x][gThreadID.y];
+    uint localID = gThreadId.x + 16 * gThreadId.y;
+    float4 encodedRadianceVariance = localRadianceDistance[localID];
+    float4 encodedNormalDepth           = localNormalDepth[localID];
 
+    CoordData neighborSample = (CoordData) 0;
     neighborSample.radiance = encodedRadianceVariance.xyz;
     neighborSample.hitDistance = encodedRadianceVariance.w;
     neighborSample.normal = encodedNormalDepth.xyz;
@@ -561,20 +637,41 @@ CoordData LoadFromGroupSharedMemory(uint2 gThreadID)
     return neighborSample;
 }
 
-void StoreInGroupSharedMemory(uint2 gThreadID, CoordData inData)
+void StoreInGroupSharedMemory(uint2 gThreadId, CoordData inData)
 {
-    localRadianceDistance[gThreadID.x][gThreadID.y] = float4(inData.radiance.xyz, inData.hitDistance);
-    localNormalDepth[gThreadID.x][gThreadID.y] = float4(inData.normal.xyz, inData.depth);
+    uint localID = gThreadId.x + 16 * gThreadId.y;
+    localRadianceDistance[localID] = float4(inData.radiance.xyz, inData.hitDistance);
+    localNormalDepth[localID] = float4(inData.normal.xyz, inData.depth);
 }
 
-float4 LoadFromGroupSharedMemoryAvgRadiance(uint2 gThreadID)
+float4 LoadFromGroupSharedMemoryAvgRadiance(uint2 gThreadId)
 {
-    return localRadianceDistance[gThreadID.x][gThreadID.y].xyzw;
+    uint localID = gThreadId.x + 16 * gThreadId.y;
+    return localRadianceDistance[localID].xyzw;
 }
 
-void StoreInGroupSharedMemoryAvgRadiance(uint2 gThreadID, float4 radianceAndWeight)
+void StoreInGroupSharedMemoryAvgRadiance(uint2 gThreadId, float4 radianceAndWeight)
 {
-    localRadianceDistance[gThreadID.x][gThreadID.y] = radianceAndWeight.xyzw;
+    uint localID = gThreadId.x + 16 * gThreadId.y;
+    localRadianceDistance[localID] = radianceAndWeight.xyzw;
+}
+
+
+void ResolveLoadCoordDataWithOpacity(uint2 coordSS, float4 screenSize, out float perceptualRoughness, out CoordData outData)
+{
+    float3 currColor = 0.0f;
+    
+    float2 hitScreenUV = LOAD_TEXTURE2D_X(_SSRHitPointTexture, coordSS).xy;
+    if (max(hitScreenUV.x, hitScreenUV.y) != 0)
+    {
+        currColor = LoadUVAndSampleRadianceFromPrevColorPyramidWithOpacity(hitScreenUV);
+    }
+    outData.radiance = currColor;
+    outData.hitDistance = 1 / max(_SSRRayInfoTexture[coordSS].y, FLT_EPS);
+
+    GetNormalAndPerceptualRoughness(coordSS, outData.normal, perceptualRoughness);
+
+    outData.depth = LinearEyeDepth(LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r, _ZBufferParams);
 }
 
 void ResolveLoadCoordData(uint2 coordSS, float4 screenSize, out float perceptualRoughness, out CoordData outData)
@@ -594,22 +691,22 @@ void ResolveLoadCoordData(uint2 coordSS, float4 screenSize, out float perceptual
     outData.depth = LinearEyeDepth(LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r, _ZBufferParams);
 }
 
-void InitializeGroupSharedMemory(uint2 dThreadID, uint2 gThreadID)
+void InitializeGroupSharedMemory(uint2 dThreadId, uint2 gThreadId)
 {
     uint2 offset[4] = {uint2(0, 0), uint2(8, 0), uint2(0, 8), uint2(8, 8)};
 
-    dThreadID -= 4;
+    dThreadId -= 4;
 
     float perceptualRoughness = 0;
     CoordData coordData[4];
     for (int i = 0; i < 4; i++)
     {
-        ResolveLoadCoordData(dThreadID + offset[i], _ScreenSize, perceptualRoughness, coordData[i]);
+        ResolveLoadCoordDataWithOpacity(dThreadId + offset[i], _ScreenSize, perceptualRoughness, coordData[i]);
     }
 
     for (int j = 0; j < 4; j++)
     {
-        StoreInGroupSharedMemory(gThreadID + offset[j], coordData[j]);
+        StoreInGroupSharedMemory(gThreadId + offset[j], coordData[j]);
     }
 }
 
@@ -650,10 +747,13 @@ float ResloveGetRadianceWeight(float3 radiance1, float3 radiance2)
 }
 
 [numthreads(8, 8, 1)]
-void ScreenSpaceReflectionsResolve(uint3 dispatchThreadId : SV_DispatchThreadID, uint3 groupThreadID : SV_GroupThreadID)
+void ScreenSpaceReflectionsResolve(uint3 dispatchThreadId : SV_DispatchThreadID, uint2 groupThreadId : SV_GroupThreadID, uint groupId : SV_GroupID)
 {
-    uint2 coordSS = dispatchThreadId.xy;
-    uint2 coordGroup = groupThreadID.xy;
+    uint2 coordSS;
+    InitializeDispatchThreadIdFromTileList(groupId, groupThreadId, coordSS);
+    // uint2 coordSS = dispatchThreadId.xy;
+
+    uint2 coordGroup = groupThreadId.xy;
 
     float perceptualRoughness;
     CoordData center;
@@ -669,52 +769,53 @@ void ScreenSpaceReflectionsResolve(uint3 dispatchThreadId : SV_DispatchThreadID,
 
     float3 radiance = center.radiance;
     float variance = 0.0f;
-    if (perceptualRoughness > _SsrRoughnessFadeEnd)
+    if (NEED_RAYTRACED_REFLECTIONS(perceptualRoughness))
     {
-        // No need reflection.
-        // return;
-    }
-    else
-    {
-        // Compute the actual roughness
         float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
         float  centerDeviceZ = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
         float3 centerPosWS = ComputeWorldSpacePosition(screenUV, centerDeviceZ, _SSR_MATRIX_I_VP);
         float3 V = GetWorldSpaceNormalizeViewDir(centerPosWS);
-
-        float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
-        roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
-        float radiusScale = lerp(0.0f, 1.0f, saturate(roughness * 32));
-        float rayDistScale = lerp(0.0f, 1.0f, saturate(center.hitDistance * 0.5));
-
-
-
+        
         float closestHitDistance = center.hitDistance;
 
         float weightSum = 0.0f;
         float mean = 0.0f;
         float varianceSum = 0.0f;
         float3 radianceSum = 0.0f;
-        
-        for (int i = 0; i < kResloveSampleCount; i++)
+
+        if (IS_MIRROR_REFLECTIONS(perceptualRoughness))
         {
-            uint2 neighCoordSS = coordGroup + radiusScale * rayDistScale * kResloveOffsets3x3[i];
-
-            CoordData neighData = LoadFromGroupSharedMemory(neighCoordSS);
-
-            float weight = 1;
-            weight *= ResloveGetEdegStoppingNormalWeight(center.normal, neighData.normal);
-            weight *= ResloveGetEdgeStoppingDepthWeight(center.depth, neighData.depth);
-            weight *= ResloveGetRadianceWeight(center.radiance, neighData.radiance);
-
-
-            if (weight > .001f)
+            weightSum = 1.0f;
+            radianceSum = center.radiance;
+        }
+        else
+        {
+            float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
+            roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
+            float radiusScale = lerp(0.0f, 1.0f, saturate(roughness * 32));
+            float rayDistScale = lerp(0.0f, 1.0f, saturate(center.hitDistance * 0.5));
+            
+            for (int i = 0; i < kResloveSampleCount; i++)
             {
-                closestHitDistance = min(closestHitDistance, neighData.hitDistance);
-                IncreaseVariance(weight, Luminance(neighData.radiance), weightSum, mean, varianceSum);
-                radianceSum += weight * neighData.radiance;
+                uint2 neighCoordSS = coordGroup + radiusScale * rayDistScale * kResloveOffsets3x3[i];
+
+                CoordData neighData = LoadFromGroupSharedMemory(neighCoordSS);
+
+                float weight = 1;
+                weight *= ResloveGetEdegStoppingNormalWeight(center.normal, neighData.normal);
+                weight *= ResloveGetEdgeStoppingDepthWeight(center.depth, neighData.depth);
+                weight *= ResloveGetRadianceWeight(center.radiance, neighData.radiance);
+
+
+                if (weight > .001f)
+                {
+                    closestHitDistance = min(closestHitDistance, neighData.hitDistance);
+                    IncreaseVariance(weight, Luminance(neighData.radiance), weightSum, mean, varianceSum);
+                    radianceSum += weight * neighData.radiance;
+                }
             }
         }
+        
 
 
         if (weightSum > 0.0f)
@@ -781,6 +882,58 @@ void ScreenSpaceReflectionsResolve(uint3 dispatchThreadId : SV_DispatchThreadID,
 
 
 #define _MaxFramesAccumulated 32
+#define VARIANCE_REDUCTION_LERP(radiance, avgRadiance, variance) \
+        (lerp(radiance, avgRadiance, saturate(variance * 5)))
+
+groupshared float4 localRadianceVariance[256];
+
+struct CoordData {
+    float3  radiance;
+    float   variance;
+};
+
+CoordData LoadFromGroupSharedMemory(uint2 gThreadId)
+{
+    uint localID = gThreadId.x + 16 * gThreadId.y;
+    float4 encodedRadianceVariance = localRadianceVariance[localID];
+
+    CoordData neighborSample = (CoordData) 0;
+    neighborSample.radiance = encodedRadianceVariance.xyz;
+    neighborSample.variance = encodedRadianceVariance.w;
+    
+    return neighborSample;
+}
+
+void StoreInGroupSharedMemory(uint2 gThreadId, CoordData inData)
+{
+    uint localID = gThreadId.x + 16 * gThreadId.y;
+    localRadianceVariance[localID] = float4(inData.radiance.xyz, inData.variance);
+}
+
+void ResolveLoadCoordData(uint2 coordSS, out CoordData outData)
+{
+    float4 rv = _SSRAccumTexture[coordSS];
+    outData.radiance = rv.xyz;
+    outData.variance = rv.w;
+}
+
+void InitializeGroupSharedMemory(uint2 dThreadId, uint2 gThreadId)
+{
+    uint2 offset[4] = {uint2(0, 0), uint2(8, 0), uint2(0, 8), uint2(8, 8)};
+
+    dThreadId -= 4;
+
+    CoordData coordData[4];
+    for (int i = 0; i < 4; i++)
+    {
+        ResolveLoadCoordData(dThreadId + offset[i], coordData[i]);
+    }
+
+    for (int j = 0; j < 4; j++)
+    {
+        StoreInGroupSharedMemory(gThreadId + offset[j], coordData[j]);
+    }
+}
 
 struct FNeighborStatistics
 {
@@ -791,12 +944,24 @@ struct FNeighborStatistics
     float3 maxVal;
 };
 
+// Note: corners need to be first for GetNeighborStatistics
+static const int2 kOffsets3x3[8] =
+{
+	int2(-1, -1),
+	int2( 1, -1),
+	int2(-1,  1),
+	int2( 1,  1),
+	int2( 0, -1),
+	int2(-1,  0),
+	int2( 1,  0),
+	int2( 0,  1),
+};
 FNeighborStatistics GetNeighborStatistics(
-    uint2 coordSS, 
+    uint2 coordGroup, 
     uint2 MinScreenCoord, 
     uint2 MaxScreenCoord,
     float3 centerLighting,
-    uint InBSDFIndex)
+    float3 avgRadiance)
 {
     FNeighborStatistics result = (FNeighborStatistics)0;
 
@@ -807,29 +972,27 @@ FNeighborStatistics GetNeighborStatistics(
     result.minVal = centerLighting;
     result.maxVal = centerLighting;
 
-    for (int yy = -2; yy <= 2; yy++)
+    for(uint neighborId = 0; neighborId < 8; neighborId++)
     {
-        for (int xx = -2; xx <= 2; xx++)
+        int2 offset = kOffsets3x3[neighborId];
+        uint2 neighCoordGroup = coordGroup + offset;
+        neighCoordGroup = clamp(neighCoordGroup, MinScreenCoord, MaxScreenCoord);
+        
+        CoordData neighData;
+        neighData = LoadFromGroupSharedMemory(neighCoordGroup);
+        neighData.radiance = VARIANCE_REDUCTION_LERP(neighData.radiance, avgRadiance, neighData.variance);
         {
-            int2 offset = int2(xx, yy);
-            uint2 neighCoordSS = coordSS + offset;
-            neighCoordSS = clamp(neighCoordSS, MinScreenCoord, MaxScreenCoord);
+            result.minVal = min(result.minVal, neighData.radiance);
+            result.maxVal = max(result.maxVal, neighData.radiance);
 
-            float4 sample = _SSRAccumTexture[neighCoordSS];
-
-            {
-                result.minVal = min(result.minVal, sample.xyz);
-                result.maxVal = max(result.maxVal, sample.xyz);
-
-                // Welford's online algorithm for variance.
-                // More numerically stable than accumulating squares.
-                // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
-                count += 1;
-                float3 delta1 = sample.xyz - M1;
-                M1 += delta1 / count;
-                float3 delta2 = sample.xyz - M1;
-                M2 += delta1 * delta2;
-            }
+            // Welford's online algorithm for variance.
+            // More numerically stable than accumulating squares.
+            // https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+            count += 1;
+            float3 delta1 = neighData.radiance - M1;
+            M1 += delta1 / count;
+            float3 delta2 = neighData.radiance - M1;
+            M2 += delta1 * delta2;
         }
     }
 
@@ -925,97 +1088,102 @@ FSpecularIndirectHistory FetchHistory(TEXTURE2D_X(historyTexture), FBilinear inB
 }
 
 [numthreads(8, 8, 1)]
-void ScreenSpaceReflectionsAccumulate(uint3 dispatchThreadId : SV_DispatchThreadID)
+void ScreenSpaceReflectionsAccumulate(uint3 dispatchThreadId : SV_DispatchThreadID, uint2 groupThreadId : SV_GroupThreadID, uint groupId : SV_GroupID)
 {
-    uint2 coordSS = dispatchThreadId.xy;
+    uint2 coordSS;
+    InitializeDispatchThreadIdFromTileList(groupId, groupThreadId, coordSS);
+    // uint2 coordSS = dispatchThreadId.xy;
+
+    uint2 coordGroup = groupThreadId.xy;
     float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
 
     float3 N;
     float perceptualRoughness;
     GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
+
+    CoordData center;
+    InitializeGroupSharedMemory(coordSS, coordGroup);
+    GroupMemoryBarrierWithGroupSync();
+
+    coordGroup += 4;
+    center = LoadFromGroupSharedMemory(coordGroup);
     
-    if (perceptualRoughness > _SsrRoughnessFadeEnd)
+    
+    if (NEED_RAYTRACED_REFLECTIONS(perceptualRoughness))
     {
-        // No need reflection.
-        return;
+        // Compute the actual roughness
+        float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
+        roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
+        float roughnessReductionFactor = 1 - exp(-roughness * 100.0f);
+
+        float3 avgRadiance = SAMPLE_TEXTURE2D_X_LOD(_SSRAvgRadianceTexture, ssr_bilinear_clamp_sampler, screenUV, 0).xyz;
+
+        float3 currColor = VARIANCE_REDUCTION_LERP(center.radiance, avgRadiance, center.variance);
+        float reflectionHitDeviceZ = _SSRHitDepthTexture[coordSS].x;
+        float deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
+        float2 motionVector = LoadMotionVectorOffset(coordSS);
+
+        float3 prevScreenPosFromVirtualHit = GetHistoryScreenPos(screenUV, deviceDepth, reflectionHitDeviceZ, motionVector, _SSR_MATRIX_CLIP_TO_PREV_CLIP);
+        float3 prevScreenPosFromSceneDepth = GetHistoryScreenPos(screenUV, deviceDepth, deviceDepth, motionVector, _SSR_MATRIX_CLIP_TO_PREV_CLIP);
+
+        FBilinear bilinearVirtualHit = GetBilinearFilter(prevScreenPosFromVirtualHit.xy, _ScreenSize.xy);
+        FBilinear bilinearSceneDepth = GetBilinearFilter(prevScreenPosFromSceneDepth.xy, _ScreenSize.xy);
+
+        FSpecularIndirectHistory historyFromVirtualHit = FetchHistory(_SsrAccumPrev, bilinearVirtualHit, 0, _ScreenSize);
+        FSpecularIndirectHistory historyFromSceneDepth = FetchHistory(_SsrAccumPrev, bilinearSceneDepth, 0, _ScreenSize);
+
+        FNeighborStatistics neighborhood = GetNeighborStatistics(coordGroup, uint2(0,0), _ScreenSize.xy, currColor, avgRadiance);
+
+
+        float InvalidHistoryErrorThreshold = 1e6;
+        float ErrorFromReflectHit = (any(prevScreenPosFromVirtualHit.xy >= 0) && any(prevScreenPosFromVirtualHit.xy <= 1)) ? abs(Luminance(historyFromVirtualHit.specularIndirect) - Luminance(neighborhood.mean)) : InvalidHistoryErrorThreshold;
+        float ErrorFromSceneDepth = (any(prevScreenPosFromSceneDepth.xy >= 0) && any(prevScreenPosFromSceneDepth.xy <= 1)) ? abs(Luminance(historyFromSceneDepth.specularIndirect) - Luminance(neighborhood.mean)) : InvalidHistoryErrorThreshold;
+
+        float3 historySpecularIndirect = ErrorFromReflectHit < ErrorFromSceneDepth
+            ? historyFromVirtualHit.specularIndirect 
+            : historyFromSceneDepth.specularIndirect;
+
+        neighborhood.stdDev = (neighborhood.stdDev + length(neighborhood.mean.xyz - avgRadiance)) * 1.0f;
+        neighborhood.mean = lerp(neighborhood.mean.xyz, avgRadiance, 0.2f * roughnessReductionFactor);
+        float3 historyClampMin = neighborhood.mean - neighborhood.stdDev;
+        float3 historyClampMax = neighborhood.mean + neighborhood.stdDev;
+
+        historyClampMin = max(0, historyClampMin);
+        historySpecularIndirect = clamp(historySpecularIndirect, neighborhood.minVal, neighborhood.maxVal);
+
+
+
+
+        float3 historyScreenUV = ErrorFromReflectHit < ErrorFromSceneDepth
+            ? prevScreenPosFromVirtualHit
+            : prevScreenPosFromSceneDepth;
+
+        // Sample neighbor frames num
+        float historyFramesNum = SAMPLE_TEXTURE2D_X_LOD(_SSRPrevNumFramesAccumTexture, ssr_point_clamp_sampler, historyScreenUV.xy, 0).x;
+        float maxSamplesNum = max(8.0f, _MaxFramesAccumulated * roughnessReductionFactor) * _SsrAccumulationAmount;
+        historyFramesNum *= maxSamplesNum;
+        historyFramesNum = min(historyFramesNum + 1.0f, maxSamplesNum);
+        float accumulatedFramesNum = (all(historyScreenUV.xy > 0) && all(historyScreenUV.xy < 1)) ? historyFramesNum : 0;
+
+        // Temporal accumulate
+        float temporalWeight = 1.0f / max(1.0f, accumulatedFramesNum);
+        float3 result = lerp(historySpecularIndirect, currColor, temporalWeight);
+
+        // Valid result
+        uint3 intCol = asuint(result.rgb);
+        bool  isPosFin = Max3(intCol.r, intCol.g, intCol.b) < 0x7F800000;
+        result.rgb = isPosFin ? result.rgb : 0;
+        bool bResultValid = all(result != 0);
+
+        // RoughnessFade
+        float roughnessFade = PerceptualRoughnessFade(perceptualRoughness, _SsrRoughnessFadeRcpLength, _SsrRoughnessFadeEndTimesRcpLength);
+
+        // Write texture
+        _SsrLightingTexture[coordSS] = float4(result * roughnessFade, Luminance(neighborhood.variance));
+        _SSRAccumTexture[coordSS] = float4(result, bResultValid);
+        _SSRNumFramesAccumTexture[coordSS] = accumulatedFramesNum / maxSamplesNum;
     }
 
-    // Compute the actual roughness
-    float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
-    roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
-    float roughnessReductionFactor = 1 - exp(-roughness * 100.0f);
-
-    float4 currRadianceVariance = _SSRAccumTexture[coordSS].xyzw;
-    float3 avgRadiance = SAMPLE_TEXTURE2D_X_LOD(_SSRAvgRadianceTexture, ssr_bilinear_clamp_sampler, screenUV, 0).xyz;
-
-    float3 currColor = lerp(currRadianceVariance.xyz, avgRadiance, saturate(currRadianceVariance.w * 10));
-    float reflectionHitDeviceZ = _SSRHitDepthTexture[coordSS].x;
-    float deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
-    float2 motionVector = LoadMotionVectorOffset(coordSS);
-
-
-    // This ver will jittered reflections
-    // float3 prevScreenPosFromVirtualHit = GetHistoryScreenPos(screenUV, deviceDepth, reflectionHitDeviceZ, motionVector, _SSR_MATRIX_I_VP, _SSR_PREV_MATRIX_VP);
-    // float3 prevScreenPosFromSceneDepth = GetHistoryScreenPos(screenUV, deviceDepth, deviceDepth, motionVector, _SSR_MATRIX_I_VP, _SSR_PREV_MATRIX_VP);
-
-    float3 prevScreenPosFromVirtualHit = GetHistoryScreenPos(screenUV, deviceDepth, reflectionHitDeviceZ, motionVector, _SSR_MATRIX_CLIP_TO_PREV_CLIP);
-    float3 prevScreenPosFromSceneDepth = GetHistoryScreenPos(screenUV, deviceDepth, deviceDepth, motionVector, _SSR_MATRIX_CLIP_TO_PREV_CLIP);
-
-    FBilinear bilinearVirtualHit = GetBilinearFilter(prevScreenPosFromVirtualHit.xy, _ScreenSize.xy);
-    FBilinear bilinearSceneDepth = GetBilinearFilter(prevScreenPosFromSceneDepth.xy, _ScreenSize.xy);
-
-    FSpecularIndirectHistory historyFromVirtualHit = FetchHistory(_SsrAccumPrev, bilinearVirtualHit, 0, _ScreenSize);
-    FSpecularIndirectHistory historyFromSceneDepth = FetchHistory(_SsrAccumPrev, bilinearSceneDepth, 0, _ScreenSize);
-
-#define NEIGHBORHOOD_MEAN_CONTAINS_CURRENT 1
-    
-    FNeighborStatistics neighborhood = GetNeighborStatistics(coordSS, uint2(0,0), _ScreenSize.xy, NEIGHBORHOOD_MEAN_CONTAINS_CURRENT ? currColor : 0, 0);
-
-
-    float InvalidHistoryErrorThreshold = 1e6;
-    float ErrorFromReflectHit = (any(prevScreenPosFromVirtualHit.xy >= 0) && any(prevScreenPosFromVirtualHit.xy <= 1)) ? abs(Luminance(historyFromVirtualHit.specularIndirect) - Luminance(neighborhood.mean)) : InvalidHistoryErrorThreshold;
-    float ErrorFromSceneDepth = (any(prevScreenPosFromSceneDepth.xy >= 0) && any(prevScreenPosFromSceneDepth.xy <= 1)) ? abs(Luminance(historyFromSceneDepth.specularIndirect) - Luminance(neighborhood.mean)) : InvalidHistoryErrorThreshold;
-
-    float3 historySpecularIndirect = ErrorFromReflectHit < ErrorFromSceneDepth
-        ? historyFromVirtualHit.specularIndirect 
-        : historyFromSceneDepth.specularIndirect;
-
-    neighborhood.stdDev = (neighborhood.stdDev + length(neighborhood.mean.xyz - avgRadiance)) * 1.0f;
-    neighborhood.mean = lerp(neighborhood.mean.xyz, avgRadiance, 0.2f * roughnessReductionFactor);
-    float3 historyClampMin = neighborhood.mean - neighborhood.stdDev;
-    float3 historyClampMax = neighborhood.mean + neighborhood.stdDev;
-
-    historyClampMin = saturate(historyClampMin);
-    historySpecularIndirect = clamp(historySpecularIndirect, historyClampMin, historyClampMax);
-
-
-
-
-    float3 historyScreenUV = ErrorFromReflectHit < ErrorFromSceneDepth
-        ? prevScreenPosFromVirtualHit
-        : prevScreenPosFromSceneDepth;
-
-    // Sample neighbor frames num
-    float historyFramesNum = SAMPLE_TEXTURE2D_X_LOD(_SSRPrevNumFramesAccumTexture, ssr_point_clamp_sampler, historyScreenUV.xy, 0);
-    float maxSamplesNum = max(8.0f, _MaxFramesAccumulated * roughnessReductionFactor);
-    historyFramesNum *= maxSamplesNum;
-    historyFramesNum = min(historyFramesNum + 1.0f, maxSamplesNum);
-    float accumulatedFramesNum = (all(historyScreenUV.xy > 0) && all(historyScreenUV.xy < 1)) ? historyFramesNum : 0;
-
-    // Temporal accumulate
-    float temporalWeight = 1.0f / max(1.0f, accumulatedFramesNum);
-    float3 result = lerp(historySpecularIndirect, currColor, temporalWeight);
-
-    // Valid result
-    uint3 intCol = asuint(result.rgb);
-    bool  isPosFin = Max3(intCol.r, intCol.g, intCol.b) < 0x7F800000;
-    result.rgb = isPosFin ? result.rgb : 0;
-    bool bResultValid = all(result != 0);
-
-    // Write texture
-    _SsrLightingTexture[coordSS] = float4(result, Luminance(neighborhood.variance));
-    _SSRAccumTexture[coordSS] = float4(result, bResultValid);
-    _SSRNumFramesAccumTexture[coordSS] = accumulatedFramesNum / maxSamplesNum;
 }
 
 
@@ -1033,233 +1201,115 @@ void ScreenSpaceReflectionsAccumulate(uint3 dispatchThreadId : SV_DispatchThread
 
 #elif defined(SSR_BILATERAL)
 
-float3 TonemapLightingForBilateral(float3 lighting)
-{
-	return lighting / (1.0f + Luminance(lighting));
-}
-
-float3 InverseTonemapLightingForBilateral(float3 tonemappedLighting)
-{
-	return tonemappedLighting / (1.0f - Luminance(tonemappedLighting));
-}
-
-[numthreads(8, 8, 1)]
-void ScreenSpaceReflectionsBilateral(uint3 dispatchThreadId : SV_DispatchThreadID)
-{
-    uint2 coordSS = dispatchThreadId.xy;
-    float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
-
-    float3 N;
-    float perceptualRoughness;
-    GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
-    
-    if (perceptualRoughness > _SsrRoughnessFadeEnd)
+    float3 TonemapLightingForBilateral(float3 lighting)
     {
-        // No need reflection.
-        return;
+        return lighting / (1.0f + Luminance(lighting));
     }
 
-    // Compute the actual roughness
-    float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
-    roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
-
-    // TODO: Variance guided
-    float varianceFromSpatialResolve = _SSRResolveVarianceTexture[coordSS].x;
-    float strongBlur = varianceFromSpatialResolve > 0.1 ? 1.0f : 0.0f;
-    float smallBlur = varianceFromSpatialResolve < 0.001 ? 1.0f : 0.0f;
-    float disocclusionBlur = varianceFromSpatialResolve > 1.0f - .1f ? 1.0f : 0.0f;
-
-    float minKernelRadius = 0.0f;
-    float maxKernelRadius = 32.0f * lerp(1.0f, 2.0f, strongBlur) * lerp(1.0f, 0.0625f, smallBlur);
-    float kernelRadius = lerp(minKernelRadius, maxKernelRadius, saturate(roughness * 8));
-
-#define BilateralFilterDepthWeightScale 1.0f
-#define BilateralFilterNormalAngleThresholdScale 1.0f
-    int NumBilateralFilterSamples = 4 * lerp(1.0f, 2.0f, strongBlur) * lerp(1.0f, 0.0f, smallBlur);
-    NumBilateralFilterSamples = min(NumBilateralFilterSamples, 16);
-
-    float invSpecularLobeAngleThreshold = 1.0f / (lerp(.0001f * PI, PI, roughness * roughness) * BilateralFilterNormalAngleThresholdScale);
-    uint2 randomSeed = Rand3DPCG16(int3(coordSS, _SsrFrameCount)).xy;
-
-    float  deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
-    float sceneDepth = LinearEyeDepth(deviceDepth, _ZBufferParams);
-    float3 positionWS = ComputeWorldSpacePosition(screenUV, deviceDepth, _SSR_MATRIX_I_VP);
-    float4 scenePlane = float4(N, dot(positionWS, N));
-
-
-    float guassianNormalize = 2.0f / (kernelRadius * kernelRadius);
-
-    float totalWeight = 1.0f;
-    float3 outReflections = TonemapLightingForBilateral(_SSRAccumTexture[coordSS].xyz);
-
-    UNITY_UNROLL
-    for (int i = 0; i < NumBilateralFilterSamples; i++)
+    float3 InverseTonemapLightingForBilateral(float3 tonemappedLighting)
     {
-        float2 localOffset = Hammersley16(i, NumBilateralFilterSamples, randomSeed) - 0.5f;
-        float2 offset = localOffset * kernelRadius * 2;
-        uint2 neighCoordSS = coordSS + offset;
+        return tonemappedLighting / (1.0f - Luminance(tonemappedLighting));
+    }
 
-        // Bound neighborCoord
-        if (all(neighCoordSS >= uint2(0, 0)) && all(neighCoordSS < (uint2)_ScreenSize.xy))
+    [numthreads(8, 8, 1)]
+    void ScreenSpaceReflectionsBilateral(uint3 dispatchThreadId : SV_DispatchThreadID)
+    {
+        uint2 coordSS = dispatchThreadId.xy;
+        float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
+
+        float3 N;
+        float perceptualRoughness;
+        GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
+        
+        if (perceptualRoughness > _SsrRoughnessFadeEnd)
         {
-            float3 neighNormalWS;
-            float neighPerceptualRoughness;
-            GetNormalAndPerceptualRoughness(neighCoordSS, neighNormalWS, neighPerceptualRoughness);
-
-            if (neighPerceptualRoughness > _SsrRoughnessFadeEnd)
-            {
-                // No need reflection.
-                continue;
-            }
-
-            float  neighDeviceZ = LOAD_TEXTURE2D_X(_CameraDepthTexture, neighCoordSS).r;
-
-            float2 neighScreenUV = TransformCoordSSToScreenUV(neighCoordSS, _ScreenSize);
-            float3 neighPosWS = ComputeWorldSpacePosition(neighScreenUV, neighDeviceZ, _SSR_MATRIX_I_VP);
-
-            float planeDistance = abs(dot(float4(neighPosWS, -1), scenePlane));
-            float relativeDepthDifference = planeDistance / sceneDepth;
-
-            float depthWeight = exp2(-BilateralFilterDepthWeightScale * (relativeDepthDifference * relativeDepthDifference));
-
-            float spatialWeight = exp2(-guassianNormalize * dot(offset, offset));
-
-            float angleBetweenNormals = acos(saturate(dot(N, neighNormalWS)));
-            float normalWeight = 1.0f - saturate(angleBetweenNormals * invSpecularLobeAngleThreshold);
-
-            float sampleWeight = depthWeight * spatialWeight * normalWeight;
-
-            outReflections += TonemapLightingForBilateral(_SSRAccumTexture[neighCoordSS].xyz) * sampleWeight;
-            totalWeight += sampleWeight;
+            // No need reflection.
+            return;
         }
 
+        // Compute the actual roughness
+        float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
+        roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
+
+        // TODO: Variance guided
+        float varianceFromSpatialResolve = _SSRResolveVarianceTexture[coordSS].x;
+        float strongBlur = varianceFromSpatialResolve > 0.1 ? 1.0f : 0.0f;
+        float smallBlur = varianceFromSpatialResolve < 0.001 ? 1.0f : 0.0f;
+        float disocclusionBlur = varianceFromSpatialResolve > 1.0f - .1f ? 1.0f : 0.0f;
+
+        float minKernelRadius = 0.0f;
+        float maxKernelRadius = 32.0f * lerp(1.0f, 2.0f, strongBlur) * lerp(1.0f, 0.0625f, smallBlur);
+        float kernelRadius = lerp(minKernelRadius, maxKernelRadius, saturate(roughness * 8));
+
+    #define BilateralFilterDepthWeightScale 1.0f
+    #define BilateralFilterNormalAngleThresholdScale 1.0f
+        int NumBilateralFilterSamples = 4 * lerp(1.0f, 2.0f, strongBlur) * lerp(1.0f, 0.0f, smallBlur);
+        NumBilateralFilterSamples = min(NumBilateralFilterSamples, 16);
+
+        float invSpecularLobeAngleThreshold = 1.0f / (lerp(.0001f * PI, PI, roughness * roughness) * BilateralFilterNormalAngleThresholdScale);
+        uint2 randomSeed = Rand3DPCG16(int3(coordSS, _SsrFrameCount)).xy;
+
+        float  deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
+        float sceneDepth = LinearEyeDepth(deviceDepth, _ZBufferParams);
+        float3 positionWS = ComputeWorldSpacePosition(screenUV, deviceDepth, _SSR_MATRIX_I_VP);
+        float4 scenePlane = float4(N, dot(positionWS, N));
+
+
+        float guassianNormalize = 2.0f / (kernelRadius * kernelRadius);
+
+        float totalWeight = 1.0f;
+        float3 outReflections = TonemapLightingForBilateral(_SSRAccumTexture[coordSS].xyz);
+
+        UNITY_UNROLL
+        for (int i = 0; i < NumBilateralFilterSamples; i++)
+        {
+            float2 localOffset = Hammersley16(i, NumBilateralFilterSamples, randomSeed) - 0.5f;
+            float2 offset = localOffset * kernelRadius * 2;
+            uint2 neighCoordSS = coordSS + offset;
+
+            // Bound neighborCoord
+            if (all(neighCoordSS >= uint2(0, 0)) && all(neighCoordSS < (uint2)_ScreenSize.xy))
+            {
+                float3 neighNormalWS;
+                float neighPerceptualRoughness;
+                GetNormalAndPerceptualRoughness(neighCoordSS, neighNormalWS, neighPerceptualRoughness);
+
+                if (neighPerceptualRoughness > _SsrRoughnessFadeEnd)
+                {
+                    // No need reflection.
+                    continue;
+                }
+
+                float  neighDeviceZ = LOAD_TEXTURE2D_X(_CameraDepthTexture, neighCoordSS).r;
+
+                float2 neighScreenUV = TransformCoordSSToScreenUV(neighCoordSS, _ScreenSize);
+                float3 neighPosWS = ComputeWorldSpacePosition(neighScreenUV, neighDeviceZ, _SSR_MATRIX_I_VP);
+
+                float planeDistance = abs(dot(float4(neighPosWS, -1), scenePlane));
+                float relativeDepthDifference = planeDistance / sceneDepth;
+
+                float depthWeight = exp2(-BilateralFilterDepthWeightScale * (relativeDepthDifference * relativeDepthDifference));
+
+                float spatialWeight = exp2(-guassianNormalize * dot(offset, offset));
+
+                float angleBetweenNormals = acos(saturate(dot(N, neighNormalWS)));
+                float normalWeight = 1.0f - saturate(angleBetweenNormals * invSpecularLobeAngleThreshold);
+
+                float sampleWeight = depthWeight * spatialWeight * normalWeight;
+
+                outReflections += TonemapLightingForBilateral(_SSRAccumTexture[neighCoordSS].xyz) * sampleWeight;
+                totalWeight += sampleWeight;
+            }
+
+        }
+
+        outReflections = outReflections / totalWeight;
+        outReflections = InverseTonemapLightingForBilateral(outReflections);
+
+
+        _SsrLightingTexture[coordSS] = varianceFromSpatialResolve; //float4(_SSRAccumTexture[coordSS].xyz, 1);
+        _SSRAccumTexture[coordSS] = float4(outReflections, 1);
     }
-
-    outReflections = outReflections / totalWeight;
-    outReflections = InverseTonemapLightingForBilateral(outReflections);
-
-
-    _SsrLightingTexture[coordSS] = varianceFromSpatialResolve; //float4(_SSRAccumTexture[coordSS].xyz, 1);
-    _SSRAccumTexture[coordSS] = float4(outReflections, 1);
-}
-
-
-
-// // First 15 numbers of Halton(2,3) streteched to [-3,3].
-// static const int2 kOffsets4x4[15] =
-// {
-//     int2( 0,  1),
-//     int2(-2,  1),
-//     int2( 2, -3),
-//     int2(-3,  0),
-//     int2( 1,  2),
-//     int2(-1, -2),
-//     int2( 3,  0),
-//     int2(-3,  3),
-//     int2( 0, -3),
-//     int2(-1, -1),
-//     int2( 2,  1),
-//     int2(-2, -2),
-//     int2( 1,  0),
-//     int2( 0,  2),
-//     int2( 3, -1)
-// };
-
-
-
-// [numthreads(8, 8, 1)]
-// void ScreenSpaceReflectionsBilateral(uint3 dispatchThreadId : SV_DispatchThreadID)
-// {
-//     uint2 coordSS = dispatchThreadId.xy;
-//     float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
-
-//     float3 N;
-//     float perceptualRoughness;
-//     GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
-    
-//     if (perceptualRoughness > _SsrRoughnessFadeEnd)
-//     {
-//         // No need reflection.
-//         return;
-//     }
-
-//     // Compute the actual roughness
-//     float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
-//     roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
-
-//     // TODO: Variance guided
-//     float minKernelRadius = 0.0f;
-//     float maxKernelRadius = 1.0f;
-//     float kernelRadius = lerp(minKernelRadius, maxKernelRadius, saturate(roughness * 8));
-
-// #define BilateralFilterDepthWeightScale 1.0f
-// #define BilateralFilterNormalAngleThresholdScale 1.0f
-// #define NumBilateralFilterSamples 15
-
-//     float invSpecularLobeAngleThreshold = 1.0f / (lerp(.0001f * PI, PI, roughness * roughness) * BilateralFilterNormalAngleThresholdScale);
-//     uint2 randomSeed = Rand3DPCG16(int3(coordSS, _SsrFrameCount)).xy;
-
-//     float  deviceDepth = LOAD_TEXTURE2D_X(_CameraDepthTexture, coordSS).r;
-//     float sceneDepth = LinearEyeDepth(deviceDepth, _ZBufferParams);
-//     float3 positionWS = ComputeWorldSpacePosition(screenUV, deviceDepth, _SSR_MATRIX_I_VP);
-//     float4 scenePlane = float4(N, dot(positionWS, N));
-
-
-//     float guassianNormalize = 2.0f / (kernelRadius * kernelRadius);
-
-//     float totalWeight = 1.0f;
-//     float3 outReflections = (_SSRAccumTexture[coordSS].xyz);
-
-//     UNITY_UNROLL
-//     for (int i = 0; i < NumBilateralFilterSamples; i++)
-//     {
-//         float2 offset = kOffsets4x4[i];
-//         uint2 neighCoordSS = coordSS + offset;
-
-//         // Bound neighborCoord
-//         if (all(neighCoordSS >= uint2(0, 0)) && all(neighCoordSS < (uint2)_ScreenSize.xy))
-//         {
-//             float3 neighNormalWS;
-//             float neighPerceptualRoughness;
-//             GetNormalAndPerceptualRoughness(neighCoordSS, neighNormalWS, neighPerceptualRoughness);
-
-//             // if (neighPerceptualRoughness > _SsrRoughnessFadeEnd)
-//             // {
-//             //     // No need reflection.
-//             //     continue;
-//             // }
-
-//             float  neighDeviceZ = LOAD_TEXTURE2D_X(_CameraDepthTexture, neighCoordSS).r;
-
-//             float2 neighScreenUV = TransformCoordSSToScreenUV(neighCoordSS, _ScreenSize);
-//             float3 neighPosWS = ComputeWorldSpacePosition(neighScreenUV, neighDeviceZ, _SSR_MATRIX_I_VP);
-
-//             float planeDistance = abs(dot(float4(neighPosWS, -1), scenePlane));
-//             float relativeDepthDifference = planeDistance / sceneDepth;
-
-//             float depthWeight = exp2(-BilateralFilterDepthWeightScale * (relativeDepthDifference * relativeDepthDifference));
-
-//             float spatialWeight = exp2(-guassianNormalize * dot(offset, offset));
-
-//             float angleBetweenNormals = acos(saturate(dot(N, neighNormalWS)));
-//             float normalWeight = 1.0f - saturate(angleBetweenNormals * invSpecularLobeAngleThreshold);
-
-//             float sampleWeight = depthWeight * spatialWeight * normalWeight;
-//             sampleWeight = 1;
-
-//             outReflections += (_SSRAccumTexture[neighCoordSS].xyz) * sampleWeight;
-//             totalWeight += sampleWeight;
-//         }
-
-//     }
-
-//     outReflections = outReflections / totalWeight;
-//     outReflections = (outReflections);
-
-
-//     // _SsrLightingTexture[coordSS] = float4(outReflections, 1);
-//     _SSRAccumTexture[coordSS] = float4(outReflections, 1);
-// }
 
 
 
@@ -1267,74 +1317,74 @@ void ScreenSpaceReflectionsBilateral(uint3 dispatchThreadId : SV_DispatchThreadI
 
 #elif defined(SSR_ATROUS)
 
-float _ATrousStepSize;
+    float _ATrousStepSize;
 
-[numthreads(32, 32, 1)]
-void ScreenSpaceReflectionsATrous(uint3 dispatchThreadId : SV_DispatchThreadID)
-{
-    uint2 coordSS = dispatchThreadId.xy;
-    float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
-
-    float3 N;
-    float perceptualRoughness;
-    GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
-    
-    if (perceptualRoughness > _SsrRoughnessFadeEnd)
+    [numthreads(32, 32, 1)]
+    void ScreenSpaceReflectionsATrous(uint3 dispatchThreadId : SV_DispatchThreadID)
     {
-        // No need reflection.
-        return;
-    }
+        uint2 coordSS = dispatchThreadId.xy;
+        float2 screenUV = TransformCoordSSToScreenUV(coordSS, _ScreenSize);
 
-    // Compute the actual roughness
-    float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
-    roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
-
-    const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
-
-    float totalWeight = 1.0f;
-    float3 outReflections = _SSRAccumTexture[coordSS].xyz;
-
-    for (int yy = -2; yy <= 2; yy++)
-    {
-        for (int xx = -2; xx <= 2; xx++)
+        float3 N;
+        float perceptualRoughness;
+        GetNormalAndPerceptualRoughness(coordSS, N, perceptualRoughness);
+        
+        if (perceptualRoughness > _SsrRoughnessFadeEnd)
         {
-            uint2 neighCoordSS = coordSS + int2(xx, yy) * _ATrousStepSize;
-            bool inside = all(neighCoordSS >= uint2(0, 0)) && all(neighCoordSS < (uint2)_ScreenSize.xy);
+            // No need reflection.
+            return;
+        }
 
-            float kernelWeight = kernelWeights[abs(xx)] * kernelWeights[abs(yy)];
+        // Compute the actual roughness
+        float roughness = PerceptualRoughnessToRoughness(perceptualRoughness);
+        roughness = clamp(roughness, MIN_GGX_ROUGHNESS, MAX_GGX_ROUGHNESS);
 
-            if (inside && (xx != 0 || yy != 0)) // skip center pixel, it is already accumulated
+        const float kernelWeights[3] = { 1.0, 2.0 / 3.0, 1.0 / 6.0 };
+
+        float totalWeight = 1.0f;
+        float3 outReflections = _SSRAccumTexture[coordSS].xyz;
+
+        for (int yy = -2; yy <= 2; yy++)
+        {
+            for (int xx = -2; xx <= 2; xx++)
             {
-                // float3 neighNormalWS;
-                // float neighPerceptualRoughness;
-                // GetNormalAndPerceptualRoughness(neighCoordSS, neighNormalWS, neighPerceptualRoughness);
+                uint2 neighCoordSS = coordSS + int2(xx, yy) * _ATrousStepSize;
+                bool inside = all(neighCoordSS >= uint2(0, 0)) && all(neighCoordSS < (uint2)_ScreenSize.xy);
 
-                // if (neighPerceptualRoughness > _SsrRoughnessFadeEnd)
-                // {
-                //     // No need reflection.
-                //     continue;
-                // }
+                float kernelWeight = kernelWeights[abs(xx)] * kernelWeights[abs(yy)];
 
-                // float  neighDeviceZ = LOAD_TEXTURE2D_X(_CameraDepthTexture, neighCoordSS).r;
+                if (inside && (xx != 0 || yy != 0)) // skip center pixel, it is already accumulated
+                {
+                    // float3 neighNormalWS;
+                    // float neighPerceptualRoughness;
+                    // GetNormalAndPerceptualRoughness(neighCoordSS, neighNormalWS, neighPerceptualRoughness);
 
-                // float2 neighScreenUV = TransformCoordSSToScreenUV(neighCoordSS, _ScreenSize);
-                // float3 neighPosWS = ComputeWorldSpacePosition(neighScreenUV, neighDeviceZ, _SSR_MATRIX_I_VP);
+                    // if (neighPerceptualRoughness > _SsrRoughnessFadeEnd)
+                    // {
+                    //     // No need reflection.
+                    //     continue;
+                    // }
 
-                // compute the edge-stopping functions
+                    // float  neighDeviceZ = LOAD_TEXTURE2D_X(_CameraDepthTexture, neighCoordSS).r;
 
-                float weight = 1.0f * kernelWeight;
-                totalWeight += weight;
-                outReflections += _SSRAccumTexture[neighCoordSS].xyz * weight;
-                
+                    // float2 neighScreenUV = TransformCoordSSToScreenUV(neighCoordSS, _ScreenSize);
+                    // float3 neighPosWS = ComputeWorldSpacePosition(neighScreenUV, neighDeviceZ, _SSR_MATRIX_I_VP);
+
+                    // compute the edge-stopping functions
+
+                    float weight = 1.0f * kernelWeight;
+                    totalWeight += weight;
+                    outReflections += _SSRAccumTexture[neighCoordSS].xyz * weight;
+                    
+                }
             }
         }
+
+
+        outReflections = outReflections / totalWeight;
+
+        _SSRAccumTexture[coordSS] = float4(outReflections, 1);
     }
-
-
-    outReflections = outReflections / totalWeight;
-
-    _SSRAccumTexture[coordSS] = float4(outReflections, 1);
-}
 
 
 #endif

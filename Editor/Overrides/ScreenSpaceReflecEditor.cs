@@ -22,12 +22,12 @@ namespace UnityEditor.Rendering.Universal
         SerializedDataParameter m_DepthBufferThickness;
         SerializedDataParameter m_AccumulationFactor;
         SerializedDataParameter m_BiasFactor;
-        SerializedDataParameter m_EnableWorldSpeedRejection;
-        SerializedDataParameter m_SpeedRejectionFactor;
-        SerializedDataParameter m_SpeedRejectionScalerFactor;
-        SerializedDataParameter m_SpeedSmoothReject;
-        SerializedDataParameter m_SpeedSurfaceOnly;
-        SerializedDataParameter m_SpeedTargetOnly;
+        //SerializedDataParameter m_EnableWorldSpeedRejection;
+        //SerializedDataParameter m_SpeedRejectionFactor;
+        //SerializedDataParameter m_SpeedRejectionScalerFactor;
+        //SerializedDataParameter m_SpeedSmoothReject;
+        //SerializedDataParameter m_SpeedSurfaceOnly;
+        //SerializedDataParameter m_SpeedTargetOnly;
 
         // Ray Tracing
         SerializedDataParameter m_RayMiss;
@@ -71,13 +71,12 @@ namespace UnityEditor.Rendering.Universal
             m_ScreenFadeDistance = Unpack(o.Find(x => x.screenFadeDistance));
             m_AccumulationFactor = Unpack(o.Find(x => x.accumulationFactor));
             m_BiasFactor = Unpack(o.Find(x => x.biasFactor));
-            m_SpeedRejectionFactor = Unpack(o.Find(x => x.speedRejectionParam));
-            m_BiasFactor = Unpack(o.Find(x => x.biasFactor));
-            m_EnableWorldSpeedRejection = Unpack(o.Find(x => x.enableWorldSpeedRejection));
-            m_SpeedRejectionScalerFactor = Unpack(o.Find(x => x.speedRejectionScalerFactor));
-            m_SpeedSmoothReject = Unpack(o.Find(x => x.speedSmoothReject));
-            m_SpeedSurfaceOnly = Unpack(o.Find(x => x.speedSurfaceOnly));
-            m_SpeedTargetOnly = Unpack(o.Find(x => x.speedTargetOnly));
+            //m_SpeedRejectionFactor = Unpack(o.Find(x => x.speedRejectionParam));
+            //m_EnableWorldSpeedRejection = Unpack(o.Find(x => x.enableWorldSpeedRejection));
+            //m_SpeedRejectionScalerFactor = Unpack(o.Find(x => x.speedRejectionScalerFactor));
+            //m_SpeedSmoothReject = Unpack(o.Find(x => x.speedSmoothReject));
+            //m_SpeedSurfaceOnly = Unpack(o.Find(x => x.speedSurfaceOnly));
+            //m_SpeedTargetOnly = Unpack(o.Find(x => x.speedTargetOnly));
 
             // Generic ray tracing
             m_RayMiss = Unpack(o.Find(x => x.rayMiss));
@@ -268,9 +267,9 @@ namespace UnityEditor.Rendering.Universal
                 PropertyField(m_UsedAlgorithm, k_Algo);
 
                 // Shared Data
+                PropertyField(m_ReflectSky, k_ReflectSkyText);
                 PropertyField(m_MinSmoothness, k_MinimumSmoothnessText);
                 PropertyField(m_SmoothnessFadeStart, k_SmoothnessFadeStartText);
-                PropertyField(m_ReflectSky, k_ReflectSkyText);
                 m_SmoothnessFadeStart.value.floatValue = Mathf.Max(m_MinSmoothness.value.floatValue, m_SmoothnessFadeStart.value.floatValue);
 
                 PropertyField(m_ScreenFadeDistance, k_ScreenFaceDistanceText);
@@ -288,23 +287,25 @@ namespace UnityEditor.Rendering.Universal
                 }
                 if (m_UsedAlgorithm.value.intValue == (int)ScreenSpaceReflectionAlgorithm.PBRAccumulation)
                 {
-                    PropertyField(m_AccumulationFactor, k_AccumulationFactorText);
-                    PropertyField(m_EnableWorldSpeedRejection, k_EnableSpeedRejectionText);
+                    
+                    //PropertyField(m_EnableWorldSpeedRejection, k_EnableSpeedRejectionText);
                     if (BeginAdditionalPropertiesScope())
                     {
-                        if (m_EnableWorldSpeedRejection.value.boolValue)
-                        {
-                            using (new IndentLevelScope())
-                            {
-                                PropertyField(m_SpeedRejectionScalerFactor, k_SpeedRejectionScalerFactorText);
-                                PropertyField(m_SpeedSmoothReject, k_SpeedSmoothRejectText);
-                            }
-                        }
-                        PropertyField(m_SpeedRejectionFactor, k_SpeedRejectionFactorText);
-                        if (!m_SpeedSurfaceOnly.value.boolValue && !m_SpeedTargetOnly.value.boolValue)
-                            m_SpeedSurfaceOnly.value.boolValue = true;
-                        PropertyField(m_SpeedSurfaceOnly, k_SpeedSurfaceOnlyText);
-                        PropertyField(m_SpeedTargetOnly, k_SpeedTargetOnlyText);
+                        //if (m_EnableWorldSpeedRejection.value.boolValue)
+                        //{
+                        //    using (new IndentLevelScope())
+                        //    {
+                        //        PropertyField(m_SpeedRejectionScalerFactor, k_SpeedRejectionScalerFactorText);
+                        //        PropertyField(m_SpeedSmoothReject, k_SpeedSmoothRejectText);
+                        //    }
+                        //}
+                        //PropertyField(m_SpeedRejectionFactor, k_SpeedRejectionFactorText);
+                        //if (!m_SpeedSurfaceOnly.value.boolValue && !m_SpeedTargetOnly.value.boolValue)
+                        //    m_SpeedSurfaceOnly.value.boolValue = true;
+                        //PropertyField(m_SpeedSurfaceOnly, k_SpeedSurfaceOnlyText);
+                        //PropertyField(m_SpeedTargetOnly, k_SpeedTargetOnlyText);
+
+                        PropertyField(m_AccumulationFactor, k_AccumulationFactorText);
                         PropertyField(m_BiasFactor, k_BiasFactorText);
                     }
                     EndAdditionalPropertiesScope();

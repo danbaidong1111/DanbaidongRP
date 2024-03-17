@@ -1,4 +1,5 @@
 using System;
+using Unity.Mathematics;
 using UnityEngine.Experimental.Rendering;
 
 namespace UnityEngine.Rendering.Universal
@@ -6,11 +7,13 @@ namespace UnityEngine.Rendering.Universal
     internal class ScreenSpaceReflectionPass : ScriptableRenderPass
     {
         // Profiling tag
+        private static string m_SSRClassifyTilesProfilerTag = "SSRClassifyTiles";
         private static string m_SSRTracingProfilerTag = "SSRTracing";
         private static string m_SSRResolveProfilerTag = "SSRResolve";
         private static string m_SSRAccumulateProfilerTag = "SSRAccumulate";
         private static string m_SSRBilateralProfilerTag = "SSRBilateral";
         private static string m_SSRATrousProfilerTag = "SSRATrous";
+        private static ProfilingSampler m_SSRClassifyTilesProfilingSampler = new ProfilingSampler(m_SSRClassifyTilesProfilerTag);
         private static ProfilingSampler m_SSRTracingProfilingSampler = new ProfilingSampler(m_SSRTracingProfilerTag);
         private static ProfilingSampler m_SSRResolveProfilingSampler = new ProfilingSampler(m_SSRResolveProfilerTag);
         private static ProfilingSampler m_SSRAccumulateProfilingSampler = new ProfilingSampler(m_SSRAccumulateProfilerTag);
@@ -31,6 +34,7 @@ namespace UnityEngine.Rendering.Universal
         private RTHandle m_SSRResolveVarianceTexture;
         private RTHandle m_SSRLightingTexture;
 
+        private int m_SSRClassifyTilesKernel;
         private int m_SSRTracingKernel;
         private int m_SSRResolveKernel;
         private int m_SSRAccumulateKernel;
@@ -39,6 +43,9 @@ namespace UnityEngine.Rendering.Universal
         private ScreenSpaceReflection m_volumeSettings;
         private UniversalRenderer m_Renderer;
         private HistoryFrameRTSystem m_CurCameraHistoryRTSystem;
+
+        private ComputeBuffer m_DispatchIndirectBuffer = null;
+        private ComputeBuffer m_TileListBuffer = null;
 
         private bool traceDownSample = false;
 
@@ -52,6 +59,7 @@ namespace UnityEngine.Rendering.Universal
             m_CurrentSettings = new ScreenSpaceReflectionSettings();
             m_Compute = computeShader;
 
+            m_SSRClassifyTilesKernel = m_Compute.FindKernel("ScreenSpaceReflectionsClassifyTiles");
             m_SSRTracingKernel = m_Compute.FindKernel("ScreenSpaceReflectionsTracing");
             m_SSRResolveKernel = m_Compute.FindKernel("ScreenSpaceReflectionsResolve");
             m_SSRAccumulateKernel = m_Compute.FindKernel("ScreenSpaceReflectionsAccumulate");
@@ -136,6 +144,17 @@ namespace UnityEngine.Rendering.Universal
             desc.graphicsFormat = GraphicsFormat.R16G16_UNorm;
             desc.enableRandomWrite = true;
 
+            // As descripted in HDRP, but we only use DispatchIndirect.
+            // DispatchIndirect: Buffer with arguments has to have three integer numbers at given argsOffset offset: number of work groups in X dimension, number of work groups in Y dimension, number of work groups in Z dimension.
+            // DrawProceduralIndirect: Buffer with arguments has to have four integer numbers at given argsOffset offset: vertex count per instance, instance count, start vertex location, and start instance location
+            // Use use max size of 4 unit for allocation
+            m_DispatchIndirectBuffer = ShaderData.instance.GetSSRDispatchIndirectBuffer(3);
+            m_TileListBuffer = ShaderData.instance.GetSSRTileListBuffer(RenderingUtils.DivRoundUp(desc.width, 8) * RenderingUtils.DivRoundUp(desc.height, 8));
+            // Avoid GC or GPU readback. No need to SetData or GetData.
+            //m_DispatchIndirectBuffer.SetData(new uint[3] { 0, 1, 1 });
+            //m_TileListBuffer.SetData(tileListArray);
+
+
             var hitDesc = desc;
             if (traceDownSample)
             {
@@ -203,6 +222,20 @@ namespace UnityEngine.Rendering.Universal
                     cmd.DisableShaderKeyword("SSR_APPROX");
                 }
 
+
+
+
+                using (new ProfilingScope(cmd, m_SSRClassifyTilesProfilingSampler))
+                {
+                    cmd.SetComputeBufferParam(m_Compute, m_SSRClassifyTilesKernel, "gDispatchIndirectBuffer", m_DispatchIndirectBuffer);
+                    cmd.SetComputeBufferParam(m_Compute, m_SSRClassifyTilesKernel, "gTileList", m_TileListBuffer);
+
+                    cmd.DispatchCompute(m_Compute, m_SSRClassifyTilesKernel, RenderingUtils.DivRoundUp(m_SSRHitPointTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRHitPointTexture.rt.height, 8), 1);
+                }
+
+
+
+
                 using (new ProfilingScope(cmd, m_SSRTracingProfilingSampler))
                 {
                     cmd.SetRenderTarget(m_SSRHitPointTexture);
@@ -269,6 +302,7 @@ namespace UnityEngine.Rendering.Universal
                         cmd.SetComputeFloatParam(m_Compute, "_SsrThicknessBias", thicknessBias);
                         cmd.SetComputeFloatParam(m_Compute, "_SsrPBRBias", m_volumeSettings.biasFactor.value);
                         cmd.SetComputeVectorParam(m_Compute, "_ColorPyramidUvScaleAndLimitPrevFrame", colorPyramidUvScaleAndLimitPrev);
+                        cmd.SetComputeFloatParam(m_Compute, "_SsrAccumulationAmount", m_volumeSettings.accumulationFactor.value);
                         cmd.SetComputeIntParam(m_Compute, "_SsrFrameCount", Time.frameCount);
                         
 
@@ -276,7 +310,12 @@ namespace UnityEngine.Rendering.Universal
                     }
 
 
-                    cmd.DispatchCompute(m_Compute, m_SSRTracingKernel, RenderingUtils.DivRoundUp(m_SSRHitPointTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRHitPointTexture.rt.height, 8), 1);
+                    cmd.SetComputeBufferParam(m_Compute, m_SSRTracingKernel, "gDispatchIndirectBuffer", m_DispatchIndirectBuffer);
+                    cmd.SetComputeBufferParam(m_Compute, m_SSRTracingKernel, "gTileList", m_TileListBuffer);
+                    cmd.DispatchCompute(m_Compute, m_SSRTracingKernel, m_DispatchIndirectBuffer, 0);
+
+
+                    //cmd.DispatchCompute(m_Compute, m_SSRTracingKernel, RenderingUtils.DivRoundUp(m_SSRHitPointTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRHitPointTexture.rt.height, 8), 1);
                 }
 
                 using (new ProfilingScope(cmd, m_SSRResolveProfilingSampler))
@@ -309,7 +348,11 @@ namespace UnityEngine.Rendering.Universal
                         cmd.SetComputeFloatParam(m_Compute, "_SsrRoughnessFadeEndTimesRcpLength", ((roughnessFadeLength != 0) ? (ssrRoughnessFadeEnd * (1.0f / roughnessFadeLength)) : 1));
                     }
 
-                    cmd.DispatchCompute(m_Compute, m_SSRResolveKernel, RenderingUtils.DivRoundUp(SSRResolveHandle.rt.width, 8), RenderingUtils.DivRoundUp(SSRResolveHandle.rt.height, 8), 1);
+                    cmd.SetComputeBufferParam(m_Compute, m_SSRResolveKernel, "gDispatchIndirectBuffer", m_DispatchIndirectBuffer);
+                    cmd.SetComputeBufferParam(m_Compute, m_SSRResolveKernel, "gTileList", m_TileListBuffer);
+                    cmd.DispatchCompute(m_Compute, m_SSRResolveKernel, m_DispatchIndirectBuffer, 0);
+
+                    //cmd.DispatchCompute(m_Compute, m_SSRResolveKernel, RenderingUtils.DivRoundUp(SSRResolveHandle.rt.width, 8), RenderingUtils.DivRoundUp(SSRResolveHandle.rt.height, 8), 1);
                 }
 
                 if (m_volumeSettings.usedAlgorithm == ScreenSpaceReflectionAlgorithm.PBRAccumulation)
@@ -356,12 +399,15 @@ namespace UnityEngine.Rendering.Universal
                         cmd.SetComputeTextureParam(m_Compute, m_SSRAccumulateKernel, "_SSRNumFramesAccumTexture", m_CurCameraHistoryRTSystem.GetCurrentFrameRT(HistoryFrameType.ScreenSpaceReflectionNumFramesAccumulation));
 
 
-                        cmd.DispatchCompute(m_Compute, m_SSRAccumulateKernel, RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.height, 8), 1);
+                        cmd.SetComputeBufferParam(m_Compute, m_SSRAccumulateKernel, "gDispatchIndirectBuffer", m_DispatchIndirectBuffer);
+                        cmd.SetComputeBufferParam(m_Compute, m_SSRAccumulateKernel, "gTileList", m_TileListBuffer);
+                        cmd.DispatchCompute(m_Compute, m_SSRAccumulateKernel, m_DispatchIndirectBuffer, 0);
+
+                        //cmd.DispatchCompute(m_Compute, m_SSRAccumulateKernel, RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.width, 8), RenderingUtils.DivRoundUp(m_SSRLightingTexture.rt.height, 8), 1);
                     }
 
 
                 }
-
 
                 cmd.SetGlobalTexture("_SsrLightingTexture", m_SSRLightingTexture);
             }
