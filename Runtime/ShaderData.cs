@@ -66,7 +66,7 @@ namespace UnityEngine.Rendering.Universal
 
         internal ComputeBuffer GetSSRDispatchIndirectBuffer(int size)
         {
-            return GetOrUpdateBuffer<uint>(ref m_SSRDispatchIndirectBuffer, size);
+            return GetOrUpdateBuffer<uint>(ref m_SSRDispatchIndirectBuffer, size, ComputeBufferType.IndirectArguments);
         }
 
         internal ComputeBuffer GetSSRTileListBuffer(int size)
@@ -74,16 +74,16 @@ namespace UnityEngine.Rendering.Universal
             return GetOrUpdateBuffer<uint>(ref m_SSRTileListBuffer, size);
         }
 
-        ComputeBuffer GetOrUpdateBuffer<T>(ref ComputeBuffer buffer, int size) where T : struct
+        ComputeBuffer GetOrUpdateBuffer<T>(ref ComputeBuffer buffer, int size, ComputeBufferType bufferType = ComputeBufferType.Default) where T : struct
         {
             if (buffer == null)
             {
-                buffer = new ComputeBuffer(size, Marshal.SizeOf<T>());
+                buffer = new ComputeBuffer(size, Marshal.SizeOf<T>(), bufferType);
             }
             else if (size > buffer.count)
             {
                 buffer.Dispose();
-                buffer = new ComputeBuffer(size, Marshal.SizeOf<T>());
+                buffer = new ComputeBuffer(size, Marshal.SizeOf<T>(), bufferType);
             }
 
             return buffer;
