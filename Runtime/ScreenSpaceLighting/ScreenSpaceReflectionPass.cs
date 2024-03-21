@@ -176,11 +176,8 @@ namespace UnityEngine.Rendering.Universal
             hitDepthDesc.graphicsFormat = GraphicsFormat.R16_UNorm;
             RenderingUtils.ReAllocateIfNeeded(ref m_SSRHitDepthTexture, hitDepthDesc, FilterMode.Point, TextureWrapMode.Clamp, name: "_SSRHitDepthTexture");
             
-            if (m_volumeSettings.usedAlgorithm == ScreenSpaceReflectionAlgorithm.PBRAccumulation)
-            {
-                ReAllocatedAccumulateTextureIfNeeded(m_CurCameraHistoryRTSystem, renderingData.cameraData);
-                ReAllocatedNumFramesAccumTextureIfNeeded(m_CurCameraHistoryRTSystem, renderingData.cameraData);
-            }
+            ReAllocatedAccumulateTextureIfNeeded(m_CurCameraHistoryRTSystem, renderingData.cameraData);
+            ReAllocatedNumFramesAccumTextureIfNeeded(m_CurCameraHistoryRTSystem, renderingData.cameraData);
         }
 
         void UpdateSSRConstantBuffer(RenderingData renderingData)
@@ -257,6 +254,12 @@ namespace UnityEngine.Rendering.Universal
             if (m_Compute == null)
             {
                 Debug.LogErrorFormat("{0}.Execute(): Missing computeShader. ScreenSpaceReflection pass will not execute.", GetType().Name);
+                return;
+            }
+            if (m_CurCameraHistoryRTSystem == null || 
+                m_CurCameraHistoryRTSystem.GetPreviousFrameRT(HistoryFrameType.ScreenSpaceReflectionAccumulation) == null)
+            {
+                Debug.LogError("History invalid");
                 return;
             }
 

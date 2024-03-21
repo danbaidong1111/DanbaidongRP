@@ -15,8 +15,8 @@ namespace UnityEngine.Rendering.Universal
         // Serialized Fields
         [SerializeField] private ScreenSpaceReflectionSettings m_Settings = new ScreenSpaceReflectionSettings();
 
-        [SerializeField, HideInInspector]
-        [Reload("Shaders/ScreenSpaceLighting/ScreenSpaceReflections.compute")]
+        //[SerializeField, HideInInspector]
+        //[Reload("Shaders/ScreenSpaceLighting/ScreenSpaceReflections.compute")]
         private ComputeShader m_Shader;
 
         // Private Fields
@@ -30,7 +30,7 @@ namespace UnityEngine.Rendering.Universal
 #if UNITY_EDITOR
             ResourceReloader.TryReloadAllNullIn(this, UniversalRenderPipelineAsset.packagePath);
 #endif
-
+            m_Shader = UniversalRenderPipelineGlobalSettings.instance.renderPipelineRuntimeResources.shaders.screenSpaceReflectionsCS;
             if (m_SSRPass == null)
                 m_SSRPass = new ScreenSpaceReflectionPass(m_Shader);
 

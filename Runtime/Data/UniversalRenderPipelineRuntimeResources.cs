@@ -44,6 +44,15 @@ namespace UnityEngine.Rendering.Universal
             [Reload("Shaders/ScreenSpaceLighting/ScreenSpaceReflections.compute")]
             public ComputeShader screenSpaceReflectionsCS;
 
+            /// <summary>
+            /// PreIntegratedFGD
+            /// </summary>
+            [Reload("Shaders/PreIntegratedFGD/PreIntegratedFGD_GGXDisneyDiffuse.shader")]
+            public Shader preIntegratedFGD_GGXDisneyDiffusePS;
+
+            [Reload("Shaders/PreIntegratedFGD/PreIntegratedFGD_CharlieFabricLambert.shader")]
+            public Shader preIntegratedFGD_CharlieFabricLambertPS;
+
 #if UNITY_EDITOR
             // Iterator to retrieve all compute shaders in reflection so we don't have to keep a list of
             // used compute shaders up to date (prefer editor-only usage)

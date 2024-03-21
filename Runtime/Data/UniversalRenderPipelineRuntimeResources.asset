@@ -19,6 +19,10 @@ MonoBehaviour:
     colorPyramidCS: {fileID: 7200000, guid: 530ccfca99c4b574b867fe96bbd686bc, type: 3}
     screenSpaceReflectionsCS: {fileID: 7200000, guid: b0222456b575af94288a8edede631437,
       type: 3}
+    preIntegratedFGD_GGXDisneyDiffusePS: {fileID: 4800000, guid: 4c351deaa85fc9c48b7bbd41f3047d82,
+      type: 3}
+    preIntegratedFGD_CharlieFabricLambertPS: {fileID: 4800000, guid: 793c3c6faf5715045856b508462930c6,
+      type: 3}
   materials:
     lit: {fileID: 2100000, guid: 4c19d03af4d77ae49a8fd7cc69e444d9, type: 2}
   textures:

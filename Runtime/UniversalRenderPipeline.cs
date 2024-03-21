@@ -242,6 +242,10 @@ namespace UnityEngine.Rendering.Universal
 
             BlueNoiseSystem.Initialize(defaultRuntimeResources);
 
+            // We always create this.
+            // TODO: Create a switch button for users.
+            PreIntegratedFGD.instance.Build(PreIntegratedFGD.FGDIndex.FGD_GGXAndDisneyDiffuse);
+
             Shader.globalRenderPipeline = k_ShaderTagName;
 
             Lightmapping.SetDelegate(lightsDelegate);
@@ -291,6 +295,8 @@ namespace UnityEngine.Rendering.Universal
             XRSystem.Dispose();
 
             BlueNoiseSystem.ClearAll();
+
+            PreIntegratedFGD.instance.Cleanup(PreIntegratedFGD.FGDIndex.FGD_GGXAndDisneyDiffuse);
 
             s_RenderGraph.Cleanup();
             s_RenderGraph = null;
@@ -660,6 +666,7 @@ namespace UnityEngine.Rendering.Universal
                 context.ExecuteCommandBuffer(cmd); // Send all the commands enqueued so far in the CommandBuffer cmd, to the ScriptableRenderContext context
                 cmd.Clear();
 
+                PreIntegratedFGD.instance.RenderInit(PreIntegratedFGD.FGDIndex.FGD_GGXAndDisneyDiffuse, cmd);
                 SetupPerCameraShaderConstants(cmd);
 
                 // Emit scene/game view UI. The main game camera UI is always rendered, so this needs to be handled only for different camera types
