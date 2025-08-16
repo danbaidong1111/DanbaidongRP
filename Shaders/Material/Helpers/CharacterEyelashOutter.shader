@@ -6,6 +6,11 @@ Shader "DanbaidongRP/Helpers/CharacterEyelashOutter"
         [FoldoutBegin(_FoldoutTexEnd)]_FoldoutTex("Textures", float) = 0
             _BaseColorOutter                      ("BaseColor", Color)                    = (1,1,1,1)
             _BaseMapOutter                        ("BaseMap_d", 2D)                       = "white" {}
+
+            [Header(Parallax)]
+            _ParallaxScale                          ("ParallaxScale", Range(0, 1))          = 1.0
+            _ParallaxMaskEdge                       ("MaskEdge", Range(0, 1))               = 0.8
+            _ParallaxMaskEdgeOffset                 ("MaskEdgeOffset", Range(0, 1))         = 0.2
         [FoldoutEnd]_FoldoutTexEnd("_FoldoutEnd", float) = 0
 
 
@@ -158,6 +163,11 @@ Shader "DanbaidongRP/Helpers/CharacterEyelashOutter"
             float3  _BaseColorOutter;
             float4  _BaseMapOutter_ST;
 
+            //Parallax
+            float   _ParallaxScale;
+            float   _ParallaxMaskEdge;
+            float   _ParallaxMaskEdgeOffset;
+
             // PBR Properties
             float   _Metallic;
             float   _Smoothness;
@@ -303,9 +313,21 @@ Shader "DanbaidongRP/Helpers/CharacterEyelashOutter"
                     alpha *= i.viewAngleAlpha;
                 }
 
+                //Parallax
+                float3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS);
+                float3 viewDirOS = TransformWorldToObjectDir(viewDirWS);
+                viewDirOS = normalize(viewDirOS);
+                float2 parallaxOffset = viewDirOS.xy;
+                parallaxOffset.y *= -1;
+                float2 parallaxUV = i.uv + _ParallaxScale * parallaxOffset;
+                //parallaxMask
+                float2 centerVec = i.uv - float2(0.5, 0.5);
+                half centerDist = dot(centerVec, centerVec);
+                half parallaxMask = smoothstep(_ParallaxMaskEdge, _ParallaxMaskEdge + _ParallaxMaskEdgeOffset, 1 - centerDist);
+
 
                 // Tex Sample
-                float4 mainTex = SAMPLE_TEXTURE2D(_BaseMapOutter, sampler_BaseMapOutter, UV);
+                float4 mainTex = SAMPLE_TEXTURE2D(_BaseMapOutter, sampler_BaseMapOutter, lerp(UV, parallaxUV, parallaxMask));
 
                 // Property prepare
                 float emission               = 1 - mainTex.a;
@@ -322,7 +344,6 @@ Shader "DanbaidongRP/Helpers/CharacterEyelashOutter"
 
                 float3 normalWS = SafeNormalize(i.normalWS);
 
-                float3 viewDirWS = GetWorldSpaceNormalizeViewDir(positionWS);
                 float NdotV = dot(normalWS, viewDirWS);
                 float clampedNdotV = ClampNdotV(NdotV);
 

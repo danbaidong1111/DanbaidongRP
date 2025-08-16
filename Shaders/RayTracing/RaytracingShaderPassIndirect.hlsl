@@ -49,11 +49,11 @@ void ClosestHitMain(inout RayIntersection rayIntersection : SV_RayPayload, Attri
     float alpha = Alpha(albedoAlpha.a, _BaseColor, _Cutoff);
     float3 albedo = albedoAlpha.rgb * _BaseColor.rgb;
 
-// #ifndef _EMISSION
-//     float3 emission = 0;
-// #else
+#ifndef _EMISSION
+    float3 emission = 0;
+#else
     float3 emission = SAMPLE_TEXTURE2D_LOD(_EmissionMap, sampler_EmissionMap, uv, 0).rgb * _EmissionColor.rgb;
-// #endif
+#endif
 
     float3 normalWS = fragInput.tangentToWorld[2];
 
