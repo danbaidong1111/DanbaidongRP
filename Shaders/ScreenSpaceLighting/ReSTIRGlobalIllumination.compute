@@ -1,17 +1,20 @@
 #pragma kernel ReSTIRGIResamplingTemporal
 #pragma kernel ReSTIRGIResamplingSpatial
-#pragma kernel ReSTIRGIResamplingCopy
+#pragma kernel ReSTIRGIResamplingCopy COPY_RESERVOIR=ReSTIRGIResamplingCopy
+#pragma kernel ReSTIRGIResamplingCopyResolve COPY_RESERVOIR=ReSTIRGIResamplingCopyResolve COPY_RESOLVE
 #pragma kernel ReSTIRGIResamplingResolve
 #pragma kernel ReSTIRGIDepthNormalUpsample
+#pragma kernel ReSTIRGIInitialScreenSpace RESTIR_GI_SCREENSPACE
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
-#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/BlueNoise.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIRandom.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIReservoir.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ScreenSpaceLighting.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Runtime/ScreenSpaceLighting/ShaderVariablesScreenSpaceGlobalIllumination.cs.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGICoordinates.hlsl"
 
 TEXTURE2D_X(_GBuffer2);
 TEXTURE2D_X(_PrevCameraDepthTexture);
@@ -26,6 +29,8 @@ Texture2D<uint4> _PreviousReservoirData2;
 Texture2D<uint4> _InputReservoirData0;
 Texture2D<uint4> _InputReservoirData1;
 Texture2D<uint4> _InputReservoirData2;
+StructuredBuffer<float2> _ReSTIRGINeighborOffsets;
+float4x4 _ClipToPrevClipMatrix;
 
 RW_TEXTURE2D(uint4, _OutputReservoirData0RW);
 RW_TEXTURE2D(uint4, _OutputReservoirData1RW);
@@ -46,6 +51,7 @@ RW_TEXTURE2D(float4, _GlobalIlluminationTextureRW);
 #define RESTIR_GI_SPATIAL_REFERENCE_DISTANCE (10.0)
 #define RESTIR_GI_SPATIAL_MIN_RADIUS (1.0)
 #define RESTIR_GI_SPATIAL_MIN_SAMPLE_COUNT (1)
+#define RESTIR_GI_NEIGHBOR_OFFSET_MASK (255u)
 
 // The boiling filter becomes more aggressive with distance because a distant
 // pixel covers more world space and unstable high-energy samples are more visible.
@@ -62,27 +68,6 @@ bool IsValidPixel(uint2 coordSS)
 bool IsValidOutputPixel(uint2 coordSS)
 {
     return all(coordSS < (uint2)_SSGIOutputSize.xy);
-}
-
-uint2 GetReSTIRGISourceCoord(uint2 traceCoord)
-{
-    uint2 traceSize = max((uint2)_SSGITraceScreenSize.xy, 1u);
-    uint2 sourceSize = max((uint2)_SSGISourceSize.xy, 1u);
-    uint2 sourceStep = max((sourceSize + traceSize - 1u) / traceSize, 1u);
-    uint2 cellOrigin = min(traceCoord * sourceStep, sourceSize - 1u);
-    uint2 cellExtent = max(min(sourceStep, sourceSize - cellOrigin), 1u);
-    uint phaseIndex = (uint)_SSGIFrameIndex & 3u;
-    uint2 checkerboardOffset = uint2(phaseIndex & 1u, (phaseIndex >> 1u) & 1u);
-    return cellOrigin + min(checkerboardOffset, cellExtent - 1u);
-}
-
-float RandomValue(uint2 coordSS, uint salt)
-{
-    uint state = coordSS.x * 1973u + coordSS.y * 9277u + salt * 26699u + (uint)_SSGIFrameIndex * 17431u + 1u;
-    state ^= state << 13;
-    state ^= state >> 17;
-    state ^= state << 5;
-    return frac(state * (1.0 / 65536.0));
 }
 
 ReSTIRGISurface LoadSurfaceFromSourceCoord(uint2 sourceCoord, float rawDepth)
@@ -142,12 +127,51 @@ GIReservoir LoadInputReservoir(uint2 coordSS)
         LOAD_TEXTURE2D_X(_InputReservoirData2, coordSS)));
 }
 
+// Spatial reuse overwrites the creation geometry with the current receiver.
+// With spatial Jacobian disabled, only the hit and light records are needed.
+GIReservoir LoadSpatialInputReservoir(int2 coordSS)
+{
+    GIReservoir reservoir = CreateEmptyGIReservoir();
+    uint4 lightInfo = LOAD_TEXTURE2D_X(_InputReservoirData2, coordSS);
+    uint sampleCount = lightInfo.y >> 16;
+    if (sampleCount > 0u && lightInfo.w <= (uint)_SSGIMaxSampleAge)
+    {
+        uint4 hitGeometry = LOAD_TEXTURE2D_X(_InputReservoirData1, coordSS);
+        reservoir.position = asfloat(hitGeometry.xyz);
+        reservoir.normal = decodeGIReservoirNormal(hitGeometry.w);
+        reservoir.radiance = float3(
+            f16tof32(lightInfo.x & 0xffffu),
+            f16tof32(lightInfo.x >> 16),
+            f16tof32(lightInfo.y & 0xffffu));
+        reservoir.M = (int)sampleCount;
+        reservoir.avgWeight = asfloat(lightInfo.z);
+        reservoir.age = lightInfo.w;
+    }
+    return reservoir;
+}
+
 void StoreOutputReservoir(uint2 coordSS, GIReservoir reservoir)
 {
     PackedGIReservoir packed = PackGIReservoir(reservoir);
     _OutputReservoirData0RW[coordSS] = packed.creationGeometry;
     _OutputReservoirData1RW[coordSS] = packed.hitGeometry;
     _OutputReservoirData2RW[coordSS] = packed.lightInfo;
+}
+
+void StoreResolvedGI(uint2 coordSS, ReSTIRGISurface surface, GIReservoir reservoir)
+{
+    if (!IsValidSurface(surface) || !hasReservoirCandidates(reservoir))
+    {
+        _GlobalIlluminationTextureRW[coordSS] = 0.0;
+        return;
+    }
+
+    // Every input (including spatial's selected sample) was decoded from a
+    // packed reservoir. Radiance is already half-quantized; do not pack it again.
+    // RIS estimates irradiance E. Deferred diffuse expects E / PI.
+    float3 indirectDiffuse = evaluateReservoirContribution(reservoir, surface)
+        * reservoir.avgWeight * (_SSGIIntensity / PI);
+    _GlobalIlluminationTextureRW[coordSS] = float4(indirectDiffuse, 1.0);
 }
 
 void FinalizeResampledReservoir(inout GIReservoir reservoir, float weightSum, ReSTIRGISurface surface)
@@ -170,26 +194,50 @@ void FinalizeResampledReservoir(inout GIReservoir reservoir, float weightSum, Re
     // normalization denominator during later temporal/spatial reuse.
 }
 
-GIReservoir ResampleTemporalReservoir(uint2 coordSS)
+void ResampleTemporalReservoir(uint2 coordSS, out GIReservoir temporalReservoir)
 {
-    GIReservoir temporalReservoir = CreateEmptyGIReservoir();
+    temporalReservoir = CreateEmptyGIReservoir();
     GIReservoir currentReservoir = LoadCurrentReservoir(coordSS);
     ReSTIRGISurface surface = LoadSurface(coordSS);
     if (!IsValidSurface(surface))
-        return temporalReservoir;
+        return;
+
+    // An invalid history may be newly allocated and unwritten. Do not fetch it
+    // and then multiply its potentially undefined weight by M == 0.
+    if (_SSGIHistoryValid == 0)
+    {
+        temporalReservoir = currentReservoir;
+        return;
+    }
 
     uint2 sourceCoord = GetReSTIRGISourceCoord(coordSS);
     float2 motionVector = LoadMotionVectorOffset(sourceCoord);
     float2 screenUV = TransformCoordSSToScreenUV(sourceCoord, _SSGISourceSize);
     float2 prevScreenUV = screenUV - motionVector;
-    bool isPrevValid = _SSGIHistoryValid != 0 && all(prevScreenUV > 0.0) && all(prevScreenUV < 1.0);
-    uint2 prevCoordSS = clamp(TransformScreenUVToCoordSS(prevScreenUV, _SSGITraceScreenSize), 0, (uint2)_SSGITraceScreenSize.xy - 1);
-    uint2 prevSourceCoord = clamp(TransformScreenUVToCoordSS(prevScreenUV, _SSGISourceSize), 0, (uint2)_SSGISourceSize.xy - 1);
+    bool isPrevValid = all(prevScreenUV > 0.0) && all(prevScreenUV < 1.0);
+    if (!isPrevValid)
+    {
+        temporalReservoir = currentReservoir;
+        return;
+    }
+    uint2 prevCoordSS = GetReSTIRGITraceCoord(prevScreenUV);
+    uint2 prevSourceCoord = GetReSTIRGISourceCoord(prevCoordSS);
 
-    float currentDepth = LinearEyeDepth(LoadSceneDepth(sourceCoord), _ZBufferParams);
-    float previousDepth = LinearEyeDepth(LOAD_TEXTURE2D_X(_PrevCameraDepthTexture, prevSourceCoord).r, _ZBufferParams);
-    if (abs(currentDepth - previousDepth) > max(_SSGIDepthTolerance * max(currentDepth, 1.0), 1e-4))
-        isPrevValid = false;
+    float currentRawDepth = LoadSceneDepth(sourceCoord);
+    float4 currentClip = ComputeClipSpacePosition(screenUV, currentRawDepth);
+    float4 previousClip = mul(_ClipToPrevClipMatrix, currentClip);
+    float previousProjectedDeviceDepth = previousClip.z / max(previousClip.w, 1e-6);
+    float expectedPreviousDepth = LinearEyeDepth(previousProjectedDeviceDepth, _ZBufferParams);
+    float previousRawDepth = LOAD_TEXTURE2D_X(_PrevCameraDepthTexture, prevSourceCoord).r;
+    float previousDepth = LinearEyeDepth(previousRawDepth, _ZBufferParams);
+    if (previousClip.w <= 0.0 || previousProjectedDeviceDepth < 0.0
+        || previousProjectedDeviceDepth > 1.0 || previousRawDepth == UNITY_RAW_FAR_CLIP_VALUE
+        || abs(expectedPreviousDepth - previousDepth)
+            > max(_SSGIDepthTolerance * max(expectedPreviousDepth, 1.0), 1e-4))
+    {
+        temporalReservoir = currentReservoir;
+        return;
+    }
 
     GIReservoir previousReservoir = LoadPreviousReservoir(prevCoordSS);
     if (length(previousReservoir.creationPoint - surface.positionWS) > 1.0
@@ -204,12 +252,10 @@ GIReservoir ResampleTemporalReservoir(uint2 coordSS)
             isPrevValid = false;
     }
 
-    if (!isPrevValid)
+    if (!isPrevValid || !hasReservoirCandidates(previousReservoir))
     {
-        previousReservoir.M = 0;
-        previousReservoir.age = 0u;
-        previousReservoir.creationPoint = surface.positionWS;
-        previousReservoir.creationNormal = surface.normalWS;
+        temporalReservoir = currentReservoir;
+        return;
     }
 
     float previousTarget = evalTargetFunction(previousReservoir.radiance, surface.normalWS,
@@ -254,13 +300,17 @@ GIReservoir ResampleTemporalReservoir(uint2 coordSS)
         float currentTarget = evalTargetFunction(currentReservoir.radiance, surface.normalWS,
             surface.positionWS, currentReservoir.position);
         float currentWeight = currentTarget * max(currentReservoir.avgWeight, 0.0) * currentReservoir.M;
-        updateReservoir(currentWeight, currentReservoir, GetSpatiotemporalBlueNoiseVec1(sourceCoord),
+        uint selectionRandom = InitReSTIRGIRandom(sourceCoord, (uint)_SSGIFrameIndex, RESTIR_GI_RANDOM_TEMPORAL);
+        updateReservoir(currentWeight, currentReservoir, NextReSTIRGIRandom(selectionRandom),
             weightSum, temporalReservoir);
     }
 
     FinalizeResampledReservoir(temporalReservoir, weightSum, surface);
-    return temporalReservoir;
 }
+
+#if defined(RESTIR_GI_SCREENSPACE)
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIScreenSpace.hlsl"
+#endif
 
 #define RESTIR_GI_BOILING_GROUP_WIDTH (8)
 #define RESTIR_GI_BOILING_GROUP_SIZE (RESTIR_GI_BOILING_GROUP_WIDTH * RESTIR_GI_BOILING_GROUP_WIDTH)
@@ -275,20 +325,64 @@ void ApplyTemporalBoilingFilter(uint2 groupThreadID, float centerDepth, inout GI
         ? max(Luminance(reservoir.radiance) * reservoir.avgWeight, 0.0)
         : 0.0;
 
+#if defined(UNITY_HW_SUPPORTS_WAVE)
+    uint waveSize = WaveGetLaneCount();
+    float waveWeight = WaveActiveSum(reservoirWeight);
+    uint waveCount = WaveActiveCountBits(reservoirWeight > 0.0);
+    if (WaveIsFirstLane())
+    {
+        s_ReSTIRGIBoilingWeight[localIndex / waveSize] = waveWeight;
+        s_ReSTIRGIBoilingCount[localIndex / waveSize] = waveCount;
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (localIndex == 0u)
+    {
+        float totalWeight = 0.0;
+        uint totalCount = 0u;
+        for (uint waveIndex = 0u; waveIndex < (RESTIR_GI_BOILING_GROUP_SIZE + waveSize - 1u) / waveSize; ++waveIndex)
+        {
+            totalWeight += s_ReSTIRGIBoilingWeight[waveIndex];
+            totalCount += s_ReSTIRGIBoilingCount[waveIndex];
+        }
+        s_ReSTIRGIBoilingWeight[0] = totalWeight;
+        s_ReSTIRGIBoilingCount[0] = totalCount;
+    }
+    GroupMemoryBarrierWithGroupSync();
+#else
+    // Portable two-stage reduction: 3 group barriers instead of 7. Every
+    // thread (including background / out-of-bounds lanes) must reach them.
     s_ReSTIRGIBoilingWeight[localIndex] = reservoirWeight;
     s_ReSTIRGIBoilingCount[localIndex] = reservoirWeight > 0.0 ? 1u : 0u;
     GroupMemoryBarrierWithGroupSync();
-
-    [unroll]
-    for (uint stride = RESTIR_GI_BOILING_GROUP_SIZE >> 1; stride > 0u; stride >>= 1u)
+    if (groupThreadID.x == 0u)
     {
-        if (localIndex < stride)
+        float rowWeight = 0.0;
+        uint rowCount = 0u;
+        [unroll]
+        for (uint column = 0u; column < RESTIR_GI_BOILING_GROUP_WIDTH; ++column)
         {
-            s_ReSTIRGIBoilingWeight[localIndex] += s_ReSTIRGIBoilingWeight[localIndex + stride];
-            s_ReSTIRGIBoilingCount[localIndex] += s_ReSTIRGIBoilingCount[localIndex + stride];
+            rowWeight += s_ReSTIRGIBoilingWeight[localIndex + column];
+            rowCount += s_ReSTIRGIBoilingCount[localIndex + column];
         }
-        GroupMemoryBarrierWithGroupSync();
+        s_ReSTIRGIBoilingWeight[localIndex] = rowWeight;
+        s_ReSTIRGIBoilingCount[localIndex] = rowCount;
     }
+    GroupMemoryBarrierWithGroupSync();
+    if (localIndex == 0u)
+    {
+        float totalWeight = 0.0;
+        uint totalCount = 0u;
+        [unroll]
+        for (uint row = 0u; row < RESTIR_GI_BOILING_GROUP_WIDTH; ++row)
+        {
+            totalWeight += s_ReSTIRGIBoilingWeight[row * RESTIR_GI_BOILING_GROUP_WIDTH];
+            totalCount += s_ReSTIRGIBoilingCount[row * RESTIR_GI_BOILING_GROUP_WIDTH];
+        }
+        s_ReSTIRGIBoilingWeight[0] = totalWeight;
+        s_ReSTIRGIBoilingCount[0] = totalCount;
+    }
+    GroupMemoryBarrierWithGroupSync();
+#endif
 
     float averageNonzeroWeight = s_ReSTIRGIBoilingCount[0] > 0u
         ? s_ReSTIRGIBoilingWeight[0] / (float)s_ReSTIRGIBoilingCount[0]
@@ -311,7 +405,7 @@ void ReSTIRGIResamplingTemporal(uint3 dispatchThreadID : SV_DispatchThreadID, ui
     bool validPixel = IsValidPixel(coordSS);
     GIReservoir temporalReservoir = CreateEmptyGIReservoir();
     if (validPixel)
-        temporalReservoir = ResampleTemporalReservoir(coordSS);
+        ResampleTemporalReservoir(coordSS, temporalReservoir);
 
     float centerDepth = validPixel
         ? LinearEyeDepth(LoadSceneDepth(GetReSTIRGISourceCoord(coordSS)), _ZBufferParams)
@@ -322,27 +416,26 @@ void ReSTIRGIResamplingTemporal(uint3 dispatchThreadID : SV_DispatchThreadID, ui
         StoreOutputReservoir(coordSS, temporalReservoir);
 }
 
-float2 SampleSpatialNeighborDisk(float2 randomValue)
+int2 GetSpatialNeighborCoord(uint2 sourceCoord, int sampleIndex, uint startIndex, float searchRadius)
 {
-    float radius = sqrt(saturate(randomValue.x));
-    float angle = 2.0 * PI * randomValue.y;
-    float sineValue;
-    float cosineValue;
-    sincos(angle, sineValue, cosineValue);
-    return float2(cosineValue, sineValue) * radius;
+    uint offsetIndex = (startIndex + (uint)sampleIndex) & RESTIR_GI_NEIGHBOR_OFFSET_MASK;
+    float2 diskOffset = _ReSTIRGINeighborOffsets[offsetIndex];
+    int2 neighborSourceCoord = int2(sourceCoord) + int2(diskOffset * searchRadius);
+    return (int2)GetReSTIRGITraceCoordFromSource(neighborSourceCoord);
 }
 
-int2 GetSpatialNeighborCoord(uint2 coordSS, int sampleIndex, float searchRadius, int2 boundary)
-{
-    float2 randomValue = GetSpatiotemporalBlueNoiseVec2(GetReSTIRGISourceCoord(coordSS), sampleIndex * 17);
-    float2 diskOffset = SampleSpatialNeighborDisk(randomValue);
-    int2 neighborCoordSS = int2(coordSS) + int2(round(diskOffset * searchRadius));
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGISpatial.hlsl"
 
-    neighborCoordSS.x = neighborCoordSS.x < 0 ? -neighborCoordSS.x
-        : (neighborCoordSS.x > boundary.x ? 2 * boundary.x - neighborCoordSS.x : neighborCoordSS.x);
-    neighborCoordSS.y = neighborCoordSS.y < 0 ? -neighborCoordSS.y
-        : (neighborCoordSS.y > boundary.y ? 2 * boundary.y - neighborCoordSS.y : neighborCoordSS.y);
-    return clamp(neighborCoordSS, 0, boundary);
+void StreamSpatialCandidate(int2 coord, ReSTIRGISurface surface, float randomValue,
+    inout SpatialGIState state)
+{
+    uint4 light = LOAD_TEXTURE2D_X(_InputReservoirData2, coord);
+    if ((light.y >> 16u) == 0u || light.w > (uint)_SSGIMaxSampleAge)
+        return;
+    uint4 hit = 0u;
+    if (asfloat(light.z) > 0.0)
+        hit = LOAD_TEXTURE2D_X(_InputReservoirData1, coord);
+    StreamPackedSpatialCandidate(hit, light, surface, randomValue, state);
 }
 
 [numthreads(8, 8, 1)]
@@ -352,116 +445,86 @@ void ReSTIRGIResamplingSpatial(uint3 dispatchThreadID : SV_DispatchThreadID)
     if (!IsValidPixel(coordSS))
         return;
 
-    GIReservoir centerReservoir = LoadInputReservoir(coordSS);
-    ReSTIRGISurface centerSurface = LoadSurface(coordSS);
+    uint2 centerSourceCoord = GetReSTIRGISourceCoord(coordSS);
+    float centerRawDepth = LoadSceneDepth(centerSourceCoord);
+    ReSTIRGISurface centerSurface = LoadSurfaceFromSourceCoord(centerSourceCoord, centerRawDepth);
     if (!IsValidSurface(centerSurface))
     {
         StoreOutputReservoir(coordSS, CreateEmptyGIReservoir());
+        _GlobalIlluminationTextureRW[coordSS] = 0.0;
         return;
     }
 
-    GIReservoir spatialReservoir = CreateEmptyGIReservoir();
-    float weightSum = 0.0;
-
-    bool centerHasCandidates = hasReservoirCandidates(centerReservoir)
-        && centerReservoir.age <= (uint)_SSGIMaxSampleAge;
-    if (centerHasCandidates)
-    {
-        float centerTarget = evalTargetFunction(centerReservoir.radiance, centerSurface.normalWS,
-            centerSurface.positionWS, centerReservoir.position);
-        float centerWeight = max(centerReservoir.avgWeight, 0.0) * centerReservoir.M * centerTarget;
-        updateReservoir(centerWeight, centerReservoir, 0.5, weightSum, spatialReservoir);
-    }
-
-    uint2 centerSourceCoord = GetReSTIRGISourceCoord(coordSS);
-    float centerDepth = LinearEyeDepth(LoadSceneDepth(centerSourceCoord), _ZBufferParams);
-    float sourceToTraceScale = _SSGITraceScreenSize.x / max(_SSGISourceSize.x, 1.0);
-    float searchRadius = _SSGISpatialRadius * sourceToTraceScale;
-    float distanceScale = saturate(RESTIR_GI_SPATIAL_REFERENCE_DISTANCE / max(centerDepth, RESTIR_GI_SPATIAL_REFERENCE_DISTANCE));
-    searchRadius = max(searchRadius * distanceScale, min(RESTIR_GI_SPATIAL_MIN_RADIUS, searchRadius));
-
+    SpatialGIState state = (SpatialGIState)0;
+    StreamSpatialCandidate((int2)coordSS, centerSurface, 0.5, state);
+    float centerDepth = LinearEyeDepth(centerRawDepth, _ZBufferParams);
+    float depthTolerance = max(_SSGIDepthTolerance * max(centerDepth, 1.0), 1e-4);
+    float distanceScale = saturate(RESTIR_GI_SPATIAL_REFERENCE_DISTANCE
+        / max(centerDepth, RESTIR_GI_SPATIAL_REFERENCE_DISTANCE));
+    float searchRadius = max(_SSGISpatialRadius * distanceScale,
+        min(RESTIR_GI_SPATIAL_MIN_RADIUS, _SSGISpatialRadius));
     int spatialSampleCount = max(_SSGISpatialSampleCount, 0);
-    int minSampleCount = min(RESTIR_GI_SPATIAL_MIN_SAMPLE_COUNT, spatialSampleCount);
-    float radiusScale = searchRadius / max(_SSGISpatialRadius, 1.0);
-    float sampleScale = saturate(radiusScale * radiusScale);
-    spatialSampleCount = (int)round(lerp((float)minSampleCount,
-        (float)spatialSampleCount, sampleScale));
+    spatialSampleCount = (int)round(lerp((float)min(RESTIR_GI_SPATIAL_MIN_SAMPLE_COUNT, spatialSampleCount),
+        (float)spatialSampleCount, distanceScale * distanceScale));
 
-    int2 boundary = (int2)_SSGITraceScreenSize.xy - 1;
+    uint selectionRandom = InitReSTIRGIRandom(centerSourceCoord, (uint)_SSGIFrameIndex, RESTIR_GI_RANDOM_SPATIAL);
+    uint neighborOffsetStart = (uint)(NextReSTIRGIRandom(selectionRandom)
+        * (float)(RESTIR_GI_NEIGHBOR_OFFSET_MASK + 1u));
     UNITY_LOOP
     for (int neighborIndex = 0; neighborIndex < spatialSampleCount; ++neighborIndex)
     {
-        int2 neighborCoordSS = GetSpatialNeighborCoord(coordSS, neighborIndex, searchRadius, boundary);
+        int2 neighborCoordSS = GetSpatialNeighborCoord(
+            centerSourceCoord, neighborIndex, neighborOffsetStart, searchRadius);
         if (all(neighborCoordSS == int2(coordSS)))
             continue;
-
         uint2 neighborSourceCoord = GetReSTIRGISourceCoord((uint2)neighborCoordSS);
         float neighborRawDepth = LoadSceneDepth(neighborSourceCoord);
-        float neighborDepth = LinearEyeDepth(neighborRawDepth, _ZBufferParams);
-        if (abs(centerDepth - neighborDepth) > max(_SSGIDepthTolerance * max(centerDepth, 1.0), 1e-4))
+        if (neighborRawDepth == UNITY_RAW_FAR_CLIP_VALUE)
+            continue;
+        if (abs(centerDepth - LinearEyeDepth(neighborRawDepth, _ZBufferParams)) > depthTolerance)
+            continue;
+        float3 neighborNormal = SafeNormalize(UnpackNormal(LOAD_TEXTURE2D_X(_GBuffer2, neighborSourceCoord).xyz));
+        if (!any(neighborNormal != 0.0) || dot(centerSurface.normalWS, neighborNormal) < _SSGINormalTolerance)
             continue;
 
-        ReSTIRGISurface neighborSurface = LoadSurfaceFromSourceCoord(neighborSourceCoord, neighborRawDepth);
-        if (!IsValidSurface(neighborSurface)
-            || dot(centerSurface.normalWS, neighborSurface.normalWS) < _SSGINormalTolerance)
-            continue;
-
-        GIReservoir neighborReservoir = LoadInputReservoir(neighborCoordSS);
-        if (!hasReservoirCandidates(neighborReservoir)
-            || neighborReservoir.age > (uint)_SSGIMaxSampleAge)
-            continue;
-
-        float neighborTarget = evalTargetFunction(neighborReservoir.radiance,
-            centerSurface.normalWS, centerSurface.positionWS, neighborReservoir.position);
-        // float jacobian = 1.0;
-        // if (_SSGIEnableSpatialJacobian > 0.5)
-        // {
-        //     float3 offsetB = neighborReservoir.position - neighborReservoir.creationPoint;
-        //     float3 offsetA = neighborReservoir.position - centerSurface.positionWS;
-        //     float RB2 = dot(offsetB, offsetB);
-        //     float RA2 = dot(offsetA, offsetA);
-        //     if (RA2 <= 1e-8 || RB2 <= 1e-8)
-        //         continue;
-        //
-        //     offsetB *= rsqrt(RB2);
-        //     offsetA *= rsqrt(RA2);
-        //
-        //     float cosA = dot(centerSurface.normalWS, offsetA);
-        //     float cosB = dot(neighborReservoir.creationNormal, offsetB);
-        //     float cosPhiA = -dot(offsetA, neighborReservoir.normal);
-        //     float cosPhiB = -dot(offsetB, neighborReservoir.normal);
-        //
-        //     bool isJacobianValid = cosA > 0.0 && cosPhiA > 0.0
-        //         && cosB > 0.0 && cosPhiB > 0.0;
-        //     jacobian = isJacobianValid ? RB2 * cosPhiA / (RA2 * cosPhiB) : 0.0;
-        //     isJacobianValid = isJacobianValid
-        //         && jacobian >= RESTIR_GI_SPATIAL_JACOBIAN_VALID_MIN
-        //         && jacobian <= RESTIR_GI_SPATIAL_JACOBIAN_VALID_MAX;
-        //     if (!isJacobianValid)
-        //         continue;
-        //
-        //     jacobian = clamp(jacobian, RESTIR_GI_SPATIAL_JACOBIAN_CLAMP_MIN,
-        //         RESTIR_GI_SPATIAL_JACOBIAN_CLAMP_MAX);
-        // }
-
-        float neighborWeight = max(neighborReservoir.avgWeight, 0.0) * neighborReservoir.M * neighborTarget;
-        // neighborWeight *= jacobian;
-        uint randomSalt = 102u + (uint)neighborIndex * 37u;
-        updateReservoir(neighborWeight, neighborReservoir, RandomValue(coordSS, randomSalt),
-            weightSum, spatialReservoir);
+        // Jacobian intentionally remains disabled. A Jacobian-enabled variant
+        // would also need creation geometry and decoded hit normals.
+        // weight *= jacobian;
+        StreamSpatialCandidate(neighborCoordSS, centerSurface, NextReSTIRGIRandom(selectionRandom), state);
     }
 
-    FinalizeResampledReservoir(spatialReservoir, weightSum, centerSurface);
-    StoreOutputReservoir(coordSS, spatialReservoir);
+    float avgWeight = state.selectedTarget > 0.0
+        ? (state.weightSum / max((float)state.M, 1.0)) / state.selectedTarget : 0.0;
+    // Preserve the selected sample's packed hit normal and half radiance exactly.
+    _OutputReservoirData0RW[coordSS] = uint4(asuint(centerSurface.positionWS),
+        encodeGIReservoirNormal(centerSurface.normalWS));
+    _OutputReservoirData1RW[coordSS] = state.hit;
+    state.light.y = (state.light.y & 0xffffu) | (min(state.M, 0xffffu) << 16u);
+    state.light.z = asuint(avgWeight);
+    _OutputReservoirData2RW[coordSS] = state.light;
+    float3 contribution = state.selectedRadiance * state.selectedCosine * avgWeight * (_SSGIIntensity / PI);
+    _GlobalIlluminationTextureRW[coordSS] = float4(contribution, state.M > 0u ? 1.0 : 0.0);
 }
 
 
 [numthreads(8, 8, 1)]
-void ReSTIRGIResamplingCopy(uint3 dispatchThreadID : SV_DispatchThreadID)
+void COPY_RESERVOIR(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     uint2 coordSS = dispatchThreadID.xy;
     if (IsValidPixel(coordSS))
-        StoreOutputReservoir(coordSS, LoadInputReservoir(coordSS));
+    {
+        // Copy the packed bits, without another normal/radiance round trip.
+        PackedGIReservoir packed = MakePackedReservoir(
+            LOAD_TEXTURE2D_X(_InputReservoirData0, coordSS),
+            LOAD_TEXTURE2D_X(_InputReservoirData1, coordSS),
+            LOAD_TEXTURE2D_X(_InputReservoirData2, coordSS));
+        _OutputReservoirData0RW[coordSS] = packed.creationGeometry;
+        _OutputReservoirData1RW[coordSS] = packed.hitGeometry;
+        _OutputReservoirData2RW[coordSS] = packed.lightInfo;
+#if defined(COPY_RESOLVE)
+        StoreResolvedGI(coordSS, LoadSurface(coordSS), UnPackGIReservoir(packed));
+#endif
+    }
 }
 
 [numthreads(8, 8, 1)]
@@ -473,47 +536,39 @@ void ReSTIRGIResamplingResolve(uint3 dispatchThreadID : SV_DispatchThreadID)
 
     ReSTIRGISurface surface = LoadSurface(coordSS);
     GIReservoir reservoir = LoadInputReservoir(coordSS);
-    if (!IsValidSurface(surface) || !isReservoirValid(reservoir))
-    {
-        _GlobalIlluminationTextureRW[coordSS] = 0.0;
-        return;
-    }
-
-    float3 indirectDiffuse = evaluateReservoirContribution(reservoir, surface) * reservoir.avgWeight * _SSGIIntensity;
-    _GlobalIlluminationTextureRW[coordSS] = float4(indirectDiffuse, 1.0);
+    StoreResolvedGI(coordSS, surface, reservoir);
 }
 
 void AccumulateReSTIRGIUpsampleSample(
     uint2 traceCoord,
-    float2 outputUV,
+    float spatialWeight,
     ReSTIRGISurface sourceSurface,
     float planeTolerance,
     inout float3 colorSum,
     inout float weightSum)
 {
-    uint4 creationGeometry = LOAD_TEXTURE2D_X(_InputReservoirData0, traceCoord);
-    uint4 lightInfo = LOAD_TEXTURE2D_X(_InputReservoirData2, traceCoord);
-    if ((lightInfo.y >> 16) == 0u)
+    if (spatialWeight <= 0.0)
         return;
 
-    float3 guidePositionWS = asfloat(creationGeometry.xyz);
-    float3 guideNormalWS = decodeGIReservoirNormal(creationGeometry.w);
-    float normalSimilarity = dot(sourceSurface.normalWS, guideNormalWS);
+    uint2 guideSourceCoord = GetReSTIRGISourceCoord(traceCoord);
+    float guideDepth = LoadSceneDepth(guideSourceCoord);
+    ReSTIRGISurface guideSurface = LoadSurfaceFromSourceCoord(guideSourceCoord, guideDepth);
+    if (!IsValidSurface(guideSurface))
+        return;
+
+    float normalSimilarity = dot(sourceSurface.normalWS, guideSurface.normalWS);
     if (normalSimilarity < _SSGINormalTolerance)
         return;
 
     // Camera-space/radial depth changes rapidly along a grazing surface. Measure
     // separation from both tangent planes instead so coplanar samples stay valid.
-    float3 positionDelta = guidePositionWS - sourceSurface.positionWS;
+    float3 positionDelta = guideSurface.positionWS - sourceSurface.positionWS;
     float sourcePlaneDistance = abs(dot(positionDelta, sourceSurface.normalWS));
-    float guidePlaneDistance = abs(dot(positionDelta, guideNormalWS));
+    float guidePlaneDistance = abs(dot(positionDelta, guideSurface.normalWS));
     float planeDistance = max(sourcePlaneDistance, guidePlaneDistance);
     if (planeDistance > planeTolerance)
         return;
 
-    float2 guideUV = ((float2)GetReSTIRGISourceCoord(traceCoord) + 0.5) * _SSGISourceSize.zw;
-    float2 outputDelta = (guideUV - outputUV) * _SSGIOutputSize.xy;
-    float spatialWeight = exp2(-0.5 * dot(outputDelta, outputDelta));
     float planeWeight = exp2(-4.0 * planeDistance / max(planeTolerance, 1e-5));
     float normalWeight = saturate(normalSimilarity);
     normalWeight *= normalWeight;
@@ -523,7 +578,9 @@ void AccumulateReSTIRGIUpsampleSample(
     normalWeight *= normalWeight;
     float weight = spatialWeight * planeWeight * normalWeight;
 
-    colorSum += LOAD_TEXTURE2D_X(_InputGITexture, traceCoord).rgb * weight;
+    float4 gi = LOAD_TEXTURE2D_X(_InputGITexture, traceCoord);
+    weight *= saturate(gi.a);
+    colorSum += gi.rgb * weight;
     weightSum += weight;
 }
 
@@ -552,8 +609,9 @@ void ReSTIRGIDepthNormalUpsample(uint3 dispatchThreadID : SV_DispatchThreadID)
         return;
     }
 
-    float2 tracePosition = outputUV * _SSGITraceScreenSize.xy - 0.5;
-    int2 baseTraceCoord = int2(floor(tracePosition));
+    float2 tracePosition = GetReSTIRGITracePosition(outputUV);
+    int2 baseTraceCoord = (int2)floor(tracePosition);
+    float2 traceFraction = frac(tracePosition);
     int2 traceBoundary = (int2)_SSGITraceScreenSize.xy - 1;
     float sourceViewDistance = length(sourceSurface.positionWS - _WorldSpaceCameraPos);
     float planeTolerance = max(0.005, sourceViewDistance * max(_SSGIDepthTolerance * 0.05, 0.001));
@@ -567,9 +625,14 @@ void ReSTIRGIDepthNormalUpsample(uint3 dispatchThreadID : SV_DispatchThreadID)
         [unroll]
         for (int x = 0; x <= 1; ++x)
         {
-            uint2 traceCoord = (uint2)clamp(baseTraceCoord + int2(x, y), 0, traceBoundary);
+            int2 tapCoord = baseTraceCoord + int2(x, y);
+            if (any(tapCoord < 0) || any(tapCoord > traceBoundary))
+                continue;
+
+            float spatialWeight = (x == 0 ? 1.0 - traceFraction.x : traceFraction.x)
+                * (y == 0 ? 1.0 - traceFraction.y : traceFraction.y);
             AccumulateReSTIRGIUpsampleSample(
-                traceCoord, outputUV, sourceSurface, planeTolerance, colorSum, weightSum);
+                (uint2)tapCoord, spatialWeight, sourceSurface, planeTolerance, colorSum, weightSum);
         }
     }
 
@@ -577,21 +640,25 @@ void ReSTIRGIDepthNormalUpsample(uint3 dispatchThreadID : SV_DispatchThreadID)
     // surface tests are kept, so the fallback does not turn into bilinear leaking.
     if (weightSum <= 1e-5)
     {
-        int2 nearestTraceCoord = int2(floor(tracePosition + 0.5));
+        int2 nearestTraceCoord = (int2)GetReSTIRGITraceCoord(outputUV);
         [unroll]
         for (int fallbackY = -1; fallbackY <= 1; ++fallbackY)
         {
             [unroll]
             for (int fallbackX = -1; fallbackX <= 1; ++fallbackX)
             {
-                uint2 traceCoord = (uint2)clamp(
-                    nearestTraceCoord + int2(fallbackX, fallbackY), 0, traceBoundary);
+                int2 tapCoord = nearestTraceCoord + int2(fallbackX, fallbackY);
+                if (any(tapCoord < 0) || any(tapCoord > traceBoundary))
+                    continue;
+
+                float2 traceDelta = (float2)tapCoord - tracePosition;
+                float spatialWeight = exp2(-0.5 * dot(traceDelta, traceDelta));
                 AccumulateReSTIRGIUpsampleSample(
-                    traceCoord, outputUV, sourceSurface, planeTolerance, colorSum, weightSum);
+                    (uint2)tapCoord, spatialWeight, sourceSurface, planeTolerance, colorSum, weightSum);
             }
         }
     }
 
     float3 upsampledGI = weightSum > 1e-5 ? colorSum / weightSum : 0.0;
-    _GlobalIlluminationTextureRW[outputCoord] = float4(upsampledGI, 1.0);
+    _GlobalIlluminationTextureRW[outputCoord] = float4(upsampledGI, weightSum > 1e-5 ? 1.0 : 0.0);
 }

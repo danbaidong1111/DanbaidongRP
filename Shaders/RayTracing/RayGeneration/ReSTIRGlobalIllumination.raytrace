@@ -4,44 +4,27 @@
 #define SHADER_TARGET 50
 
 #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Sampling/Sampling.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/BlueNoise.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/UnityGBuffer.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIReservoir.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIRandom.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIDirections.hlsl"
 
 #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Raytracing/ShaderVariablesRaytracing.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Raytracing/RayTracingCommon.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Raytracing/RaytracingIntersection.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Runtime/Raytracing/RayTracingFallbackHierarchy.cs.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/Runtime/ScreenSpaceLighting/ShaderVariablesScreenSpaceGlobalIllumination.cs.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGICoordinates.hlsl"
 
 TEXTURE2D_X(_GBuffer2);
 
 RW_TEXTURE2D(uint4, _OutputReservoirData0RW);
 RW_TEXTURE2D(uint4, _OutputReservoirData1RW);
 RW_TEXTURE2D(uint4, _OutputReservoirData2RW);
-
-float RandomValue(uint2 pixel, uint salt)
-{
-    uint state = pixel.x * 1973u + pixel.y * 9277u + salt * 26699u + (uint)_SSGIFrameIndex * 17431u + 1u;
-    state ^= state << 13;
-    state ^= state >> 17;
-    state ^= state << 5;
-    return frac(state * (1.0 / 65536.0));
-}
-
-uint2 GetReSTIRGISourceCoord(uint2 traceCoord)
-{
-    uint2 traceSize = max((uint2)_SSGITraceScreenSize.xy, 1u);
-    uint2 sourceSize = max((uint2)_SSGISourceSize.xy, 1u);
-    uint2 sourceStep = max((sourceSize + traceSize - 1u) / traceSize, 1u);
-    uint2 cellOrigin = min(traceCoord * sourceStep, sourceSize - 1u);
-    uint2 cellExtent = max(min(sourceStep, sourceSize - cellOrigin), 1u);
-    uint phaseIndex = (uint)_SSGIFrameIndex & 3u;
-    uint2 checkerboardOffset = uint2(phaseIndex & 1u, (phaseIndex >> 1u) & 1u);
-    return cellOrigin + min(checkerboardOffset, cellExtent - 1u);
-}
 
 ReSTIRGISurface LoadSurface(uint2 traceCoord)
 {
@@ -97,15 +80,17 @@ void SingleRayGen()
 {
     uint2 traceCoord = DispatchRaysIndex().xy;
     uint2 sourceCoord = GetReSTIRGISourceCoord(traceCoord);
-    StoreOutputReservoir(traceCoord, CreateEmptyGIReservoir());
-
     ReSTIRGISurface surface = LoadSurface(traceCoord);
     if (!IsValidSurface(surface))
+    {
+        StoreOutputReservoir(traceCoord, CreateEmptyGIReservoir());
         return;
+    }
 
     float rayBias = EvaluateRayTracingBias(surface.positionWS);
     float3x3 localToWorld = GetLocalFrame(surface.normalWS);
-    uint candidateCount = max(1, (uint)_SSGICandidateCount);
+    uint candidateCount = clamp((uint)_SSGICandidateCount, 1u, 8u);
+    uint selectionRandom = InitReSTIRGIRandom(sourceCoord, (uint)_SSGIFrameIndex, RESTIR_GI_RANDOM_INITIAL);
 
     GIReservoir selectedReservoir = CreateEmptyGIReservoir();
     selectedReservoir.creationPoint = surface.positionWS;
@@ -115,7 +100,7 @@ void SingleRayGen()
     UNITY_LOOP
     for (uint candidateIndex = 0; candidateIndex < candidateCount; ++candidateIndex)
     {
-        float3 localDirection = GetSpatiotemporalBlueNoiseUnitVec3Cosine(sourceCoord, candidateIndex * 17);
+        float3 localDirection = SampleReSTIRGICosineDirection(sourceCoord, (uint)_SSGIFrameIndex, candidateIndex);
         float3 rayDirection = normalize(mul(localDirection, localToWorld));
         float sampleCosine = saturate(dot(surface.normalWS, rayDirection));
         float samplePdf = sampleCosine / PI;
@@ -153,7 +138,7 @@ void SingleRayGen()
         candidateReservoir.age = 0u;
 
         float targetPdf = evalTargetFunction(candidateReservoir.radiance, surface.normalWS, surface.positionWS, candidateReservoir.position);
-        updateReservoir(targetPdf * rcp(samplePdf), candidateReservoir, RandomValue(sourceCoord, (uint)candidateIndex + 1u), weightSum, selectedReservoir);
+        updateReservoir(targetPdf * rcp(samplePdf), candidateReservoir, NextReSTIRGIRandom(selectionRandom), weightSum, selectedReservoir);
     }
 
     if (selectedReservoir.M > 0)

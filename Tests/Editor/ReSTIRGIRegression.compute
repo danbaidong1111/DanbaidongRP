@@ -1,0 +1,90 @@
+#pragma kernel TestRandom
+#pragma kernel TestInitialRIS
+#pragma kernel TestSpatialPacked
+
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Sampling/Sampling.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIRandom.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIDirections.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGIReservoir.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/ScreenSpaceLighting/ReSTIRGISpatial.hlsl"
+
+RWStructuredBuffer<float4> _Results;
+uint _CandidateCount;
+uint _TestMode; // 0: constant, 1: alternating black, 2: all black, 3: smooth signal
+
+[numthreads(64, 1, 1)]
+void TestSpatialPacked(uint3 id : SV_DispatchThreadID)
+{
+    uint random = InitReSTIRGIRandom(uint2(id.x, 0), 91u, RESTIR_GI_RANDOM_SPATIAL);
+    ReSTIRGISurface surface = (ReSTIRGISurface)0;
+    surface.normalWS = float3(0, 0, 1);
+    SpatialGIState packedState = (SpatialGIState)0;
+    GIReservoir reference = CreateEmptyGIReservoir();
+    float referenceWeight = 0.0;
+    for (uint i = 0u; i < 8u; ++i)
+    {
+        GIReservoir candidate = CreateEmptyGIReservoir();
+        float x = NextReSTIRGIRandom(random) * 2.0 - 1.0;
+        float y = NextReSTIRGIRandom(random) * 2.0 - 1.0;
+        float z = NextReSTIRGIRandom(random) * 2.0 - 1.0;
+        candidate.position = float3(x, y, z);
+        candidate.radiance = float3(1, 2, 4) * NextReSTIRGIRandom(random);
+        candidate.M = (int)i + 1;
+        candidate.avgWeight = NextReSTIRGIRandom(random) * 4.0;
+        if ((i & 1u) == 0u) { candidate.radiance = 0.0; candidate.avgWeight = 0.0; }
+        PackedGIReservoir packed = PackGIReservoir(candidate);
+        candidate = UnPackGIReservoir(packed);
+        float r = NextReSTIRGIRandom(random);
+        float target = evalTargetFunction(candidate, surface);
+        updateReservoir(candidate.avgWeight * candidate.M * target, candidate, r, referenceWeight, reference);
+        StreamPackedSpatialCandidate(packed.hitGeometry, packed.lightInfo, surface, r, packedState);
+    }
+    float referenceTarget = evalTargetFunction(reference, surface);
+    reference.avgWeight = referenceTarget > 0.0 ? referenceWeight / reference.M / referenceTarget : 0.0;
+    float fastWeight = packedState.selectedTarget > 0.0
+        ? packedState.weightSum / packedState.M / packedState.selectedTarget : 0.0;
+    float3 a = evaluateReservoirContribution(reference, surface) * reference.avgWeight;
+    float3 b = packedState.selectedRadiance * packedState.selectedCosine * fastWeight;
+    _Results[id.x] = float4(abs(a - b), abs((float)reference.M - packedState.M));
+}
+
+[numthreads(64, 1, 1)]
+void TestRandom(uint3 id : SV_DispatchThreadID)
+{
+    uint state = InitReSTIRGIRandom(uint2(id.x & 127u, id.x >> 7u), 73u, RESTIR_GI_RANDOM_TEMPORAL);
+    float a = NextReSTIRGIRandom(state);
+    float b = NextReSTIRGIRandom(state);
+    state = InitReSTIRGIRandom(uint2(id.x & 127u, id.x >> 7u), 73u, RESTIR_GI_RANDOM_SPATIAL);
+    float c = NextReSTIRGIRandom(state);
+    _Results[id.x] = float4(a, b, c, 1.0);
+}
+
+[numthreads(64, 1, 1)]
+void TestInitialRIS(uint3 id : SV_DispatchThreadID)
+{
+    uint selection = InitReSTIRGIRandom(uint2(id.x, 0), 0u, RESTIR_GI_RANDOM_INITIAL);
+    ReSTIRGISurface surface;
+    surface.positionWS = 0.0;
+    surface.normalWS = float3(0, 0, 1);
+    GIReservoir reservoir = CreateEmptyGIReservoir();
+    float weightSum = 0.0;
+    for (uint i = 0u; i < _CandidateCount; ++i)
+    {
+        float3 direction = SampleReSTIRGICosineDirection(uint2(id.x & 127u, id.x >> 7u), 0u, i);
+        GIReservoir candidate = CreateEmptyGIReservoir();
+        candidate.position = direction;
+        candidate.M = 1;
+        float signal = _TestMode == 3u ? 0.1 + direction.z * direction.z : 1.0;
+        if (_TestMode == 2u || (_TestMode == 1u && (i & 1u) == 0u))
+            signal = 0.0;
+        candidate.radiance = float3(1, 2, 4) * signal;
+        float target = evalTargetFunction(candidate, surface);
+        updateReservoir(target * PI / direction.z, candidate, NextReSTIRGIRandom(selection), weightSum, reservoir);
+    }
+    float selectedTarget = evalTargetFunction(reservoir, surface);
+    reservoir.avgWeight = selectedTarget > 0.0 ? weightSum / (_CandidateCount * selectedTarget) : 0.0;
+    _Results[id.x] = float4(evaluateReservoirContribution(reservoir, surface) * reservoir.avgWeight / PI, reservoir.M);
+}

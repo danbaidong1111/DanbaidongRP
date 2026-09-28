@@ -93,6 +93,7 @@ RayTracingLightingOutput RayTracedLit(PositionInputs posInput, RayTracingShading
     float3 positionWS       = posInput.positionWS;
     float3 normalWS         = shadingData.normalWS;
     float3 viewDirWS        = shadingData.viewDirWS;
+    bool includeSpecular = _RayTracingDiffuseLightingOnly == 0;
 
 
     float  NdotV = dot(normalWS, viewDirWS);
@@ -123,24 +124,20 @@ RayTracingLightingOutput RayTracedLit(PositionInputs posInput, RayTracingShading
                 float NdotL = dot(normalWS, lightDirWS);
                 
                 float clampedNdotL = saturate(NdotL);
-                float clampedRoughness = max(shadingData.roughness, dirLight.minRoughness);
-
-                float LdotV, NdotH, LdotH, invLenLV;
-                GetBSDFAngle(viewDirWS, lightDirWS, NdotL, NdotV, LdotV, NdotH, LdotH, invLenLV);
-
-
-
-                float3 F = F_Schlick(shadingData.fresnel0, LdotH);
-                float DV = DV_SmithJointGGX(NdotH, abs(NdotL), clampedNdotV, clampedRoughness);
-                float3 specTerm = F * DV;
                 // float diffTerm = DisneyDiffuse(clampedNdotV, abs(NdotL), LdotV, shadingData.perceptualRoughness);
                 float diffTerm = Lambert();
 
                 diffTerm *= clampedNdotL;
-                specTerm *= clampedNdotL;
-
                 directDiffuse += shadingData.diffuseColor * diffTerm * dirLight.lightColor;
-                directSpecular += specTerm * dirLight.lightColor;
+                if (includeSpecular)
+                {
+                    float clampedRoughness = max(shadingData.roughness, dirLight.minRoughness);
+                    float LdotV, NdotH, LdotH, invLenLV;
+                    GetBSDFAngle(viewDirWS, lightDirWS, NdotL, NdotV, LdotV, NdotH, LdotH, invLenLV);
+                    float3 F = F_Schlick(shadingData.fresnel0, LdotH);
+                    float DV = DV_SmithJointGGX(NdotH, abs(NdotL), clampedNdotV, clampedRoughness);
+                    directSpecular += F * DV * clampedNdotL * dirLight.lightColor;
+                }
             }
 
         }
@@ -174,22 +171,14 @@ half realtimeShadow = MainLightRealtimeShadow(shadowCoord);
     // TODO: ModifyBakedDiffuseLighting Function
 
 
-    float3 reflectDirWS = reflect(-viewDirWS, normalWS);
-    // Env is cubemap
+    if (includeSpecular)
     {
+        float3 reflectDirWS = reflect(-viewDirWS, normalWS);
         float3 specDominantDirWS = GetSpecularDominantDir(normalWS, reflectDirWS, shadingData.perceptualRoughness, clampedNdotV);
         // When we are rough, we tend to see outward shifting of the reflection when at the boundary of the projection volume
         // Also it appear like more sharp. To avoid these artifact and at the same time get better match to reference we lerp to original unmodified reflection.
         // Formula is empirical.
         reflectDirWS = lerp(specDominantDirWS, reflectDirWS, saturate(smoothstep(0, 1, shadingData.roughness2)));
-    }
-
-    // Evaluate ScreenSpaceReflection (We have problem with this.)
-    float reflectionHierarchyWeight = 0.0; // Max: 1.0
-
-    // Evaluate SkyEnvironment
-    if (reflectionHierarchyWeight < 1.0)
-    {
         float3 envReflection = SampleSkyEnvironment(reflectDirWS, shadingData.perceptualRoughness).rgb;
         indirectSpecular += specularFGD * envReflection;
     }
@@ -198,8 +187,9 @@ half realtimeShadow = MainLightRealtimeShadow(shadowCoord);
     indirectDiffuse *= shadingData.occlusion;
     indirectSpecular *= shadingData.occlusion;
     lightOutput.diffuseLighting = directDiffuse + indirectDiffuse;
-    lightOutput.specularLighting = directSpecular + indirectSpecular;
-    lightOutput.specularLighting *= 1.0 + shadingData.fresnel0 * energyCompensation;
+    if (includeSpecular)
+        lightOutput.specularLighting = (directSpecular + indirectSpecular)
+            * (1.0 + shadingData.fresnel0 * energyCompensation);
 
     return lightOutput;
 }
@@ -213,6 +203,7 @@ RayTracingLightingOutput RayTracedToon(PositionInputs posInput, RayTracingShadin
     float3 positionWS       = posInput.positionWS;
     float3 normalWS         = shadingData.normalWS;
     float3 viewDirWS        = shadingData.viewDirWS;
+    bool includeSpecular = _RayTracingDiffuseLightingOnly == 0;
 
 
     float  NdotV = dot(normalWS, viewDirWS);
@@ -245,22 +236,19 @@ RayTracingLightingOutput RayTracedToon(PositionInputs posInput, RayTracingShadin
                 float NdotL = dot(normalWS, lightDirWS);
                 
                 float clampedNdotL = saturate(NdotL);
-                float clampedRoughness = max(shadingData.roughness, dirLight.minRoughness);
-
-                float LdotV, NdotH, LdotH, invLenLV;
-                GetBSDFAngle(viewDirWS, lightDirWS, NdotL, NdotV, LdotV, NdotH, LdotH, invLenLV);
-
-
-
-                float3 F = F_Schlick(shadingData.fresnel0, LdotH);
-                float DV = DV_SmithJointGGX(NdotH, abs(NdotL), clampedNdotV, clampedRoughness);
-                float3 specTerm = F * DV;
                 float diffTerm = Lambert();
                 diffTerm *= SigmoidSharp(NdotL * 0.5 + 0.5, 0.5, 5);
-                specTerm *= clampedNdotL;
 
                 directDiffuse += shadingData.diffuseColor * diffTerm * dirLight.lightColor;
-                directSpecular += specTerm * dirLight.lightColor;
+                if (includeSpecular)
+                {
+                    float clampedRoughness = max(shadingData.roughness, dirLight.minRoughness);
+                    float LdotV, NdotH, LdotH, invLenLV;
+                    GetBSDFAngle(viewDirWS, lightDirWS, NdotL, NdotV, LdotV, NdotH, LdotH, invLenLV);
+                    float3 F = F_Schlick(shadingData.fresnel0, LdotH);
+                    float DV = DV_SmithJointGGX(NdotH, abs(NdotL), clampedNdotV, clampedRoughness);
+                    directSpecular += F * DV * clampedNdotL * dirLight.lightColor;
+                }
             }
 
         }
@@ -295,22 +283,14 @@ half realtimeShadow = MainLightRealtimeShadow(shadowCoord);
     // TODO: ModifyBakedDiffuseLighting Function
 
 
-    float3 reflectDirWS = reflect(-viewDirWS, normalWS);
-    // Env is cubemap
+    if (includeSpecular)
     {
+        float3 reflectDirWS = reflect(-viewDirWS, normalWS);
         float3 specDominantDirWS = GetSpecularDominantDir(normalWS, reflectDirWS, shadingData.perceptualRoughness, clampedNdotV);
         // When we are rough, we tend to see outward shifting of the reflection when at the boundary of the projection volume
         // Also it appear like more sharp. To avoid these artifact and at the same time get better match to reference we lerp to original unmodified reflection.
         // Formula is empirical.
         reflectDirWS = lerp(specDominantDirWS, reflectDirWS, saturate(smoothstep(0, 1, shadingData.roughness2)));
-    }
-
-    // Evaluate ScreenSpaceReflection (We have problem with this.)
-    float reflectionHierarchyWeight = 0.0; // Max: 1.0
-
-    // Evaluate SkyEnvironment
-    if (reflectionHierarchyWeight < 1.0)
-    {
         float3 envReflection = SampleSkyEnvironment(reflectDirWS, shadingData.perceptualRoughness).rgb;
         indirectSpecular += specularFGD * envReflection;
     }
@@ -319,8 +299,9 @@ half realtimeShadow = MainLightRealtimeShadow(shadowCoord);
     indirectDiffuse *= shadingData.occlusion;
     indirectSpecular *= shadingData.occlusion;
     lightOutput.diffuseLighting = directDiffuse + indirectDiffuse;
-    lightOutput.specularLighting = directSpecular + indirectSpecular;
-    lightOutput.specularLighting *= 1.0 + shadingData.fresnel0 * energyCompensation;
+    if (includeSpecular)
+        lightOutput.specularLighting = (directSpecular + indirectSpecular)
+            * (1.0 + shadingData.fresnel0 * energyCompensation);
 
     return lightOutput;
 }

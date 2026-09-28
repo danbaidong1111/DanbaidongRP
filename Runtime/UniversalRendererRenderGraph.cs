@@ -1703,7 +1703,7 @@ namespace UnityEngine.Rendering.Universal
                 // ReSTIR GI consumes the completed GBuffer, light lists, and shadow resources.
                 if (m_ReSTIRGlobalIlluminationPass.Setup(cameraData))
                 {
-                    resourceData.globalIlluminationTexture = m_ReSTIRGlobalIlluminationPass.Render(renderGraph, frameData);
+                    resourceData.globalIlluminationTexture = m_ReSTIRGlobalIlluminationPass.Render(renderGraph, frameData, colorPyramidHistoryMipCount);
                 }
 
 

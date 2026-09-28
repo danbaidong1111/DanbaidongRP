@@ -451,6 +451,7 @@ namespace UnityEngine.Rendering.Universal
             m_PostProcessPasses.Dispose();
 
             m_ScreenSpaceShadowScatterPass?.Cleanup();
+            m_ReSTIRGlobalIlluminationPass?.Dispose();
 
             m_FinalBlitPass?.Dispose();
             m_DrawOffscreenUIPass?.Dispose();
@@ -1851,7 +1852,7 @@ namespace UnityEngine.Rendering.Universal
 
             // ReSTIR GI reprojects both reservoirs and denoised radiance.
             var giSettings = VolumeManager.instance.stack.GetComponent<GlobalIllumination>();
-            if (giSettings != null && giSettings.IsActive() && GlobalIllumination.RayTracingActive(giSettings))
+            if (giSettings != null && giSettings.IsActive())
             {
                 inputSummary.requiresMotionVectors = true;
                 inputSummary.requiresPrevDepthTexture = true;

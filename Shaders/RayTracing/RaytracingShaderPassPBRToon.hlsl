@@ -72,7 +72,9 @@ void ClosestHitMain(inout RayIntersection rayIntersection : SV_RayPayload, Attri
     RayTracingLightingOutput output = RayTracedToon(posInput, shadingData, rayContext, _SelfLight, _MainLightColorLerp, _SelfEnvColor, _EnvColorLerp);
 
 
-    rayIntersection.color = output.diffuseLighting + output.specularLighting + emissResult;
+    rayIntersection.color = output.diffuseLighting + emissResult;
+    if (_RayTracingDiffuseLightingOnly == 0)
+        rayIntersection.color += output.specularLighting;
 }
 
 // Generic function that handles the reflection code

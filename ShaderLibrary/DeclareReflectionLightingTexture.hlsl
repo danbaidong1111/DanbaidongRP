@@ -4,15 +4,15 @@
 
 TEXTURE2D_X_FLOAT(_ReflectionLightingTexture);
 
-float SampleSceneReflectionLighting(float2 uv)
+float4 SampleSceneReflectionLighting(float2 uv)
 {
-    float reflectionLighting = SAMPLE_TEXTURE2D_X(_ReflectionLightingTexture, sampler_PointClamp, UnityStereoTransformScreenSpaceTex(uv)).r;
+    float4 reflectionLighting = SAMPLE_TEXTURE2D_X(_ReflectionLightingTexture, sampler_PointClamp, UnityStereoTransformScreenSpaceTex(uv));
     return reflectionLighting;
 }
 
-float LoadSceneReflectionLighting(uint2 coordSS)
+float4 LoadSceneReflectionLighting(uint2 coordSS)
 {
-    float reflectionLighting = LOAD_TEXTURE2D_X(_ReflectionLightingTexture, coordSS).r;
+    float4 reflectionLighting = LOAD_TEXTURE2D_X(_ReflectionLightingTexture, coordSS);
     return reflectionLighting;
 }
 

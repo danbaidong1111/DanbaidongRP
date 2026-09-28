@@ -40,7 +40,7 @@ float3 decodeGIReservoirNormal(uint encoded)
 
 GIReservoir CreateEmptyGIReservoir()
 {
-    GIReservoir reservoir;
+    GIReservoir reservoir = (GIReservoir)0;
     reservoir.creationPoint = 0.0;
     reservoir.creationNormal = float3(0.0, 0.0, 1.0);
     reservoir.position = float3(0.0, 0.0, 1.0);
@@ -54,7 +54,7 @@ GIReservoir CreateEmptyGIReservoir()
 
 PackedGIReservoir PackGIReservoir(GIReservoir reservoir)
 {
-    PackedGIReservoir packed;
+    PackedGIReservoir packed = (PackedGIReservoir)0;
     uint packedM = (uint)clamp(reservoir.M, 0, 0xffff);
     packed.creationGeometry.xyz = asuint(reservoir.creationPoint);
     packed.creationGeometry.w = encodeGIReservoirNormal(reservoir.creationNormal);
@@ -69,7 +69,7 @@ PackedGIReservoir PackGIReservoir(GIReservoir reservoir)
 
 GIReservoir UnPackGIReservoir(PackedGIReservoir packed)
 {
-    GIReservoir reservoir;
+    GIReservoir reservoir = (GIReservoir)0;
     reservoir.creationPoint = asfloat(packed.creationGeometry.xyz);
     reservoir.creationNormal = decodeGIReservoirNormal(packed.creationGeometry.w);
     reservoir.position = asfloat(packed.hitGeometry.xyz);

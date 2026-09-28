@@ -541,8 +541,13 @@ DeferredLightingOutput DeferredLit(PositionInputs posInput, ShadingData shadingD
 
     #if defined(_SCREEN_SPACE_GLOBAL_ILLUMINATION)
     {
-        float3 screenSpaceGI = LoadSceneGlobalIllumination(posInput.positionSS);
-        indirectDiffuse = diffuseFGD * screenSpaceGI.rgb * shadingData.diffuseColor;
+        float4 screenSpaceGI = LoadSceneGlobalIlluminationAndValidity(posInput.positionSS);
+        if (screenSpaceGI.a > 0.0)
+            indirectDiffuse = diffuseFGD * screenSpaceGI.rgb * shadingData.diffuseColor;
+
+// lightOutput.diffuseLighting = indirectDiffuse;
+// lightOutput.specularLighting = 0;
+// return lightOutput;
     }
     #endif
 
