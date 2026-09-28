@@ -1,0 +1,33 @@
+#pragma max_recursion_depth 1
+#define SHADER_TARGET 50
+
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/RayTracing/ShaderVariablesRaytracing.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/RayTracing/RaytracingIntersection.hlsl"
+
+RWStructuredBuffer<float4> _Results;
+
+RayDesc MakeTestRay()
+{
+    RayDesc ray;
+    ray.Origin = float3(0, 0, -1);
+    ray.Direction = float3(0, 0, 1);
+    ray.TMin = 0.001;
+    ray.TMax = 2.0;
+    return ray;
+}
+
+[shader("miss")]
+void MissTest(inout RayIntersection payload : SV_RayPayload)
+{
+    payload.t = -1.0;
+    payload.color = 0;
+}
+
+[shader("raygeneration")]
+void TraceTest()
+{
+    RayIntersection payload = (RayIntersection)0;
+    TraceRay(_RaytracingAccelerationStructure, RAY_FLAG_NONE, 0xFF, 0, 1, 0, MakeTestRay(), payload);
+    _Results[0] = float4(payload.color, payload.t);
+}

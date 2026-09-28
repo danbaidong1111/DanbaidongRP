@@ -1,0 +1,153 @@
+#pragma kernel LightMapContract
+#pragma kernel SubMaterialContract
+#pragma kernel FaceSubMaterialContract _SHADINGMODE_FACE
+#pragma kernel PackedRampContract
+#pragma kernel FaceSDFContract _SHADINGMODE_FACE
+#pragma kernel FaceAtlasContract _SHADINGMODE_FACE _ALLDIR_SDF
+
+#pragma kernel DirectAndIndirectContract
+#pragma kernel MetalLightMapContract
+#pragma kernel OutlineCompositionContract PASS_CHARACTEROUTLINE
+
+#define _SHADOW_RAMP 1
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Material/NPRToon/Includes/NPRToonShading.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Material/NPRToon/Includes/NPRToonOutline.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/Material/NPRToon/Includes/NPRToonRim.hlsl"
+
+StructuredBuffer<float4> _Inputs;
+RWStructuredBuffer<float4> _Results;
+
+[numthreads(1, 1, 1)]
+void OutlineCompositionContract(uint3 id : SV_DispatchThreadID)
+{
+    float4 positionCS = 0;
+    float3 positionWS = 0;
+    float3 normalWS = DecodeNormalWS(float4(0, 0, 0, 0), float3(0, 0, 1), float4(1, 0, 0, 1));
+    float3 viewDirWS = float3(0, 0, 1);
+    float4 uv0 = float4(0.5, 0.5, 0, 0);
+    float4 uv1 = uv0, uv2 = uv0, uv3 = uv0;
+    float4 normalTex = float4(0.5, 0.5, 1, 0.5);
+    float4 mainTex = float4(0.2, 0.4, 0.6, 1);
+    float4 lightmapTex = float4(0, 0.5, 0, 0.3);
+    SubMaterialData subMaterial = DecodeSubMaterial(lightmapTex.a);
+    ShadingData shadingData;
+    InitializeShadingData();
+    ShadingResult lighting = IndirectShading(shadingData);
+    float3 color = float3(0.03, 0.04, 0.05);
+    color += lighting.diffuse + lighting.specular;
+    ApplyEmission(shadingData, color);
+    ApplyRim(shadingData, 1.0, color);
+    ApplyOutline(shadingData, subMaterial, color);
+    _Results[0] = float4(color, 1);
+    _Results[1] = float4(normalWS, 1.0);
+}
+
+void WriteSubMaterialResult(uint3 id)
+{
+    SubMaterialData data = DecodeSubMaterial(_Inputs[id.x].x);
+    _Results[id.x * 3] = float4(data.materialID, data.specPow, data.specMul, data.specColor.r);
+    _Results[id.x * 3 + 1] = data.outlineColor;
+    _Results[id.x * 3 + 2] = float4(data.dayRampRow, data.nightRampRow, 0, 0);
+}
+
+[numthreads(1, 1, 1)]
+void SubMaterialContract(uint3 id : SV_DispatchThreadID)
+{
+    WriteSubMaterialResult(id);
+}
+
+[numthreads(1, 1, 1)]
+void FaceSubMaterialContract(uint3 id : SV_DispatchThreadID)
+{
+    WriteSubMaterialResult(id);
+}
+
+[numthreads(1, 1, 1)]
+void LightMapContract(uint3 id : SV_DispatchThreadID)
+{
+    float4 input = _Inputs[id.x];
+    uint materialID = UnpackSubMaterialID(input.x);
+    _Results[id.x] = float4(materialID, GetRampRow(materialID, 0), GetRampRow(materialID, 1), RemapLightMapAO(input.y, input.z));
+    _Results[id.x + 16] = float4(GetRampCoordinate(input.y, input.z, input.w), SoftStep(0.5, input.y, input.w), 0, 0);
+}
+
+[numthreads(1, 1, 1)]
+void PackedRampContract(uint3 id : SV_DispatchThreadID)
+{
+    // First five results are shadow colors; the next five are fully lit colors.
+    uint materialID = id.x + 1;
+    SubMaterialData subMaterial = GetSubMaterialData(materialID);
+    float2 rampRows = float2(subMaterial.dayRampRow, subMaterial.nightRampRow);
+    _Results[id.x] = float4(SampleShadowRamp(rampRows, 0.5, 0.0), 1);
+    _Results[id.x + 5] = float4(SampleShadowRamp(rampRows, 0.5, 1.0), 1);
+}
+
+[numthreads(1, 1, 1)]
+void FaceSDFContract(uint3 id : SV_DispatchThreadID)
+{
+    float nose;
+    float lit = SampleFaceLighting(float4(0.25, 0.5, 0.75, 0.5), _Inputs[id.x].xyz, nose);
+    _Results[id.x] = float4(lit, nose, 0, 1);
+}
+
+[numthreads(1, 1, 1)]
+void FaceAtlasContract(uint3 id : SV_DispatchThreadID)
+{
+    float nose;
+    float lit = SampleFaceLighting(float4(0.25, 0.5, 0.75, 0.5), _Inputs[id.x].xyz, nose);
+    _Results[id.x] = float4(lit, nose, 0, 1);
+}
+
+[numthreads(1, 1, 1)]
+void MetalLightMapContract(uint3 id : SV_DispatchThreadID)
+{
+    SubMaterialData subMaterial = DecodeSubMaterial(_Inputs[id.x].a);
+    float4 positionCS = 0;
+    float3 positionWS = float3(0, 0, 0);
+    float3 normalWS = float3(0, 0, 1);
+    float3 viewDirWS = float3(0, 0, 1);
+    float4 uv0 = float4(0.5, 0.5, 0, 0);
+    float4 uv1 = uv0, uv2 = uv0, uv3 = uv0;
+    float4 normalTex = float4(0.5, 0.5, 1, 0.5);
+    float4 mainTex = float4(1, 1, 1, 1);
+    float4 lightmapTex = _Inputs[id.x];
+    ShadingData shadingData;
+    InitializeShadingData();
+    shadingData.lightDirWS = float3(0, 1, 0);
+    shadingData.lightColor = 1.0;
+    shadingData.distanceAttenuation = 1.0;
+    shadingData.shadowAttenuation = 1.0;
+    shadingData.baseContribution = 1.0;
+    ShadingResult result = DirectShading(shadingData, subMaterial);
+    _Results[id.x] = float4(result.specular, shadingData.lightLit);
+}
+
+[numthreads(1, 1, 1)]
+void DirectAndIndirectContract(uint3 id : SV_DispatchThreadID)
+{
+    ShadingData data = (ShadingData)0;
+    data.normalWS = float3(0, 0, 1);
+    data.viewDirWS = float3(0, 0, 1);
+    data.albedo = float3(0.5, 0.25, 0.75);
+    data.lightMapAO = 0.5;
+    data.specularIntensity = 0.5;
+    data.specularMask = 1.0;
+    data.indirectOcclusion = 0.5;
+    data.lightDirWS = float3(0, 0, 1);
+    data.lightColor = float3(2, 3, 4);
+    data.isPunctual = id.x == 1 || id.x == 2;
+    data.distanceAttenuation = data.isPunctual ? 0.25 : 1.0;
+    data.shadowAttenuation = id.x == 0 || id.x == 2 ? 0.0 : (id.x == 1 ? 0.5 : 1.0);
+    data.baseContribution = data.isPunctual ? 0.8 : 1.0;
+    SubMaterialData subMaterial = (SubMaterialData)0;
+    subMaterial.specPow = 1.0;
+    subMaterial.specMul = 1.0;
+    subMaterial.specColor = 1.0;
+    subMaterial.dayRampRow = 0.5;
+    subMaterial.nightRampRow = 0.5;
+    ShadingResult direct = DirectShading(data, subMaterial);
+    ShadingResult indirect = IndirectShading(data);
+    _Results[id.x * 3] = float4(direct.diffuse, 0);
+    _Results[id.x * 3 + 1] = float4(direct.specular, 0);
+    _Results[id.x * 3 + 2] = float4(indirect.diffuse, dot(indirect.specular, 1.0));
+}
