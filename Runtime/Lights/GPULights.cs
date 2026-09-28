@@ -516,6 +516,29 @@ namespace UnityEngine.Rendering.Universal.Internal
             }
         }
 
+        internal static GPULightsOutPassData UseRayTracingLights(IComputeRenderGraphBuilder builder, ContextContainer frameData)
+        {
+            var lights = frameData.Get<GPULightsOutPassData>();
+            // Closest-hit shaders read these buffers even when the ray-generation shader does not.
+            builder.UseBuffer(lights.GPULightsData, AccessFlags.Read);
+            builder.UseBuffer(lights.directionalLightsData, AccessFlags.Read);
+
+            var resources = frameData.Get<UniversalResourceData>();
+            if (resources.directionalShadowsTexture.IsValid())
+                builder.UseTexture(resources.directionalShadowsTexture, AccessFlags.Read);
+            if (resources.additionalShadowsTexture.IsValid())
+                builder.UseTexture(resources.additionalShadowsTexture, AccessFlags.Read);
+            return lights;
+        }
+
+        internal static void BindRayTracingLights(ComputeCommandBuffer cmd, RayTracingShader shader, GPULightsOutPassData lights)
+        {
+            // Bind the current camera's data explicitly; raster globals do not declare graph lifetimes.
+            ConstantBuffer.PushGlobal(cmd, lights.lightListCB, ShaderConstants.ShaderVariablesLightList);
+            cmd.SetRayTracingBufferParam(shader, ShaderConstants.g_GPULightDatas, lights.GPULightsData);
+            cmd.SetRayTracingBufferParam(shader, ShaderConstants.g_DirectionalLightDatas, lights.directionalLightsData);
+        }
+
         private void InitResources(RenderGraph renderGraph, GPULightsPassData passData, UniversalLightData lightData, GPULightsOutPassData outData, UniversalCameraData cameraData)
         {
             // Copy the constant buffer into the parameter struct.

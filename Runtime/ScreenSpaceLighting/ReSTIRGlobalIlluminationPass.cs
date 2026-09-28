@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.Universal.Internal;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -269,6 +270,7 @@ namespace UnityEngine.Rendering.Universal
         {
             internal ComputeShader computeShader;
             internal RayTracingShader rayTracingShader;
+            internal GPULights.GPULightsOutPassData rayTracingLights;
             internal int temporalKernel;
             internal int spatialKernel;
             internal int copyKernel;
@@ -629,6 +631,7 @@ namespace UnityEngine.Rendering.Universal
                 using (new ProfilingScope(cmd, s_RayTracingSampler))
                 {
                     cmd.SetRayTracingShaderPass(data.rayTracingShader, "IndirectDXR");
+                    GPULights.BindRayTracingLights(cmd, data.rayTracingShader, data.rayTracingLights);
                     cmd.SetGlobalBuffer(ShaderConstants._AmbientProbeData, data.ambientProbe);
                     cmd.SetGlobalTexture(ShaderConstants._SkyTexture, data.reflectProbe);
                     cmd.SetRayTracingAccelerationStructure(data.rayTracingShader, "_RaytracingAccelerationStructure", data.rtas);
@@ -857,7 +860,10 @@ namespace UnityEngine.Rendering.Universal
                 builder.UseTexture(passData.resampleSpatialOutputReservoirData1, AccessFlags.ReadWrite);
                 builder.UseTexture(passData.resampleSpatialOutputReservoirData2, AccessFlags.ReadWrite);
                 if (passData.useRayTracing)
+                {
                     builder.UseBuffer(passData.ambientProbe, AccessFlags.Read);
+                    passData.rayTracingLights = GPULights.UseRayTracingLights(builder, frameData);
+                }
                 if (passData.enableSpatialReuse)
                     builder.UseBuffer(passData.neighborOffsets, AccessFlags.Read);
                 builder.UseTexture(passData.reflectProbe, AccessFlags.Read);

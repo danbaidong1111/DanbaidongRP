@@ -1,6 +1,7 @@
 using System;
 using UnityEngine.Experimental.Rendering;
 using UnityEngine.Rendering.RenderGraphModule;
+using UnityEngine.Rendering.Universal.Internal;
 
 namespace UnityEngine.Rendering.Universal
 {
@@ -155,6 +156,7 @@ namespace UnityEngine.Rendering.Universal
             internal BufferHandle dispatchRayIndirectBuffer;
             internal bool requireRayTracing;
             internal RayTracingShader rtrtShader;
+            internal GPULights.GPULightsOutPassData rayTracingLights;
             internal RayTracingAccelerationStructure rtas;
             // Sky Ambient & Reflect
             internal BufferHandle ambientProbe;
@@ -392,6 +394,7 @@ namespace UnityEngine.Rendering.Universal
                     {
                         // Define the shader pass to use for the reflection pass
                         cmd.SetRayTracingShaderPass(data.rtrtShader, "IndirectDXR");
+                        GPULights.BindRayTracingLights(cmd, data.rtrtShader, data.rayTracingLights);
                         // Sky Environment
                         cmd.SetGlobalBuffer(ShaderConstants._AmbientProbeData, data.ambientProbe);
                         cmd.SetGlobalTexture(ShaderConstants._SkyTexture, data.reflectProbe);
@@ -513,6 +516,7 @@ namespace UnityEngine.Rendering.Universal
                     var runtimeShaders = GraphicsSettings.GetRenderPipelineSettings<UniversalRenderPipelineRuntimeShaders>();
                     passData.rtrtShader = runtimeShaders.rayTracingReflections;
                     passData.rtas = cameraData.rayTracingSystem.RequestAccelerationStructure();
+                    passData.rayTracingLights = GPULights.UseRayTracingLights(builder, frameData);
                 }
 
                 // Sky Environment
