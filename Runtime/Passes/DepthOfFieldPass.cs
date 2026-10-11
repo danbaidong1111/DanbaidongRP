@@ -62,7 +62,7 @@ namespace UnityEngine.Rendering.Universal
             internal int frame;
             internal int eye;
             internal Vector4 depthSize;
-            internal DepthOfFieldHistory history;
+            internal CameraState cameraState;
             internal TextureHandle input;
             internal TextureHandle coc;
             internal TextureHandle stableCoC;
@@ -168,29 +168,29 @@ namespace UnityEngine.Rendering.Universal
                 scale = frameData.GetOrCreate<FrameScale>(),
                 eye = cameraData.xr.multipassId,
                 temporal = temporal,
-                frame = Time.frameCount,
                 array = descriptor.dimension == TextureDimension.Tex2DArray,
                 views = descriptor.dimension == TextureDimension.Tex2DArray ? descriptor.volumeDepth : 1,
                 depthSize = Size(depthDesc.width, depthDesc.height),
                 black = graph.defaultResources.blackTexture
             };
             var system = HistoryFrameRTSystem.GetOrCreate(cameraData.camera, data.eye);
+            data.frame = system.historyFrameCount;
             if (settings.stabilize || temporal)
             {
-                data.history = system.depthOfFieldHistory ?? (system.depthOfFieldHistory = new DepthOfFieldHistory(system));
-                data.historyValid = data.history.Prepare(cameraData, data.eye, descriptor, DepthOfFieldParameters.SettingsKey(settings, cameraData.camera), temporal);
+                data.historyValid = PrepareHistory(system, cameraData, descriptor,
+                    DepthOfFieldParameters.SettingsKey(settings, cameraData.camera), temporal, out data.cameraState);
             }
             else
-                system.depthOfFieldHistory?.Reset();
+                ResetHistory(system);
             data.input = CreateTexture(graph, descriptor, "Input", settings.width, settings.height);
             data.coc = CreateTexture(graph, descriptor, "CoC", settings.width, settings.height, GraphicsFormat.R16_SFloat);
             data.spatial = CreateTexture(graph, descriptor, "Spatial", settings.width, settings.height);
-            if (data.history != null)
+            if (data.cameraState != null)
             {
-                data.stableCoC = graph.ImportTexture(data.history.Current(data.eye, DepthOfFieldHistory.Surface.CoC));
-                data.resolvedDepth = graph.ImportTexture(data.history.Current(data.eye, DepthOfFieldHistory.Surface.Depth));
-                data.previousCoC = graph.ImportTexture(data.history.Previous(data.eye, DepthOfFieldHistory.Surface.CoC));
-                data.previousDepth = graph.ImportTexture(data.history.Previous(data.eye, DepthOfFieldHistory.Surface.Depth));
+                data.stableCoC = graph.ImportTexture(system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldCoC));
+                data.resolvedDepth = graph.ImportTexture(system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldDepth));
+                data.previousCoC = graph.ImportTexture(system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldCoC));
+                data.previousDepth = graph.ImportTexture(system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldDepth));
             }
             else
             {
@@ -202,15 +202,16 @@ namespace UnityEngine.Rendering.Universal
 
             if (temporal)
             {
-                data.resolved = graph.ImportTexture(data.history.Current(data.eye, DepthOfFieldHistory.Surface.Color));
-                data.previousColor = graph.ImportTexture(data.history.Previous(data.eye, DepthOfFieldHistory.Surface.Color));
-                data.currentVelocity = graph.ImportTexture(data.history.Current(data.eye, DepthOfFieldHistory.Surface.Velocity));
-                data.previousVelocity = graph.ImportTexture(data.history.Previous(data.eye, DepthOfFieldHistory.Surface.Velocity));
-                var exposure = system.exposureHistory;
-                if (exposure?.Current() != null && exposure.Previous() != null && VolumeManager.instance.stack.GetComponent<Exposure>().isAutomatic)
+                data.resolved = graph.ImportTexture(system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldColor));
+                data.previousColor = graph.ImportTexture(system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldColor));
+                data.currentVelocity = graph.ImportTexture(system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldVelocity));
+                data.previousVelocity = graph.ImportTexture(system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldVelocity));
+                var exposureCurrent = system.GetCurrentFrameRT(HistoryFrameType.Exposure);
+                var exposurePrevious = system.GetPreviousFrameRT(HistoryFrameType.Exposure);
+                if (exposureCurrent != null && exposurePrevious != null && VolumeManager.instance.stack.GetComponent<Exposure>().isAutomatic)
                 {
-                    data.exposureCurrent = graph.ImportTexture(exposure.Current());
-                    data.exposurePrevious = graph.ImportTexture(exposure.Previous());
+                    data.exposureCurrent = graph.ImportTexture(exposureCurrent);
+                    data.exposurePrevious = graph.ImportTexture(exposurePrevious);
                     data.exposure = true;
                 }
             }
@@ -294,7 +295,7 @@ namespace UnityEngine.Rendering.Universal
             var volume = VolumeManager.instance.stack.GetComponent<DepthOfField>();
             if (!isValid || volume == null || !volume.IsActive() || volume.mode.value != DepthOfFieldMode.Bokeh)
             {
-                DepthOfFieldHistory.Get(cameraData.camera, cameraData.xr.multipassId)?.Reset();
+                ResetHistory(HistoryFrameRTSystem.GetOrCreate(cameraData.camera, cameraData.xr.multipassId));
                 return source;
             }
 
@@ -304,7 +305,7 @@ namespace UnityEngine.Rendering.Universal
             settings.temporal.w = cameraData.taaSettings.baseBlendFactor;
             if (settings.lens.z <= 0 && settings.lens.w <= 0)
             {
-                DepthOfFieldHistory.Get(cameraData.camera, cameraData.xr.multipassId)?.Reset();
+                ResetHistory(HistoryFrameRTSystem.GetOrCreate(cameraData.camera, cameraData.xr.multipassId));
                 return source;
             }
 
@@ -365,11 +366,15 @@ namespace UnityEngine.Rendering.Universal
             RenderLayeredCombine(graph, resources);
         }
 
-        DepthOfFieldCompatibility compatibility => m_Compatibility ?? (m_Compatibility = new DepthOfFieldCompatibility(m_ComputeShaders));
+        DepthOfFieldCompatibility compatibility => m_Compatibility ?? (m_Compatibility = new DepthOfFieldCompatibility(m_ComputeShaders, this));
 
         internal void Render(CommandBuffer cmd, UniversalCameraData cameraData, RenderTextureDescriptor descriptor, DepthOfField volume, RTHandle source, RTHandle destination, RTHandle depth, RTHandle motion) => compatibility.Render(cmd, cameraData, descriptor, volume, source, destination, depth, motion);
         internal void Render(CommandBuffer cmd, UniversalCameraData cameraData, DepthOfField volume, RTHandle source, RTHandle destination, RTHandle depth, RTHandle motion) => compatibility.Render(cmd, cameraData, volume, source, destination, depth, motion);
         internal void Render(CommandBuffer cmd, Camera camera, RenderTextureDescriptor descriptor, DepthOfField volume, Material material, RTHandle source, RTHandle destination, RTHandle depth, Vector2 depthJitter = default) => compatibility.Render(cmd, camera, descriptor, volume, material, source, destination, depth, depthJitter);
-        public void Dispose() => m_Compatibility?.Dispose();
+        public void Dispose()
+        {
+            m_Compatibility?.Dispose();
+            DisposeCameraStates();
+        }
     }
 }

@@ -106,7 +106,9 @@ namespace UnityEngine.Rendering.Universal
 
         internal VolumetricHistory volumetricHistory;
         internal ExposureHistory exposureHistory;
-        internal DepthOfFieldHistory depthOfFieldHistory;
+
+        // Consumers discard their camera-local metadata when this buffer owner is disposed.
+        internal event Action<HistoryFrameRTSystem> disposed;
 
         public Camera camera;
         public int historyFrameCount = 0;
@@ -303,14 +305,15 @@ namespace UnityEngine.Rendering.Universal
 
         internal void Dispose()
         {
-            depthOfFieldHistory?.Reset();
-            depthOfFieldHistory = null;
             exposureHistory?.Dispose();
             exposureHistory = null;
             volumetricHistory?.Dispose();
             volumetricHistory = null;
             m_BufferedRTHandleSystem?.Dispose();
             m_BufferedRTHandleSystem = null;
+            var notifyDisposed = disposed;
+            disposed = null;
+            notifyDisposed?.Invoke(this);
         }
 
         /// <summary>

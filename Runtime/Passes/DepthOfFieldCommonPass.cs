@@ -311,7 +311,7 @@ namespace UnityEngine.Rendering.Universal
             {
                 ExecuteReprojectCoC(context.cmd, pass.resources);
                 if (!pass.resources.temporal)
-                    pass.resources.history?.Commit(pass.resources.eye, pass.resources.frame);
+                    pass.resources.cameraState?.Commit(pass.resources.frame);
             });
         }
 
@@ -405,7 +405,7 @@ namespace UnityEngine.Rendering.Universal
             builder.SetRenderFunc(static (PassData pass, ComputeGraphContext context) =>
             {
                 ExecuteTemporal(context.cmd, pass.resources);
-                pass.resources.history?.Commit(pass.resources.eye, pass.resources.frame);
+                pass.resources.cameraState?.Commit(pass.resources.frame);
             });
         }
 

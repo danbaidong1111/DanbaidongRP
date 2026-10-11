@@ -63,7 +63,12 @@ namespace UnityEngine.Rendering.Universal
         readonly ComputeShader[] m_Shaders;
         readonly RTHandle[] m_Textures = new RTHandle[TargetCount];
         readonly GraphicsBuffer[] m_Buffers = new GraphicsBuffer[6];
-        internal DepthOfFieldCompatibility(ComputeShader[] shaders) { m_Shaders = shaders; }
+        readonly DepthOfFieldPass m_Owner;
+        internal DepthOfFieldCompatibility(ComputeShader[] shaders, DepthOfFieldPass owner)
+        {
+            m_Shaders = shaders;
+            m_Owner = owner;
+        }
         internal void Render(CommandBuffer cmd, UniversalCameraData cameraData, RenderTextureDescriptor descriptor, DepthOfField volume,
             RTHandle source, RTHandle destination, RTHandle depth, RTHandle motion)
         {
@@ -108,29 +113,32 @@ namespace UnityEngine.Rendering.Universal
                 w.buffers[i] = m_Buffers[i];
             }
             w.previousCoC = w.targets[(int)Target.CoC]; w.previousDepth = depth;
-            DepthOfFieldHistory history = null;
+            DepthOfFieldPass.CameraState cameraState = null;
             int eye = Mathf.Clamp(cameraData?.xr?.multipassId ?? 0, 0, 1);
             if ((s.stabilize || temporal) && cameraData != null)
             {
                 var system = HistoryFrameRTSystem.GetOrCreate(cameraData.camera, eye);
-                history = system.depthOfFieldHistory ?? (system.depthOfFieldHistory = new DepthOfFieldHistory(system));
-                w.historyValid = history.Prepare(cameraData, eye, descriptor, DepthOfFieldParameters.SettingsKey(s, camera), temporal);
+                w.frame = system.historyFrameCount;
+                w.historyValid = m_Owner.PrepareHistory(system, cameraData, descriptor,
+                    DepthOfFieldParameters.SettingsKey(s, camera), temporal, out cameraState);
                 w.temporal = temporal;
-                w.targets[(int)Target.StableCoC] = history.Current(eye, DepthOfFieldHistory.Surface.CoC);
-                w.targets[(int)Target.Resolved] = history.Current(eye, DepthOfFieldHistory.Surface.Color);
-                w.targets[(int)Target.Depth] = history.Current(eye, DepthOfFieldHistory.Surface.Depth);
-                w.previousCoC = history.Previous(eye, DepthOfFieldHistory.Surface.CoC);
-                w.previousColor = history.Previous(eye, DepthOfFieldHistory.Surface.Color);
-                w.previousDepth = history.Previous(eye, DepthOfFieldHistory.Surface.Depth);
-                w.previousVelocity = history.Previous(eye, DepthOfFieldHistory.Surface.Velocity);
-                w.currentVelocity = history.Current(eye, DepthOfFieldHistory.Surface.Velocity);
-                var exposure = ExposureHistory.Get(cameraData.camera, cameraData.xr.multipassId);
-                if (exposure?.Current(eye) != null && exposure.Previous(eye) != null
-                    && VolumeManager.instance.stack.GetComponent<Exposure>().isAutomatic)
-                { w.exposure = true; w.exposureCurrent = exposure.Current(eye); w.exposurePrevious = exposure.Previous(eye); }
+                w.targets[(int)Target.StableCoC] = system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldCoC);
+                w.targets[(int)Target.Resolved] = system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldColor);
+                w.targets[(int)Target.Depth] = system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldDepth);
+                w.previousCoC = system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldCoC);
+                w.previousColor = system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldColor);
+                w.previousDepth = system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldDepth);
+                w.previousVelocity = system.GetPreviousFrameRT(HistoryFrameType.DepthOfFieldVelocity);
+                w.currentVelocity = system.GetCurrentFrameRT(HistoryFrameType.DepthOfFieldVelocity);
+                w.exposureCurrent = system.GetCurrentFrameRT(HistoryFrameType.Exposure);
+                w.exposurePrevious = system.GetPreviousFrameRT(HistoryFrameType.Exposure);
+                w.exposure = w.exposureCurrent != null && w.exposurePrevious != null
+                    && VolumeManager.instance.stack.GetComponent<Exposure>().isAutomatic;
             }
+            else if (cameraData != null)
+                m_Owner.ResetHistory(HistoryFrameRTSystem.GetOrCreate(cameraData.camera, eye));
             Execute(cmd, w);
-            history?.Commit(eye, Time.frameCount);
+            cameraState?.Commit(w.frame);
             Blitter.BlitCameraTexture(cmd, w.targets[(int)OutputTarget(w)], destination);
         }
         public void Dispose()
