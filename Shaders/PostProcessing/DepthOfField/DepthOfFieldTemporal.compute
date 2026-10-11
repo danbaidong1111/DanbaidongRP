@@ -1,0 +1,101 @@
+// Copyright (c) Unity Technologies. Licensed under the Unity Companion License. See LICENSE.md.
+#pragma target 4.5
+#pragma multi_compile _ STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON
+#pragma kernel Resolve
+#if !defined(STEREO_INSTANCING_ON) && !defined(STEREO_MULTIVIEW_ON)
+#define DISABLE_TEXTURE2D_X_ARRAY
+#endif
+#include "DepthOfFieldVariables.hlsl"
+#define ENABLE_ALPHA 1
+#define CTYPE float4
+#define CTYPE_SWIZZLE xyzw
+#include "TemporalAntialiasingOptionDef.hlsl"
+#define YCOCG 1
+#define HISTORY_SAMPLING_METHOD BILINEAR
+#define WIDE_NEIGHBOURHOOD 0
+#define NEIGHBOUROOD_CORNER_METHOD VARIANCE
+#define CENTRAL_FILTERING NO_FILTERING
+#define HISTORY_CLIP DIRECT_CLIP
+#define ANTI_FLICKER 1
+#define ANTI_FLICKER_MV_DEPENDENT 1
+#define VELOCITY_REJECTION 1
+#define PERCEPTUAL_SPACE 1
+#define MV_DILATION DEPTH_DILATION
+#define HISTORY_CONTRAST_ANTI_FLICKER 1
+#include "TemporalAntialiasing.hlsl"
+
+TEXTURE2D_X(_InputTexture);
+TEXTURE2D_X(_InputHistoryTexture);
+TEXTURE2D_X(_InputVelocityMagnitudeHistory);
+TEXTURE2D_X(_DofResolvedDepth);
+TEXTURE2D_X(_DofPreviousDepth);
+TEXTURE2D(_DofExposureCurrent);
+TEXTURE2D(_DofExposurePrevious);
+RW_TEXTURE2D_X(float4, _OutputTexture);
+RW_TEXTURE2D_X(float, _OutputVelocityMagnitudeHistory);
+float4 _DofTemporalParams; // History validity, base blend, exposure compensation, alpha processing.
+float4 _DofTemporalTuning; // Temporal contrast, speed rejection, sharpening, contrast blending.
+
+[numthreads(8, 8, 1)]
+void Resolve(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (any(id.xy >= uint2(_DofScreenSize.xy))) return;
+    float4 offsets[4] = { float4(0, -1, -1, 0), float4(1, 0, 0, 1), float4(-1, -1, 1, -1), float4(-1, 1, 1, 1) };
+    SetNeighbourOffsets(offsets);
+    float2 uv = (id.xy + 0.5) * _DofScreenSize.zw;
+    float2 closest = GetClosestFragmentOffset(_DofResolvedDepth, id.xy);
+    float2 mvUV = ClampAndScaleUVForPoint(uv + closest * _DofScreenSize.zw);
+    float2 velocity = SAMPLE_TEXTURE2D_X_LOD(_CameraMotionVectorsTexture, s_point_clamp_sampler, mvUV, 0).xy;
+    float motionLength = length(velocity);
+    _OutputVelocityMagnitudeHistory[COORD_TEXTURE2D_X(id.xy)] = motionLength * 10;
+    float4 original = LOAD_TEXTURE2D_X(_InputTexture, id.xy);
+    if (_DofTemporalParams.x < 0.5)
+    {
+        _OutputTexture[COORD_TEXTURE2D_X(id.xy)] = original;
+        return;
+    }
+    float2 previousUV = uv - velocity;
+    bool reject = any(abs(previousUV * 2 - 1) >= 1.0 - _DofScreenSize.zw);
+    float currentDepth = DofLinearEyeDepth(LOAD_TEXTURE2D_X(_DofResolvedDepth, id.xy).r);
+    float previousDepth = DofLinearEyeDepth(SAMPLE_TEXTURE2D_X_LOD(_DofPreviousDepth, s_point_clamp_sampler, previousUV, 0).r);
+    reject = reject || abs(currentDepth - previousDepth) > max(0.1, currentDepth * 0.1);
+    float4 history = Fetch4(_InputHistoryTexture, previousUV, 0, 1.0);
+    if (_DofTemporalParams.z > 0.5)
+    {
+        float currentEV = LOAD_TEXTURE2D(_DofExposureCurrent, uint2(0, 0)).y;
+        float previousEV = LOAD_TEXTURE2D(_DofExposurePrevious, uint2(0, 0)).y;
+        history.rgb *= exp2(clamp(previousEV - currentEV, -16, 16));
+    }
+    if (AnyIsNaN(history) || AnyIsInf(history)) reject = true;
+    history = ConvertToWorkingSpace(clamp(history, 0, CLAMP_MAX));
+    history.xyz *= PerceptualWeight(history);
+    float4 current = ConvertToWorkingSpace(clamp(original, 0, CLAMP_MAX));
+    NeighbourhoodSamples samples;
+    GatherNeighbourhood(_InputTexture, uv, id.xy, current, 1.0, samples);
+    float4 filtered = FilterCentralColor(samples, float4(0, 0, 0, 0));
+    if (reject) history = filtered;
+    float colorLuma = GetLuma(filtered);
+    float historyLuma = GetLuma(history);
+    float motionPixels = motionLength * length(_DofScreenSize.xy);
+    float clampedHistoryLuma;
+    GetNeighbourhoodCorners(samples, historyLuma, colorLuma, float2(3.5, _DofTemporalTuning.x), motionPixels, 1, clampedHistoryLuma);
+    history = GetClippedHistory(filtered, history, samples.minNeighbour, samples.maxNeighbour);
+    if (_DofTemporalTuning.z > 0) filtered = SharpenColor(samples, filtered, _DofTemporalTuning.z);
+    float blend = GetBlendFactor(colorLuma, clampedHistoryLuma, GetLuma(samples.minNeighbour), GetLuma(samples.maxNeighbour), _DofTemporalParams.y, _DofTemporalTuning.w);
+    blend = lerp(blend, saturate(2 * blend), saturate(motionPixels / 50));
+    if (_DofTemporalParams.w > 0.5)
+    {
+        filtered.a = lerp(history.a, filtered.a, reject ? 1 : blend);
+        float3 unfiltered = current.xyz * PerceptualWeight(current);
+        filtered.rgb = lerp(unfiltered, filtered.rgb, filtered.a);
+    }
+    if (_DofTemporalTuning.y > 0)
+        blend = ModifyBlendWithMotionVectorRejection(_InputVelocityMagnitudeHistory, motionLength * 10, previousUV, blend, _DofTemporalTuning.y, 1.0);
+    blend = reject ? 1.0 : clamp(blend, 0.03, 0.98);
+    float4 result = lerp(history, filtered, blend);
+    result.xyz *= PerceptualInvWeight(result);
+    result.xyz = clamp(ConvertToOutputSpace(result.xyz), 0, CLAMP_MAX);
+    result.a = _DofTemporalParams.w > 0.5 ? filtered.a : original.a;
+    _OutputTexture[COORD_TEXTURE2D_X(id.xy)] = result;
+}

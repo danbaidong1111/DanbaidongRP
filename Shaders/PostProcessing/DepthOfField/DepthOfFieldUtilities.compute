@@ -1,0 +1,92 @@
+#pragma target 4.5
+#pragma multi_compile _ STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON
+#pragma kernel ClearColor
+#pragma kernel ClearScalar
+#pragma kernel CopyColorMip
+#pragma kernel CopyScalarMip
+#pragma kernel CopyColor
+#pragma kernel CopyDepth
+#pragma kernel DebugCoC
+#pragma kernel DownsampleColor
+#pragma kernel DownsampleCoC
+#if !defined(STEREO_INSTANCING_ON) && !defined(STEREO_MULTIVIEW_ON)
+#define DISABLE_TEXTURE2D_X_ARRAY
+#endif
+#include "DepthOfFieldVariables.hlsl"
+TEXTURE2D_X(_InputTexture);
+RW_TEXTURE2D_X(float4, _OutputColor);
+RW_TEXTURE2D_X(float, _OutputScalar);
+float4 _UtilityParams;
+
+[numthreads(8, 8, 1)]
+void CopyColor(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (any(id.xy >= uint2(_DofDispatchSize.xy))) return;
+    float2 uv = (id.xy + 0.5) * _DofDispatchSize.zw * _DofSourceScale.xy;
+    float4 color = SAMPLE_TEXTURE2D_X_LOD(_InputTexture, s_linear_clamp_sampler, uv, 0);
+    if (_UtilityParams.x > 0.5) color.rgb = SRGBToLinear(color.rgb);
+    if (_UtilityParams.x < -0.5) color.rgb = LinearToSRGB(color.rgb);
+    _OutputColor[COORD_TEXTURE2D_X(id.xy)] = min(max(color, 0), 65472.0);
+}
+[numthreads(8, 8, 1)]
+void CopyDepth(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (any(id.xy >= uint2(_DofDispatchSize.xy))) return;
+    float2 uv = (id.xy + 0.5) * _DofDispatchSize.zw - _TaaJitterStrength.zw;
+    _OutputScalar[COORD_TEXTURE2D_X(id.xy)] = SAMPLE_TEXTURE2D_X_LOD(_CameraDepthTexture, s_point_clamp_sampler, ClampAndScaleUVForPoint(uv), 0).r;
+}
+[numthreads(8, 8, 1)]
+void DebugCoC(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (any(id.xy >= uint2(_DofDispatchSize.xy))) return;
+    float coc = LOAD_TEXTURE2D_X(_InputTexture, id.xy).r;
+    _OutputColor[COORD_TEXTURE2D_X(id.xy)] = float4(saturate(coc / max(_UtilityParams.y, 1e-6)), 0, saturate(-coc / max(_UtilityParams.x, 1e-6)), 1);
+}
+float4 Reduce(uint2 pixel)
+{
+    float2 uv = (pixel + 0.5) * _DofDispatchSize.zw;
+    return SAMPLE_TEXTURE2D_X_LOD(_InputTexture, s_linear_clamp_sampler, uv, _UtilityParams.z);
+}
+[numthreads(8, 8, 1)]
+void DownsampleColor(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (any(id.xy >= uint2(_DofDispatchSize.xy))) return;
+    _OutputColor[COORD_TEXTURE2D_X(id.xy)] = Reduce(id.xy);
+}
+[numthreads(8, 8, 1)]
+void DownsampleCoC(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (any(id.xy >= uint2(_DofDispatchSize.xy))) return;
+    _OutputScalar[COORD_TEXTURE2D_X(id.xy)] = Reduce(id.xy).r;
+}
+
+int _UtilitySourceMip;
+[numthreads(8, 8, 1)]
+void ClearColor(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (all(id.xy < uint2(_DofDispatchSize.xy))) _OutputColor[COORD_TEXTURE2D_X(id.xy)] = 0;
+}
+[numthreads(8, 8, 1)]
+void ClearScalar(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (all(id.xy < uint2(_DofDispatchSize.xy))) _OutputScalar[COORD_TEXTURE2D_X(id.xy)] = 0;
+}
+[numthreads(8, 8, 1)]
+void CopyColorMip(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (all(id.xy < uint2(_DofDispatchSize.xy))) _OutputColor[COORD_TEXTURE2D_X(id.xy)] = LOAD_TEXTURE2D_X_LOD(_InputTexture, id.xy, _UtilitySourceMip);
+}
+[numthreads(8, 8, 1)]
+void CopyScalarMip(uint3 id : SV_DispatchThreadID)
+{
+    UNITY_XR_ASSIGN_VIEW_INDEX(id.z);
+    if (all(id.xy < uint2(_DofDispatchSize.xy))) _OutputScalar[COORD_TEXTURE2D_X(id.xy)] = LOAD_TEXTURE2D_X_LOD(_InputTexture, id.xy, _UtilitySourceMip).r;
+}

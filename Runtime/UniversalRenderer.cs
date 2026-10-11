@@ -1870,6 +1870,9 @@ namespace UnityEngine.Rendering.Universal
             // Object motion blur requires motion vectors.
             if (postProcessingEnabled)
             {
+                var depthOfField = VolumeManager.instance.stack.GetComponent<DepthOfField>();
+                if (depthOfField != null && depthOfField.IsActive() && depthOfField.mode.value == DepthOfFieldMode.Bokeh)
+                    inputSummary.requiresMotionVectors = true;
                 var motionBlur = VolumeManager.instance.stack.GetComponent<MotionBlur>();
                 if(motionBlur != null && motionBlur.IsActive() && motionBlur.mode.value == MotionBlurMode.CameraAndObjects)
                     inputSummary.requiresMotionVectors = true;

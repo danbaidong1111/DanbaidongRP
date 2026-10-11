@@ -71,6 +71,35 @@ namespace UnityEngine.Rendering.Universal
             [Reload("Shaders/PostProcessing/BokehDepthOfField.shader")]
             public Shader bokehDepthOfFieldPS;
 
+            [Reload("Shaders/PostProcessing/AdvancedDepthOfField.shader")]
+            public Shader advancedDepthOfFieldPS;
+
+            [Reload(new[]
+            {
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldKernel.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCoC.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCoCReproject.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldPrefilter.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldMip.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCoCDilate.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldClearIndirectArgs.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldTileMax.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldGather.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldPreCombineFar.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCombine.compute",
+                "Shaders/PostProcessing/DepthOfField/DoFCircleOfConfusion.compute",
+                "Shaders/PostProcessing/DepthOfField/DoFCoCMinMax.compute",
+                "Shaders/PostProcessing/DepthOfField/DoFMinMaxDilate.compute",
+                "Shaders/PostProcessing/DepthOfField/DoFApertureShape.compute",
+                "Shaders/PostProcessing/DepthOfField/DoFComputeSlowTiles.compute",
+                "Shaders/PostProcessing/DepthOfField/DoFGather.compute",
+                "Shaders/PostProcessing/DepthOfField/DoFCombine.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldTemporal.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldUtilities.compute",
+                "Shaders/PostProcessing/DepthOfField/DepthOfFieldMipSafe.compute"
+            })]
+            public ComputeShader[] depthOfFieldCS;
+
             /// <summary>
             /// The Motion Blur Post Processing shader.
             /// </summary>

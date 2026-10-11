@@ -385,7 +385,6 @@ namespace UnityEngine.Rendering.Universal
                 bloomMaterial.SetVector(ShaderConstants._Bloom_Danbaidong_BlurCompositeWeight, m_Bloom.blurCompositeWeight.value);
                 bloomMaterial.SetColor(ShaderConstants._Bloom_Danbaidong_ColorTint, m_Bloom.tint.value);
 
-
                 // Temporary preFilter
                 RenderTextureDescriptor desc = GetCompatibleDescriptor(texWidth, texHeight, m_DefaultColorFormat);
                 var preFilterHandle = UniversalRenderer.CreateRenderGraphTexture(renderGraph, desc, "_PreFilteredRT", false, FilterMode.Bilinear, TextureWrapMode.Clamp);
@@ -651,26 +650,28 @@ namespace UnityEngine.Rendering.Universal
         #endregion
 
         #region DoF
-        public void RenderDoF(RenderGraph renderGraph, UniversalResourceData resourceData, UniversalCameraData cameraData, in TextureHandle source, out TextureHandle destination)
+        public void RenderDoF(RenderGraph renderGraph, ContextContainer frameData, in TextureHandle source, out TextureHandle destination)
         {
-            var dofMaterial = m_DepthOfField.mode.value == DepthOfFieldMode.Gaussian ? m_Materials.gaussianDepthOfField : m_Materials.bokehDepthOfField;
+            if (m_DepthOfField.mode.value == DepthOfFieldMode.Bokeh)
+            {
+                destination = m_AdvancedDepthOfField.Render(renderGraph, frameData, source);
+                return;
+            }
+            var resourceData = frameData.Get<UniversalResourceData>();
+            var cameraData = frameData.Get<UniversalCameraData>();
+            var dofMaterial = m_Materials.gaussianDepthOfField;
 
-            var desc = PostProcessPass.GetCompatibleDescriptor(m_Descriptor,
-                m_Descriptor.width,
-                m_Descriptor.height,
-                m_Descriptor.graphicsFormat,
-                GraphicsFormat.None);
-            destination = UniversalRenderer.CreateRenderGraphTexture(renderGraph, desc, "_DoFTarget", true, FilterMode.Bilinear);
+            var sourceDesc = renderGraph.GetTextureDesc(source);
+            sourceDesc.name = "_DoFTarget";
+            sourceDesc.clearBuffer = false;
+            sourceDesc.filterMode = FilterMode.Bilinear;
+            destination = renderGraph.CreateTexture(sourceDesc);
 
             CoreUtils.SetKeyword(dofMaterial, ShaderKeywordStrings._ENABLE_ALPHA_OUTPUT, cameraData.isAlphaOutputEnabled);
 
             if (m_DepthOfField.mode.value == DepthOfFieldMode.Gaussian)
             {
                 RenderDoFGaussian(renderGraph, resourceData, cameraData, source, destination, ref dofMaterial);
-            }
-            else if (m_DepthOfField.mode.value == DepthOfFieldMode.Bokeh)
-            {
-                RenderDoFBokeh(renderGraph, resourceData, cameraData, source, destination, ref dofMaterial);
             }
         }
 
@@ -827,155 +828,6 @@ namespace UnityEngine.Rendering.Universal
             }
         }
 
-        private class DoFBokehPassData
-        {
-            // Setup
-            internal Vector4[] bokehKernel;
-            internal int downSample;
-            internal float uvMargin;
-            internal Vector4 cocParams;
-            internal bool useFastSRGBLinearConversion;
-            // Inputs
-            internal TextureHandle sourceTexture;
-            internal TextureHandle depthTexture;
-            internal Material material;
-            internal Material materialCoC;
-            // Pass textures
-            internal TextureHandle halfCoCTexture;
-            internal TextureHandle fullCoCTexture;
-            internal TextureHandle pingTexture;
-            internal TextureHandle pongTexture;
-            // Output texture
-            internal TextureHandle destination;
-        };
-
-        public void RenderDoFBokeh(RenderGraph renderGraph, UniversalResourceData resourceData, UniversalCameraData cameraData, in TextureHandle source, in TextureHandle destination, ref Material dofMaterial)
-        {
-            int downSample = 2;
-            var material = dofMaterial;
-            int wh = m_Descriptor.width / downSample;
-            int hh = m_Descriptor.height / downSample;
-
-            // Pass Textures
-            var fullCoCTextureDesc = PostProcessPass.GetCompatibleDescriptor(m_Descriptor, m_Descriptor.width, m_Descriptor.height, GraphicsFormat.R8_UNorm);
-            var fullCoCTexture = UniversalRenderer.CreateRenderGraphTexture(renderGraph, fullCoCTextureDesc, "_FullCoCTexture", true, FilterMode.Bilinear);
-            var pingTextureDesc = PostProcessPass.GetCompatibleDescriptor(m_Descriptor, wh, hh, GraphicsFormat.R16G16B16A16_SFloat);
-            var pingTexture = UniversalRenderer.CreateRenderGraphTexture(renderGraph, pingTextureDesc, "_PingTexture", true, FilterMode.Bilinear);
-            var pongTextureDesc = PostProcessPass.GetCompatibleDescriptor(m_Descriptor, wh, hh, GraphicsFormat.R16G16B16A16_SFloat);
-            var pongTexture = UniversalRenderer.CreateRenderGraphTexture(renderGraph, pongTextureDesc, "_PongTexture", true, FilterMode.Bilinear);
-
-            using (var builder = renderGraph.AddUnsafePass<DoFBokehPassData>("Depth of Field - Bokeh", out var passData))
-            {
-                // Setup
-                // "A Lens and Aperture Camera Model for Synthetic Image Generation" [Potmesil81]
-                float F = m_DepthOfField.focalLength.value / 1000f;
-                float A = m_DepthOfField.focalLength.value / m_DepthOfField.aperture.value;
-                float P = m_DepthOfField.focusDistance.value;
-                float maxCoC = (A * F) / (P - F);
-                float maxRadius = GetMaxBokehRadiusInPixels(m_Descriptor.height);
-                float rcpAspect = 1f / (wh / (float)hh);
-
-                // Prepare the bokeh kernel constant buffer
-                int hash = m_DepthOfField.GetHashCode();
-                if (hash != m_BokehHash || maxRadius != m_BokehMaxRadius || rcpAspect != m_BokehRCPAspect)
-                {
-                    m_BokehHash = hash;
-                    m_BokehMaxRadius = maxRadius;
-                    m_BokehRCPAspect = rcpAspect;
-                    PrepareBokehKernel(maxRadius, rcpAspect);
-                }
-                float uvMargin = (1.0f / m_Descriptor.height) * downSample;
-
-                passData.bokehKernel = m_BokehKernel;
-                passData.downSample = downSample;
-                passData.uvMargin = uvMargin;
-                passData.cocParams = new Vector4(P, maxCoC, maxRadius, rcpAspect);
-                passData.useFastSRGBLinearConversion = m_UseFastSRGBLinearConversion;
-
-                // Inputs
-                passData.sourceTexture = source;
-                builder.UseTexture(source, AccessFlags.Read);
-
-                passData.depthTexture = resourceData.cameraDepthTexture;
-                builder.UseTexture(resourceData.cameraDepthTexture, AccessFlags.Read);
-
-                passData.material = material;
-                passData.materialCoC = m_Materials.bokehDepthOfFieldCoC;
-
-                // Pass Textures
-                passData.fullCoCTexture = fullCoCTexture;
-                builder.UseTexture(fullCoCTexture, AccessFlags.ReadWrite);
-                passData.pingTexture = pingTexture;
-                builder.UseTexture(pingTexture, AccessFlags.ReadWrite);
-                passData.pongTexture = pongTexture;
-                builder.UseTexture(pongTexture, AccessFlags.ReadWrite);
-
-                // Outputs
-                passData.destination = destination;
-                builder.UseTexture(destination, AccessFlags.Write);
-
-                // TODO RENDERGRAPH: properly setup dependencies between passes
-                builder.SetRenderFunc(static (DoFBokehPassData data, UnsafeGraphContext context) =>
-                {
-                    var dofMat = data.material;
-                    var dofMaterialCoC = data.materialCoC;
-                    var cmd = CommandBufferHelpers.GetNativeCommandBuffer(context.cmd);
-                    RTHandle sourceTextureHdl = data.sourceTexture;
-                    RTHandle dst = data.destination;
-
-                    // Setup
-                    using (new ProfilingScope(ProfilingSampler.Get(URPProfileId.RG_SetupDoF)))
-                    {
-                        CoreUtils.SetKeyword(dofMat, ShaderKeywordStrings.UseFastSRGBLinearConversion,
-                            data.useFastSRGBLinearConversion);
-                        CoreUtils.SetKeyword(dofMaterialCoC, ShaderKeywordStrings.UseFastSRGBLinearConversion,
-                            data.useFastSRGBLinearConversion);
-
-                        dofMat.SetVector(ShaderConstants._CoCParams, data.cocParams);
-                        dofMat.SetVectorArray(ShaderConstants._BokehKernel, data.bokehKernel);
-                        dofMat.SetVector(ShaderConstants._DownSampleScaleFactor,
-                            new Vector4(1.0f / data.downSample, 1.0f / data.downSample, data.downSample,
-                                data.downSample));
-                        dofMat.SetVector(ShaderConstants._BokehConstants,
-                            new Vector4(data.uvMargin, data.uvMargin * 2.0f));
-                        PostProcessUtils.SetSourceSize(cmd, data.sourceTexture);
-                    }
-
-                    // Compute CoC
-                    using (new ProfilingScope(ProfilingSampler.Get(URPProfileId.RG_DOFComputeCOC)))
-                    {
-                        dofMat.SetTexture(s_CameraDepthTextureID, data.depthTexture);
-                        Blitter.BlitCameraTexture(cmd, sourceTextureHdl, data.fullCoCTexture, dofMat, k_BokehDoFPassComputeCoc);
-                    }
-
-                    // Downscale and Prefilter Color + CoC
-                    using (new ProfilingScope(ProfilingSampler.Get(URPProfileId.RG_DOFDownscalePrefilter)))
-                    {
-                        dofMat.SetTexture(ShaderConstants._FullCoCTexture, data.fullCoCTexture);
-                        Blitter.BlitCameraTexture(cmd, sourceTextureHdl, data.pingTexture, dofMat, k_BokehDoFPassDownscalePrefilter);
-                    }
-
-                    // Blur
-                    using (new ProfilingScope(ProfilingSampler.Get(URPProfileId.RG_DOFBlurBokeh)))
-                    {
-                        Blitter.BlitCameraTexture(cmd, data.pingTexture, data.pongTexture, dofMat, k_BokehDoFPassBlur);
-                    }
-
-                    // Post Filtering
-                    using (new ProfilingScope(ProfilingSampler.Get(URPProfileId.RG_DOFPostFilter)))
-                    {
-                        Blitter.BlitCameraTexture(cmd, data.pongTexture, data.pingTexture, dofMat, k_BokehDoFPassPostFilter);
-                    }
-
-                    // Composite
-                    using (new ProfilingScope(ProfilingSampler.Get(URPProfileId.RG_DOFComposite)))
-                    {
-                        dofMat.SetTexture(ShaderConstants._DofTexture, data.pingTexture);
-                        Blitter.BlitCameraTexture(cmd, sourceTextureHdl, dst, dofMat, k_BokehDoFPassComposite);
-                    }
-                });
-            }
-        }
         #endregion
 
         #region Panini
@@ -1268,7 +1120,6 @@ namespace UnityEngine.Rendering.Universal
                             ctx.cmd,
                             false, false, null, null);
 
-
 #if ENABLE_VR && ENABLE_XR_MODULE
                         if (xr.enabled && xr.singlePassEnabled)
                         {
@@ -1519,7 +1370,6 @@ namespace UnityEngine.Rendering.Universal
                 else
                     cmd.SetViewport(cameraData.pixelRect);
             }
-
 
             Blitter.BlitTexture(cmd, sourceTextureHdl, scaleBias, material, 0);
         }
@@ -2108,8 +1958,9 @@ namespace UnityEngine.Rendering.Universal
             //We blit back and forth without msaa untill the last blit.
             bool useStopNan = cameraData.isStopNaNEnabled && m_Materials.stopNaN != null;
             bool useSubPixelMorpAA = cameraData.antialiasing == AntialiasingMode.SubpixelMorphologicalAntiAliasing;
-            var dofMaterial = m_DepthOfField.mode.value == DepthOfFieldMode.Gaussian ? m_Materials.gaussianDepthOfField : m_Materials.bokehDepthOfField;
-            bool useDepthOfField = m_DepthOfField.IsActive() && !isSceneViewCamera && dofMaterial != null;
+            bool dofResourcesReady = m_DepthOfField.mode.value == DepthOfFieldMode.Gaussian
+                ? m_Materials.gaussianDepthOfField != null : m_AdvancedDepthOfField.IsReady;
+            bool useDepthOfField = m_DepthOfField.IsActive() && !isSceneViewCamera && dofResourcesReady;
             bool useLensFlare = !LensFlareCommonSRP.Instance.IsEmpty() && m_SupportDataDrivenLensFlare;
             bool useLensFlareScreenSpace = m_LensFlareScreenSpace.IsActive() && m_SupportScreenSpaceLensFlare;
             bool useMotionBlur = m_MotionBlur.IsActive() && !isSceneViewCamera;
@@ -2175,15 +2026,11 @@ namespace UnityEngine.Rendering.Universal
                 currentSource = SMAATarget;
             }
 
-            // Depth of Field
-            // Adreno 3xx SystemInfo.graphicsShaderLevel is 35, but instancing support is disabled due to buggy drivers.
-            // DOF shader uses #pragma target 3.5 which adds requirement for instancing support, thus marking the shader unsupported on those devices.
-            if (useDepthOfField)
+            if (useDepthOfField && m_DepthOfField.mode.value == DepthOfFieldMode.Gaussian)
             {
-                RenderDoF(renderGraph, resourceData, cameraData, in currentSource, out var DoFTarget);
-                currentSource = DoFTarget;
+                RenderDoF(renderGraph, frameData, in currentSource, out var gaussianTarget);
+                currentSource = gaussianTarget;
             }
-
             // Temporal Anti Aliasing
             if (useTemporalAA)
             {
@@ -2197,6 +2044,14 @@ namespace UnityEngine.Rendering.Universal
                     RenderTemporalAA(renderGraph, resourceData, cameraData, ref currentSource, out var TemporalAATarget);
                     currentSource = TemporalAATarget;
                 }
+            }
+
+            // Depth of Field
+
+            if (useDepthOfField && m_DepthOfField.mode.value == DepthOfFieldMode.Bokeh)
+            {
+                RenderDoF(renderGraph, frameData, in currentSource, out var DoFTarget);
+                currentSource = DoFTarget;
             }
 
             if(useMotionBlur)

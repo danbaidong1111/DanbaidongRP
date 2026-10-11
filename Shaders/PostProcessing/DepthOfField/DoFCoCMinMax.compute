@@ -1,0 +1,78 @@
+// Copyright (c) Unity Technologies. Licensed under the Unity Companion License. See LICENSE.md.
+#if !defined(STEREO_INSTANCING_ON) && !defined(STEREO_MULTIVIEW_ON)
+#define DISABLE_TEXTURE2D_X_ARRAY
+#endif
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/DepthOfField/DepthOfFieldVariables.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/DepthOfField/PostProcessDefines.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Shaders/PostProcessing/DepthOfField/DepthOfFieldCommon.hlsl"
+
+#pragma target 4.5
+#pragma multi_compile _ STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON
+#pragma kernel KMainCoCMinMax
+
+TEXTURE2D_X(_InputTexture);
+
+// output texture with min / max tiles
+RW_TEXTURE2D_X(float4, _OutputTexture);
+
+float2 _OutputResolution;
+
+// min-max tile size
+#define TILE_RES  8u
+
+#define GROUP_RES  8u
+#define GROUP_SIZE (GROUP_RES * GROUP_RES)
+
+#define BIG_NUMBER 65504  // Largest finite value representable in fp16.
+
+CoCTileData InitMinMaxTile()
+{
+    CoCTileData tileData;
+
+    tileData.minFarCoC = BIG_NUMBER;
+    tileData.maxFarCoC = 0;
+    tileData.minNearCoC = -BIG_NUMBER;
+    tileData.maxNearCoC = 0;
+
+    return tileData;
+}
+
+void UpdateMinMaxTile(inout CoCTileData tile, float CoC)
+{
+    if (CoC >= 0)
+    {
+        tile.minFarCoC = min(tile.minFarCoC, CoC);
+        tile.maxFarCoC = max(tile.maxFarCoC, CoC);
+    }
+    else
+    {
+        tile.minNearCoC = max(tile.minNearCoC, CoC);
+        tile.maxNearCoC = min(tile.maxNearCoC, CoC);
+    }
+}
+
+[numthreads(GROUP_RES, GROUP_RES, 1)]
+void KMainCoCMinMax(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    if (any(dispatchThreadId.xy >= uint2(_OutputResolution)))
+        return;
+    UNITY_XR_ASSIGN_VIEW_INDEX(dispatchThreadId.z);
+    if (any(dispatchThreadId.xy >= uint2(_DofDispatchSize.xy))) return;
+
+    CoCTileData minMaxTile = InitMinMaxTile();
+
+    for (uint j = 0; j < TILE_RES; j++)
+    {
+        for (uint i = 0; i < TILE_RES; i++)
+        {
+            uint2 tiledCoords = dispatchThreadId.xy * TILE_RES + uint2(i, j);
+            tiledCoords = min(tiledCoords, _PostProcessScreenSize.xy - uint2(1, 1));
+            float CoC = _InputTexture[COORD_TEXTURE2D_X(tiledCoords)].x;
+
+            UpdateMinMaxTile(minMaxTile, CoC);
+        }
+    }
+
+    _OutputTexture[COORD_TEXTURE2D_X(dispatchThreadId.xy)] = PackCoCTileData(minMaxTile);
+}

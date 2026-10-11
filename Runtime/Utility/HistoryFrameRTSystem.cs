@@ -71,6 +71,11 @@ namespace UnityEngine.Rendering.Universal
         ReSTIRGIMoments,
         /// <summary>Phase-independent volumetric lighting feedback.</summary>
         VolumetricLighting,
+        /// <summary>Depth of field temporal surfaces.</summary>
+        DepthOfFieldCoC,
+        DepthOfFieldColor,
+        DepthOfFieldVelocity,
+        DepthOfFieldDepth,
         ///// <summary>Path-traced Albedo AOV.</summary>
         //AlbedoAOV,
         ///// <summary>Path-traced Normal AOV.</summary>
@@ -98,6 +103,7 @@ namespace UnityEngine.Rendering.Universal
         private int m_RTActualHeight;
 
         internal VolumetricHistory volumetricHistory;
+        internal DepthOfFieldHistory depthOfFieldHistory;
 
         public Camera camera;
         public int historyFrameCount = 0;
@@ -294,6 +300,8 @@ namespace UnityEngine.Rendering.Universal
 
         internal void Dispose()
         {
+            depthOfFieldHistory?.Reset();
+            depthOfFieldHistory = null;
             volumetricHistory?.Dispose();
             volumetricHistory = null;
             m_BufferedRTHandleSystem?.Dispose();

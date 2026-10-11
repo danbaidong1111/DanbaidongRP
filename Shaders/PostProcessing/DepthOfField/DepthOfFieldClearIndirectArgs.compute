@@ -1,0 +1,23 @@
+// Copyright (c) Unity Technologies. Licensed under the Unity Companion License. See LICENSE.md.
+#if !defined(STEREO_INSTANCING_ON) && !defined(STEREO_MULTIVIEW_ON)
+#define DISABLE_TEXTURE2D_X_ARRAY
+#endif
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+
+#pragma target 4.5
+#pragma multi_compile _ STEREO_INSTANCING_ON STEREO_MULTIVIEW_ON
+
+#pragma kernel KClear
+
+// Indirect arguments have to be in a RWBuffer
+// The first three uints are near threadgroups, the last three are far threadgroups
+RWBuffer<uint> _IndirectBuffer;
+
+
+[numthreads(2, 1, 1)]
+void KClear(uint dispatchThreadId : SV_DispatchThreadID)
+{
+    _IndirectBuffer[dispatchThreadId * 3    ] = 0; // ThreadGroupCountX
+    _IndirectBuffer[dispatchThreadId * 3 + 1] = 1; // ThreadGroupCountY
+    _IndirectBuffer[dispatchThreadId * 3 + 2] = 1; // ThreadGroupCountZ
+}
