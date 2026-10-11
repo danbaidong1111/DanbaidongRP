@@ -44,7 +44,7 @@ namespace UnityEngine.Rendering.Universal
         internal sealed class Work
         {
             internal Settings settings;
-            internal ComputeShader[] shaders;
+            internal DepthOfFieldPass.ShaderResources shaders;
             internal readonly RTHandle[] targets = new RTHandle[TargetCount];
             internal readonly GraphicsBuffer[] buffers = new GraphicsBuffer[6];
             internal RTHandle source, depth, motion, previousCoC, previousColor, previousVelocity, previousDepth, currentVelocity, exposureCurrent, exposurePrevious;
@@ -60,11 +60,11 @@ namespace UnityEngine.Rendering.Universal
             if (i == 3 || i == 4) return new BufferDesc(tiles, 4, GraphicsBuffer.Target.Append) { name = "Depth of Field Active Tiles" };
             return new BufferDesc(256, 8) { name = "Aperture Shape" };
         }
-        readonly ComputeShader[] m_Shaders;
+        readonly DepthOfFieldPass.ShaderResources m_Shaders;
         readonly RTHandle[] m_Textures = new RTHandle[TargetCount];
         readonly GraphicsBuffer[] m_Buffers = new GraphicsBuffer[6];
         readonly DepthOfFieldPass m_Owner;
-        internal DepthOfFieldCompatibility(ComputeShader[] shaders, DepthOfFieldPass owner)
+        internal DepthOfFieldCompatibility(DepthOfFieldPass.ShaderResources shaders, DepthOfFieldPass owner)
         {
             m_Shaders = shaders;
             m_Owner = owner;

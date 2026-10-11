@@ -45,7 +45,7 @@ namespace UnityEngine.Rendering.Universal
         /// Class containing shader resources used for Post Processing in URP.
         /// </summary>
         [Serializable, ReloadGroup]
-        public sealed class ShaderResources
+        public sealed class ShaderResources : ISerializationCallbackReceiver
         {
             /// <summary>
             /// The StopNan Post Processing shader.
@@ -71,34 +71,94 @@ namespace UnityEngine.Rendering.Universal
             [Reload("Shaders/PostProcessing/BokehDepthOfField.shader")]
             public Shader bokehDepthOfFieldPS;
 
-            [Reload("Shaders/PostProcessing/AdvancedDepthOfField.shader")]
-            public Shader advancedDepthOfFieldPS;
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldKernel.compute")]
+            public ComputeShader depthOfFieldKernelCS;
 
-            [Reload(new[]
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldCoC.compute")]
+            public ComputeShader depthOfFieldCoCCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldCoCReproject.compute")]
+            public ComputeShader depthOfFieldCoCReprojectCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldPrefilter.compute")]
+            public ComputeShader depthOfFieldPrefilterCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldMip.compute")]
+            public ComputeShader depthOfFieldMipCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldCoCDilate.compute")]
+            public ComputeShader depthOfFieldDilateCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldClearIndirectArgs.compute")]
+            public ComputeShader depthOfFieldClearIndirectArgsCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldTileMax.compute")]
+            public ComputeShader depthOfFieldTileMaxCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldGather.compute")]
+            public ComputeShader depthOfFieldGatherCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldPreCombineFar.compute")]
+            public ComputeShader depthOfFieldPreCombineFarCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldCombine.compute")]
+            public ComputeShader depthOfFieldCombineCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldMipSafe.compute")]
+            public ComputeShader depthOfFieldMipSafeCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DoFCircleOfConfusion.compute")]
+            public ComputeShader dofCircleOfConfusionCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DoFCoCMinMax.compute")]
+            public ComputeShader dofCoCMinMaxCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DoFMinMaxDilate.compute")]
+            public ComputeShader dofMinMaxDilateCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DoFGather.compute")]
+            public ComputeShader dofGatherCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DoFCombine.compute")]
+            public ComputeShader dofCombineCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldTemporal.compute")]
+            public ComputeShader depthOfFieldTemporalCS;
+
+            [Reload("Shaders/PostProcessing/DepthOfField/DepthOfFieldUtilities.compute")]
+            public ComputeShader depthOfFieldUtilitiesCS;
+
+            [SerializeField, HideInInspector, UnityEngine.Serialization.FormerlySerializedAs("depthOfFieldCS")]
+            ComputeShader[] m_LegacyDepthOfFieldShaders;
+
+            public void OnBeforeSerialize() { }
+
+            public void OnAfterDeserialize()
             {
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldKernel.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCoC.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCoCReproject.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldPrefilter.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldMip.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCoCDilate.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldClearIndirectArgs.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldTileMax.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldGather.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldPreCombineFar.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldCombine.compute",
-                "Shaders/PostProcessing/DepthOfField/DoFCircleOfConfusion.compute",
-                "Shaders/PostProcessing/DepthOfField/DoFCoCMinMax.compute",
-                "Shaders/PostProcessing/DepthOfField/DoFMinMaxDilate.compute",
-                "Shaders/PostProcessing/DepthOfField/DoFApertureShape.compute",
-                "Shaders/PostProcessing/DepthOfField/DoFComputeSlowTiles.compute",
-                "Shaders/PostProcessing/DepthOfField/DoFGather.compute",
-                "Shaders/PostProcessing/DepthOfField/DoFCombine.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldTemporal.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldUtilities.compute",
-                "Shaders/PostProcessing/DepthOfField/DepthOfFieldMipSafe.compute"
-            })]
-            public ComputeShader[] depthOfFieldCS;
+                // Preserve references from assets that used the former serialized array.
+                if (m_LegacyDepthOfFieldShaders == null || m_LegacyDepthOfFieldShaders.Length != 21)
+                    return;
+                depthOfFieldKernelCS ??= m_LegacyDepthOfFieldShaders[0];
+                depthOfFieldCoCCS ??= m_LegacyDepthOfFieldShaders[1];
+                depthOfFieldCoCReprojectCS ??= m_LegacyDepthOfFieldShaders[2];
+                depthOfFieldPrefilterCS ??= m_LegacyDepthOfFieldShaders[3];
+                depthOfFieldMipCS ??= m_LegacyDepthOfFieldShaders[4];
+                depthOfFieldDilateCS ??= m_LegacyDepthOfFieldShaders[5];
+                depthOfFieldClearIndirectArgsCS ??= m_LegacyDepthOfFieldShaders[6];
+                depthOfFieldTileMaxCS ??= m_LegacyDepthOfFieldShaders[7];
+                depthOfFieldGatherCS ??= m_LegacyDepthOfFieldShaders[8];
+                depthOfFieldPreCombineFarCS ??= m_LegacyDepthOfFieldShaders[9];
+                depthOfFieldCombineCS ??= m_LegacyDepthOfFieldShaders[10];
+                depthOfFieldMipSafeCS ??= m_LegacyDepthOfFieldShaders[20];
+                dofCircleOfConfusionCS ??= m_LegacyDepthOfFieldShaders[11];
+                dofCoCMinMaxCS ??= m_LegacyDepthOfFieldShaders[12];
+                dofMinMaxDilateCS ??= m_LegacyDepthOfFieldShaders[13];
+                dofGatherCS ??= m_LegacyDepthOfFieldShaders[16];
+                dofCombineCS ??= m_LegacyDepthOfFieldShaders[17];
+                depthOfFieldTemporalCS ??= m_LegacyDepthOfFieldShaders[18];
+                depthOfFieldUtilitiesCS ??= m_LegacyDepthOfFieldShaders[19];
+                m_LegacyDepthOfFieldShaders = null;
+            }
 
             [Reload("Shaders/PostProcessing/ExposureHistogram.compute")]
             public ComputeShader exposureHistogramCS;

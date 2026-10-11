@@ -17,29 +17,25 @@ MonoBehaviour:
     subpixelMorphologicalAntialiasingPS: {fileID: 4800000, guid: 63eaba0ebfb82cc43bde059b4a8c65f6, type: 3}
     gaussianDepthOfFieldPS: {fileID: 4800000, guid: 5e7134d6e63e0bc47a1dd2669cedb379, type: 3}
     bokehDepthOfFieldPS: {fileID: 4800000, guid: 2aed67ad60045d54ba3a00c91e2d2631, type: 3}
-    advancedDepthOfFieldPS: {fileID: 4800000, guid: 185b873c9c454973b41956a724ebdf24, type: 3}
-    depthOfFieldCS:
-    - {fileID: 7200000, guid: 88df234b616e4441933e10f8804ac674, type: 3}
-    - {fileID: 7200000, guid: 06266165879745e89d9126fa2764e8f6, type: 3}
-    - {fileID: 7200000, guid: e39c4763f429491c89849901a744a859, type: 3}
-    - {fileID: 7200000, guid: bd69e7c079934aed89ad825ed8776daf, type: 3}
-    - {fileID: 7200000, guid: e2d61a99b9aa44279d278973f6f15bec, type: 3}
-    - {fileID: 7200000, guid: 3436ddc95285415e925c5d8bc322a906, type: 3}
-    - {fileID: 7200000, guid: 263a8ca27a6d4352bdb69b5aed33d043, type: 3}
-    - {fileID: 7200000, guid: a2b91f760162438da0ef2ab45cdc12a2, type: 3}
-    - {fileID: 7200000, guid: c88718528f804ebabb9dbc1032afad0f, type: 3}
-    - {fileID: 7200000, guid: c2ad715e7dc24555a2f4259b41e59d35, type: 3}
-    - {fileID: 7200000, guid: 55be1a0d976441ee90354fb010fe053c, type: 3}
-    - {fileID: 7200000, guid: 4f96cfbcf1834a3f9f16d07b0a3fc59f, type: 3}
-    - {fileID: 7200000, guid: f5fc7f10f6c24c3f89cca91775515242, type: 3}
-    - {fileID: 7200000, guid: b8f96673614f44cfa817c5c2e55bc5b8, type: 3}
-    - {fileID: 7200000, guid: 7e1e1c25f37d401da3dd9af8c16af047, type: 3}
-    - {fileID: 7200000, guid: c994b487d00c4c0a9e9c1c51920f78e8, type: 3}
-    - {fileID: 7200000, guid: dc59cd228d914f72bc4c07b104573b95, type: 3}
-    - {fileID: 7200000, guid: bfd1c84d5cce4924a662dfd7b9196420, type: 3}
-    - {fileID: 7200000, guid: 143fd8cd4d7c4dbfab4ca6da17c903df, type: 3}
-    - {fileID: 7200000, guid: e8327c4b390a4910ac25b45d9415adb9, type: 3}
-    - {fileID: 7200000, guid: bb9f90f3f7d5489886806bd12b84b3cd, type: 3}
+    depthOfFieldKernelCS: {fileID: 7200000, guid: 88df234b616e4441933e10f8804ac674, type: 3}
+    depthOfFieldCoCCS: {fileID: 7200000, guid: 06266165879745e89d9126fa2764e8f6, type: 3}
+    depthOfFieldCoCReprojectCS: {fileID: 7200000, guid: e39c4763f429491c89849901a744a859, type: 3}
+    depthOfFieldPrefilterCS: {fileID: 7200000, guid: bd69e7c079934aed89ad825ed8776daf, type: 3}
+    depthOfFieldMipCS: {fileID: 7200000, guid: e2d61a99b9aa44279d278973f6f15bec, type: 3}
+    depthOfFieldDilateCS: {fileID: 7200000, guid: 3436ddc95285415e925c5d8bc322a906, type: 3}
+    depthOfFieldClearIndirectArgsCS: {fileID: 7200000, guid: 263a8ca27a6d4352bdb69b5aed33d043, type: 3}
+    depthOfFieldTileMaxCS: {fileID: 7200000, guid: a2b91f760162438da0ef2ab45cdc12a2, type: 3}
+    depthOfFieldGatherCS: {fileID: 7200000, guid: c88718528f804ebabb9dbc1032afad0f, type: 3}
+    depthOfFieldPreCombineFarCS: {fileID: 7200000, guid: c2ad715e7dc24555a2f4259b41e59d35, type: 3}
+    depthOfFieldCombineCS: {fileID: 7200000, guid: 55be1a0d976441ee90354fb010fe053c, type: 3}
+    depthOfFieldMipSafeCS: {fileID: 7200000, guid: bb9f90f3f7d5489886806bd12b84b3cd, type: 3}
+    dofCircleOfConfusionCS: {fileID: 7200000, guid: 4f96cfbcf1834a3f9f16d07b0a3fc59f, type: 3}
+    dofCoCMinMaxCS: {fileID: 7200000, guid: f5fc7f10f6c24c3f89cca91775515242, type: 3}
+    dofMinMaxDilateCS: {fileID: 7200000, guid: b8f96673614f44cfa817c5c2e55bc5b8, type: 3}
+    dofGatherCS: {fileID: 7200000, guid: dc59cd228d914f72bc4c07b104573b95, type: 3}
+    dofCombineCS: {fileID: 7200000, guid: bfd1c84d5cce4924a662dfd7b9196420, type: 3}
+    depthOfFieldTemporalCS: {fileID: 7200000, guid: 143fd8cd4d7c4dbfab4ca6da17c903df, type: 3}
+    depthOfFieldUtilitiesCS: {fileID: 7200000, guid: e8327c4b390a4910ac25b45d9415adb9, type: 3}
     exposureHistogramCS: {fileID: 7200000, guid: 2caa2dd03be14c7ea00a52f7a1d7213b, type: 3}
     exposureApplyPS: {fileID: 4800000, guid: 2326d0a8de81415484c3934891867dba, type: 3}
     cameraMotionBlurPS: {fileID: 4800000, guid: 1edcd131364091c46a17cbff0b1de97a, type: 3}

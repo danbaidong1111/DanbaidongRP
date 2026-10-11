@@ -13,6 +13,46 @@
 // Unused, keeping this just in case
 #pragma kernel KParametricFloodfillKernel     MAIN=KParametricFloodfillKernel   GROUP_SIZE=16
 
+#pragma kernel ComputeShapeBuffer APERTURE_SHAPE_KERNEL
+
+#if defined(APERTURE_SHAPE_KERNEL)
+RWStructuredBuffer<float2> _ApertureShapeTable;
+uint _ApertureShapeTableCount;
+
+CBUFFER_START(cb0)
+    float4 _Params;
+CBUFFER_END
+
+#define BladeCount  _Params.x
+#define NGonFactor _Params.y
+#define Rotation   _Params.z
+#define Anamorphism _Params.w
+
+float2 AngleToApertureShape(float angle)
+{
+    // Transform to rotated ngon
+    // "CryEngine 3 Graphics Gems" [Sousa13]
+    float n = BladeCount;
+    float nt = cos(PI / n);
+    float dt = cos(angle - (TWO_PI / n) * floor((n * angle + PI) / TWO_PI));
+    float r = PositivePow(nt / dt, NGonFactor);
+    float u = r * cos(angle - Rotation);
+    float v = r * sin(angle - Rotation);
+
+    v *= 1.0 + Anamorphism;
+    u *= 1.0 - Anamorphism;
+
+    return float2(u, v);
+}
+
+[numthreads(64, 1, 1)]
+void ComputeShapeBuffer(uint3 dispatchThreadId : SV_DispatchThreadID)
+{
+    float t = (dispatchThreadId.x / (float)_ApertureShapeTableCount) * 2 * PI;
+    _ApertureShapeTable[dispatchThreadId.x] = AngleToApertureShape(t);
+}
+
+#else
 // Each uint holds two fp16 (x,y) normalized coordinates
 RWStructuredBuffer<uint> _BokehKernel;
 
@@ -110,3 +150,5 @@ void MAIN(uint dispatchThreadId : SV_DispatchThreadID)
     // Pack two fp16 in a single uint, we don't need full fp32 precision
     _BokehKernel[dispatchThreadId] = PackKernelCoord(smp);
 }
+
+#endif

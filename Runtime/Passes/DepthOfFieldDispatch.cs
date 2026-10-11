@@ -21,7 +21,7 @@ namespace UnityEngine.Rendering.Universal
         }
         internal static void Copy(CommandBuffer cmd, Work w, RTHandle source, RTHandle destination, int sourceMip = 0, int destinationMip = 0)
         {
-            var cs = w.shaders[19];
+            var cs = w.shaders.utilities;
             bool scalar = destination.rt.graphicsFormat == GraphicsFormat.R16_SFloat;
             int kernel = cs.FindKernel(scalar ? "CopyScalarMip" : "CopyColorMip");
             cmd.SetComputeIntParam(cs, "_UtilitySourceMip", sourceMip);
@@ -31,7 +31,7 @@ namespace UnityEngine.Rendering.Universal
         }
         internal static void Clear(CommandBuffer cmd, Work w, RTHandle target)
         {
-            var cs = w.shaders[19];
+            var cs = w.shaders.utilities;
             bool scalar = target.rt.graphicsFormat == GraphicsFormat.R16_SFloat;
             int kernel = cs.FindKernel(scalar ? "ClearScalar" : "ClearColor");
             Texture(cmd, cs, kernel, scalar ? "_OutputScalar" : "_OutputColor", target);
@@ -42,10 +42,8 @@ namespace UnityEngine.Rendering.Universal
             var s = w.settings;
             Vector2 jitter = s.depthJitter;
             if (SystemInfo.graphicsUVStartsAtTop) jitter.y = -jitter.y;
-            int count = w.shaders.Length;
-            for (int index = 0; index < count; ++index)
+            foreach (var shader in w.shaders.allShaders)
             {
-                var shader = w.shaders[index];
                 Keyword(cmd, shader, "STEREO_INSTANCING_ON", w.array);
                 Keyword(cmd, shader, "STEREO_MULTIVIEW_ON", false);
                 Keyword(cmd, shader, "ENABLE_ALPHA", true);
@@ -77,7 +75,7 @@ namespace UnityEngine.Rendering.Universal
         internal static void EncodeOutput(CommandBuffer cmd, Work w)
         {
             if (QualitySettings.activeColorSpace != ColorSpace.Gamma) return;
-            var cs = w.shaders[19]; int kernel = cs.FindKernel("CopyColor");
+            var cs = w.shaders.utilities; int kernel = cs.FindKernel("CopyColor");
             cmd.SetComputeVectorParam(cs, "_UtilityParams", new Vector4(-1, 0, 0, 0));
             cmd.SetComputeVectorParam(cs, "_DofSourceScale", Vector4.one);
             Texture(cmd, cs, kernel, "_InputTexture", RT(w, w.temporal ? Target.Resolved : Target.Spatial));
@@ -87,7 +85,7 @@ namespace UnityEngine.Rendering.Universal
         internal static void PrepareInput(CommandBuffer cmd, Work w)
         {
             var s = w.settings;
-            var utility = w.shaders[19];
+            var utility = w.shaders.utilities;
             int kernel = utility.FindKernel("CopyColor");
             cmd.SetComputeVectorParam(utility, "_UtilityParams", new Vector4(QualitySettings.activeColorSpace == ColorSpace.Gamma ? 1 : 0, 0, 0, 0));
             Texture(cmd, utility, kernel, "_InputTexture", w.source);
@@ -101,7 +99,7 @@ namespace UnityEngine.Rendering.Universal
         internal static void DebugCoC(CommandBuffer cmd, Work w)
         {
             var s = w.settings;
-            var utility = w.shaders[19];
+            var utility = w.shaders.utilities;
             int kernel = utility.FindKernel("DebugCoC");
             cmd.SetComputeVectorParam(utility, "_UtilityParams", s.physicalAlgorithm ? new Vector4(s.lens.z, s.lens.w, 0, 0) : Vector4.one);
             Texture(cmd, utility, kernel, "_InputTexture", RT(w, Target.StableCoC));
@@ -134,7 +132,7 @@ namespace UnityEngine.Rendering.Universal
         internal static void CircleOfConfusion(CommandBuffer cmd, Work w)
         {
             var s = w.settings;
-            var cs = w.shaders[s.physicalAlgorithm ? 11 : 1];
+            var cs = (s.physicalAlgorithm ? w.shaders.physicalCoC : w.shaders.layeredCoC);
             bool manual = s.parameters.x > .5f;
             int k = cs.FindKernel(s.physicalAlgorithm ? manual ? "KMainCoCManual" : "KMainCoCPhysical" : manual ? "KMainManual" : "KMainPhysical");
             Vector4 parameters = s.ranges;
@@ -153,7 +151,7 @@ namespace UnityEngine.Rendering.Universal
         internal static void ReprojectCoC(CommandBuffer cmd, Work w)
         {
             var s = w.settings;
-            var cs = w.shaders[2]; int k = cs.FindKernel("KMain");
+            var cs = w.shaders.reprojection; int k = cs.FindKernel("KMain");
             cmd.SetComputeVectorParam(cs, "_Params", new Vector4(s.stabilize && w.historyValid ? .86f : 0, 1, 1, 0));
             cmd.SetComputeFloatParam(cs, "_DofHistoryValid", s.stabilize && w.historyValid ? 1 : 0);
             Texture(cmd, cs, k, "_InputCoCTexture", RT(w, Target.CoC));
@@ -169,7 +167,7 @@ namespace UnityEngine.Rendering.Universal
             int levels = Mathf.Min(4, Mathf.FloorToInt(Mathf.Log(Mathf.Max(width, height), 2)));
             if (width >= 16 && height >= 16 && width % 16 == 0 && height % 16 == 0 && SystemInfo.graphicsDeviceVendorID != 0x8086)
             {
-                var cs = w.shaders[4]; int kernel = cs.FindKernel(scalar ? "KMainCoC" : "KMainColorAlpha");
+                var cs = w.shaders.mip; int kernel = cs.FindKernel(scalar ? "KMainCoC" : "KMainColorAlpha");
                 Texture(cmd, cs, kernel, "_InputTexture", texture);
                 for (int i = 1; i <= 4; ++i) Texture(cmd, cs, kernel, "_OutputMip" + i, texture, i);
                 Dispatch(cmd, cs, kernel, width / 2, height / 2, w.views);
@@ -180,7 +178,7 @@ namespace UnityEngine.Rendering.Universal
             {
                 int mw = Mathf.Max(1, width >> (i + 1)), mh = Mathf.Max(1, height >> (i + 1));
                 var temp = RT(w, (Target)((int)(scalar ? Target.MipScalar0 : Target.MipColor0) + i));
-                var cs = w.shaders[scalar ? 19 : 20]; int k = cs.FindKernel(scalar ? "DownsampleCoC" : "KMain");
+                var cs = (scalar ? w.shaders.utilities : w.shaders.safeMip); int k = cs.FindKernel(scalar ? "DownsampleCoC" : "KMain");
                 cmd.SetComputeVectorParam(cs, "_TexelSize", Size(mw, mh));
                 cmd.SetComputeVectorParam(cs, "_UtilityParams", Vector4.zero);
                 Texture(cmd, cs, k, "_InputTexture", previous);
@@ -208,7 +206,7 @@ namespace UnityEngine.Rendering.Universal
         {
             var s = w.settings;
             bool near = s.lens.z > 0, far = s.lens.w > 0;
-            var cs = w.shaders[0]; int k = cs.FindKernel("KParametricBlurKernel");
+            var cs = w.shaders.apertureSamples; int k = cs.FindKernel("KParametricBlurKernel");
             cmd.SetComputeVectorParam(cs, "_Params2", new Vector4(s.optics.x, 0, 0, 0));
             for (int layer = 0; layer < 2; ++layer)
             {
@@ -223,7 +221,7 @@ namespace UnityEngine.Rendering.Universal
         {
             var s = w.settings;
             bool near = s.lens.z > 0, far = s.lens.w > 0;
-            var cs = w.shaders[3]; int k = cs.FindKernel("KMain");
+            var cs = w.shaders.prefilter; int k = cs.FindKernel("KMain");
             Texture(cmd, cs, k, "_InputTexture", RT(w, Target.Input));
             Texture(cmd, cs, k, "_InputCoCTexture", RT(w, Target.StableCoC));
             cmd.SetComputeVectorParam(cs, "_CoCTargetScale", Vector4.one);
@@ -244,7 +242,7 @@ namespace UnityEngine.Rendering.Universal
             RTHandle dilated = RT(w, Target.NearCoC);
             if (near)
             {
-                var cs = w.shaders[5]; int k = cs.FindKernel("KMain");
+                var cs = w.shaders.nearDilation; int k = cs.FindKernel("KMain");
                 cmd.SetComputeVectorParam(cs, "_Params", new Vector4(s.blurWidth - 1, s.blurHeight - 1, 0, 0));
                 int passes = Mathf.Max(1, Mathf.CeilToInt((s.lens.z / s.downsample + 2) / 4));
                 for (int i = 0; i < passes; ++i)
@@ -263,9 +261,9 @@ namespace UnityEngine.Rendering.Universal
             if (!w.array)
             {
                 cmd.SetBufferCounterValue(w.buffers[3], 0); cmd.SetBufferCounterValue(w.buffers[4], 0);
-                var cs = w.shaders[6]; int k = cs.FindKernel("KClear");
+                var cs = w.shaders.clearIndirect; int k = cs.FindKernel("KClear");
                 cmd.SetComputeBufferParam(cs, k, "_IndirectBuffer", w.buffers[2]); cmd.DispatchCompute(cs, k, 1, 1, 1);
-                cs = w.shaders[7]; k = cs.FindKernel("KMain");
+                cs = w.shaders.tileClassification; k = cs.FindKernel("KMain");
                 cmd.SetComputeVectorParam(cs, "_Params", new Vector4(s.blurWidth - 1, s.blurHeight - 1, 0, 0));
                 cmd.SetComputeBufferParam(cs, k, "_IndirectBuffer", w.buffers[2]);
                 if (near) { Texture(cmd, cs, k, "_InputNearCoCTexture", dilated); cmd.SetComputeBufferParam(cs, k, "_NearTileList", w.buffers[3]); }
@@ -286,7 +284,7 @@ namespace UnityEngine.Rendering.Universal
             RTHandle nearInput = RT(w, Target.Near0), nearOutput = RT(w, Target.Near1);
             if (near && far)
             {
-                var cs = w.shaders[9]; int k = cs.FindKernel("KMainPreCombineFar");
+                var cs = w.shaders.preCombine; int k = cs.FindKernel("KMainPreCombineFar");
                 Texture(cmd, cs, k, "_InputTexture", nearInput); Texture(cmd, cs, k, "_InputFarTexture", RT(w, Target.Far1));
                 Texture(cmd, cs, k, "_InputCoCTexture", RT(w, Target.FarCoC)); Texture(cmd, cs, k, "_OutputTexture", nearOutput);
                 Dispatch(cmd, cs, k, s.blurWidth, s.blurHeight, w.views);
@@ -303,7 +301,7 @@ namespace UnityEngine.Rendering.Universal
         {
             var s = w.settings;
             bool near = s.lens.z > 0, far = s.lens.w > 0;
-            var cs = w.shaders[10]; int k = cs.FindKernel("KMain");
+            var cs = w.shaders.layeredCombine; int k = cs.FindKernel("KMain");
             Texture(cmd, cs, k, "_InputTexture", RT(w, Target.Input)); Texture(cmd, cs, k, "_OutputTexture", RT(w, Target.Spatial));
             if (near) { Texture(cmd, cs, k, "_InputNearTexture", RT(w, NearOutputTarget(s))); Texture(cmd, cs, k, "_InputNearAlphaTexture", RT(w, Target.NearAlpha)); }
             if (far) { Texture(cmd, cs, k, "_InputFarTexture", RT(w, Target.Far1)); Texture(cmd, cs, k, "_InputCoCTexture", RT(w, Target.StableCoC)); }
@@ -311,7 +309,7 @@ namespace UnityEngine.Rendering.Universal
         }
         internal static void GatherLayer(CommandBuffer cmd, Work w, bool near, RTHandle input, RTHandle output, RTHandle dilated)
         {
-            var s = w.settings; var cs = w.shaders[8]; int k = cs.FindKernel(near ? "KMainNear" : "KMainFar");
+            var s = w.settings; var cs = w.shaders.layeredGather; int k = cs.FindKernel(near ? "KMainNear" : "KMainFar");
             float radius = near ? s.lens.z : s.lens.w;
             float maxMip = Mathf.Min(s.downsample == 1 ? 4 : s.downsample == 2 ? 3 : 2, Mathf.FloorToInt(Mathf.Log(Mathf.Max(s.blurWidth, s.blurHeight), 2)));
             cmd.SetComputeVectorParam(cs, "_Params1", new Vector4(near ? s.counts.x : s.counts.y, radius / s.downsample, s.optics.y, radius));
@@ -351,7 +349,7 @@ namespace UnityEngine.Rendering.Universal
         internal static void PhysicalMinMax(CommandBuffer cmd, Work w)
         {
             var s = w.settings;
-            var cs = w.shaders[12]; int k = cs.FindKernel("KMainCoCMinMax");
+            var cs = w.shaders.minMax; int k = cs.FindKernel("KMainCoCMinMax");
             Texture(cmd, cs, k, "_InputTexture", RT(w, Target.StableCoC)); Texture(cmd, cs, k, "_OutputTexture", RT(w, Target.Tile0));
             cmd.SetComputeVectorParam(cs, "_OutputResolution", new Vector4(s.tileWidth, s.tileHeight, 0, 0));
             Dispatch(cmd, cs, k, s.tileWidth, s.tileHeight, w.views);
@@ -360,7 +358,7 @@ namespace UnityEngine.Rendering.Universal
         {
             var s = w.settings;
             RTHandle tiles = RT(w, Target.Tile0), tileOutput = RT(w, Target.Tile1);
-            var cs = w.shaders[13]; int k = cs.FindKernel("KMain");
+            var cs = w.shaders.tileDilation; int k = cs.FindKernel("KMain");
             int iterations = Mathf.Max(1, Mathf.CeilToInt(s.lens.z / 8));
             for (int i = 0; i < iterations; ++i)
             {
@@ -371,7 +369,7 @@ namespace UnityEngine.Rendering.Universal
         internal static void PhysicalAperture(CommandBuffer cmd, Work w)
         {
             var s = w.settings;
-            var cs = w.shaders[14]; int k = cs.FindKernel("ComputeShapeBuffer");
+            var cs = w.shaders.apertureSamples; int k = cs.FindKernel("ComputeShapeBuffer");
             cmd.SetComputeVectorParam(cs, "_Params", new Vector4(s.apertureShape.x, 1 - s.apertureShape.y, s.apertureShape.z * Mathf.Deg2Rad, s.optics.x));
             cmd.SetComputeIntParam(cs, "_ApertureShapeTableCount", 256); cmd.SetComputeBufferParam(cs, k, "_ApertureShapeTable", w.buffers[5]);
             cmd.DispatchCompute(cs, k, 4, 1, 1);
@@ -382,7 +380,7 @@ namespace UnityEngine.Rendering.Universal
             RTHandle tiles = RT(w, PhysicalTileTarget(s));
             float maxRadius = Mathf.Max(s.lens.z, s.lens.w);
             float rings = Mathf.Max(s.counts.x, s.counts.y);
-            var cs = w.shaders[15]; int k = cs.FindKernel("ComputeSlowTiles");
+            var cs = w.shaders.physicalCombine; int k = cs.FindKernel("ComputeSlowTiles");
             cmd.SetComputeVectorParam(cs, "_Params", new Vector4(rings, maxRadius, s.optics.x, 0));
             cmd.SetComputeVectorParam(cs, "_Params2", new Vector4(s.adaptive.x, s.adaptive.y, s.downsample, 1f / s.downsample));
             BindPhysical(cmd, w, cs, k, RT(w, Target.Input), tiles, RT(w, Target.Spatial));
@@ -404,7 +402,7 @@ namespace UnityEngine.Rendering.Universal
             RTHandle tiles = RT(w, PhysicalTileTarget(s));
             float maxRadius = Mathf.Max(s.lens.z, s.lens.w), rings = Mathf.Max(s.counts.x, s.counts.y);
             RTHandle source = RT(w, s.downsample == 1 ? Target.Input : Target.Pyramid);
-            var cs = w.shaders[16]; int k = cs.FindKernel("KMain");
+            var cs = w.shaders.physicalGather; int k = cs.FindKernel("KMain");
             cmd.SetComputeVectorParam(cs, "_Params", new Vector4(rings, maxRadius, s.optics.x, 0));
             cmd.SetComputeVectorParam(cs, "_Params2", new Vector4(1 + Mathf.Ceil(Mathf.Log(Mathf.Max(maxRadius, 1), 2)), 3, 1f / s.downsample, s.downsample));
             cmd.SetComputeVectorParam(cs, "_Params3", s.adaptive);
@@ -416,7 +414,7 @@ namespace UnityEngine.Rendering.Universal
             var s = w.settings;
             RTHandle tiles = RT(w, PhysicalTileTarget(s));
             float maxRadius = Mathf.Max(s.lens.z, s.lens.w), rings = Mathf.Max(s.counts.x, s.counts.y);
-            var cs = w.shaders[17]; int k = cs.FindKernel("UpsampleFastTiles");
+            var cs = w.shaders.physicalCombine; int k = cs.FindKernel("UpsampleFastTiles");
             cmd.SetComputeVectorParam(cs, "_Params", new Vector4(rings, maxRadius, s.optics.x, 0));
             cmd.SetComputeVectorParam(cs, "_Params2", new Vector4(s.adaptive.x, s.adaptive.y, s.downsample, 1f / s.downsample));
             Texture(cmd, cs, k, "_InputNearTexture", RT(w, Target.Low));
@@ -429,7 +427,7 @@ namespace UnityEngine.Rendering.Universal
 
         internal static void Temporal(CommandBuffer cmd, Work w)
         {
-            var s = w.settings; var cs = w.shaders[18]; int k = cs.FindKernel("Resolve");
+            var s = w.settings; var cs = w.shaders.temporalResolve; int k = cs.FindKernel("Resolve");
             float historyBlend = Mathf.Lerp(.4f, .95f, Mathf.InverseLerp(.6f, .95f, s.temporal.w));
             float contrast = CalculateTemporalContrast(s.temporal.x);
             cmd.SetComputeVectorParam(cs, "_DofTemporalParams", new Vector4(w.historyValid ? 1 : 0, 1 - historyBlend, w.exposure ? 1 : 0, s.alpha ? 1 : 0));

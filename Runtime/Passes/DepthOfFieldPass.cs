@@ -7,41 +7,18 @@ namespace UnityEngine.Rendering.Universal
 {
     internal sealed partial class DepthOfFieldPass : IDisposable
     {
-        internal static readonly string[] ShaderNames =
-        {
-            "DepthOfFieldKernel",
-            "DepthOfFieldCoC",
-            "DepthOfFieldCoCReproject",
-            "DepthOfFieldPrefilter",
-            "DepthOfFieldMip",
-            "DepthOfFieldCoCDilate",
-            "DepthOfFieldClearIndirectArgs",
-            "DepthOfFieldTileMax",
-            "DepthOfFieldGather",
-            "DepthOfFieldPreCombineFar",
-            "DepthOfFieldCombine",
-            "DoFCircleOfConfusion",
-            "DoFCoCMinMax",
-            "DoFMinMaxDilate",
-            "DoFApertureShape",
-            "DoFComputeSlowTiles",
-            "DoFGather",
-            "DoFCombine",
-            "DepthOfFieldTemporal",
-            "DepthOfFieldUtilities",
-            "DepthOfFieldMipSafe"
-        };
-        readonly ComputeShader[] m_ComputeShaders;
         readonly ShaderResources m_Shaders;
         DepthOfFieldCompatibility m_Compatibility;
         internal bool isValid => m_Shaders != null;
         internal bool IsReady => isValid;
 
-        internal DepthOfFieldPass(ComputeShader[] shaders = null)
+        internal DepthOfFieldPass(PostProcessData.ShaderResources shaders = null)
         {
-            m_ComputeShaders = shaders;
-            if (shaders != null && shaders.Length == ShaderNames.Length && Array.TrueForAll(shaders, shader => shader != null))
-                m_Shaders = new ShaderResources(shaders);
+            if (shaders == null)
+                return;
+            var resources = new ShaderResources(shaders);
+            if (resources.isValid)
+                m_Shaders = resources;
         }
 
         internal static float CalculateTemporalContrast(float value) => .7f - Mathf.Lerp(0f, .3f, Mathf.SmoothStep(.5f, 1f, value));
@@ -366,7 +343,7 @@ namespace UnityEngine.Rendering.Universal
             RenderLayeredCombine(graph, resources);
         }
 
-        DepthOfFieldCompatibility compatibility => m_Compatibility ?? (m_Compatibility = new DepthOfFieldCompatibility(m_ComputeShaders, this));
+        DepthOfFieldCompatibility compatibility => m_Compatibility ?? (m_Compatibility = new DepthOfFieldCompatibility(m_Shaders, this));
 
         internal void Render(CommandBuffer cmd, UniversalCameraData cameraData, RenderTextureDescriptor descriptor, DepthOfField volume, RTHandle source, RTHandle destination, RTHandle depth, RTHandle motion) => compatibility.Render(cmd, cameraData, descriptor, volume, source, destination, depth, motion);
         internal void Render(CommandBuffer cmd, UniversalCameraData cameraData, DepthOfField volume, RTHandle source, RTHandle destination, RTHandle depth, RTHandle motion) => compatibility.Render(cmd, cameraData, volume, source, destination, depth, motion);

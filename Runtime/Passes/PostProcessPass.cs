@@ -133,7 +133,7 @@ namespace UnityEngine.Rendering.Universal
             renderPassEvent = evt;
             m_Data = data;
             m_Materials = new MaterialLibrary(data);
-            m_AdvancedDepthOfField = new DepthOfFieldPass(data.shaders.depthOfFieldCS);
+            m_AdvancedDepthOfField = new DepthOfFieldPass(data.shaders);
             m_ExposurePass = new ExposurePass(data.shaders.exposureHistogramCS, data.shaders.exposureApplyPS);
 
             // Bloom pyramid shader ids - can't use a simple stackalloc in the bloom function as we

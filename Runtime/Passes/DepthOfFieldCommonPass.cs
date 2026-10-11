@@ -7,7 +7,7 @@ namespace UnityEngine.Rendering.Universal
 {
     internal sealed partial class DepthOfFieldPass : IDisposable
     {
-        sealed class ShaderResources
+        internal sealed class ShaderResources
         {
             internal readonly ComputeShader apertureSamples;
             internal readonly int apertureSamplesKernel;
@@ -37,9 +37,7 @@ namespace UnityEngine.Rendering.Universal
             internal readonly int minMaxKernel;
             internal readonly ComputeShader tileDilation;
             internal readonly int tileDilationKernel;
-            internal readonly ComputeShader apertureShape;
             internal readonly int apertureShapeKernel;
-            internal readonly ComputeShader slowGather;
             internal readonly int slowGatherKernel;
             internal readonly ComputeShader physicalGather;
             internal readonly int physicalGatherKernel;
@@ -51,51 +49,65 @@ namespace UnityEngine.Rendering.Universal
             internal readonly int utilitiesClearColorKernel, utilitiesClearScalarKernel, utilitiesCopyColorMipKernel, utilitiesCopyScalarMipKernel, utilitiesCopyColorKernel, utilitiesCopyDepthKernel, utilitiesDebugCoCKernel, utilitiesDownsampleCoCKernel;
             internal readonly ComputeShader safeMip;
             internal readonly int safeMipKernel;
-            internal ShaderResources(ComputeShader[] shaders)
+            internal readonly ComputeShader[] allShaders;
+            internal readonly bool isValid;
+
+            internal ShaderResources(PostProcessData.ShaderResources shaders)
             {
-                apertureSamples = shaders[0];
+                apertureSamples = shaders.depthOfFieldKernelCS;
+                layeredCoC = shaders.depthOfFieldCoCCS;
+                reprojection = shaders.depthOfFieldCoCReprojectCS;
+                prefilter = shaders.depthOfFieldPrefilterCS;
+                mip = shaders.depthOfFieldMipCS;
+                nearDilation = shaders.depthOfFieldDilateCS;
+                clearIndirect = shaders.depthOfFieldClearIndirectArgsCS;
+                tileClassification = shaders.depthOfFieldTileMaxCS;
+                layeredGather = shaders.depthOfFieldGatherCS;
+                preCombine = shaders.depthOfFieldPreCombineFarCS;
+                layeredCombine = shaders.depthOfFieldCombineCS;
+                safeMip = shaders.depthOfFieldMipSafeCS;
+                physicalCoC = shaders.dofCircleOfConfusionCS;
+                minMax = shaders.dofCoCMinMaxCS;
+                tileDilation = shaders.dofMinMaxDilateCS;
+                physicalGather = shaders.dofGatherCS;
+                physicalCombine = shaders.dofCombineCS;
+                temporalResolve = shaders.depthOfFieldTemporalCS;
+                utilities = shaders.depthOfFieldUtilitiesCS;
+                allShaders = new[]
+                {
+                    apertureSamples, layeredCoC, reprojection, prefilter,
+                    mip, nearDilation, clearIndirect, tileClassification,
+                    layeredGather, preCombine, layeredCombine, safeMip,
+                    physicalCoC, minMax, tileDilation, physicalGather,
+                    physicalCombine, temporalResolve, utilities,
+                };
+                isValid = Array.TrueForAll(allShaders, shader => shader != null);
+                if (!isValid)
+                    return;
+
                 apertureSamplesKernel = apertureSamples.FindKernel("KParametricBlurKernel");
-                layeredCoC = shaders[1];
                 layeredCoCPhysicalKernel = layeredCoC.FindKernel("KMainPhysical");
                 layeredCoCManualKernel = layeredCoC.FindKernel("KMainManual");
-                reprojection = shaders[2];
                 reprojectionKernel = reprojection.FindKernel("KMain");
-                prefilter = shaders[3];
                 prefilterKernel = prefilter.FindKernel("KMain");
-                mip = shaders[4];
                 mipColorAlphaKernel = mip.FindKernel("KMainColorAlpha");
                 mipCoCKernel = mip.FindKernel("KMainCoC");
-                nearDilation = shaders[5];
                 nearDilationKernel = nearDilation.FindKernel("KMain");
-                clearIndirect = shaders[6];
                 clearIndirectKernel = clearIndirect.FindKernel("KClear");
-                tileClassification = shaders[7];
                 tileClassificationKernel = tileClassification.FindKernel("KMain");
-                layeredGather = shaders[8];
                 layeredGatherNearKernel = layeredGather.FindKernel("KMainNear");
                 layeredGatherFarKernel = layeredGather.FindKernel("KMainFar");
-                preCombine = shaders[9];
                 preCombineKernel = preCombine.FindKernel("KMainPreCombineFar");
-                layeredCombine = shaders[10];
                 layeredCombineKernel = layeredCombine.FindKernel("KMain");
-                physicalCoC = shaders[11];
                 physicalCoCPhysicalKernel = physicalCoC.FindKernel("KMainCoCPhysical");
                 physicalCoCManualKernel = physicalCoC.FindKernel("KMainCoCManual");
-                minMax = shaders[12];
                 minMaxKernel = minMax.FindKernel("KMainCoCMinMax");
-                tileDilation = shaders[13];
                 tileDilationKernel = tileDilation.FindKernel("KMain");
-                apertureShape = shaders[14];
-                apertureShapeKernel = apertureShape.FindKernel("ComputeShapeBuffer");
-                slowGather = shaders[15];
-                slowGatherKernel = slowGather.FindKernel("ComputeSlowTiles");
-                physicalGather = shaders[16];
+                apertureShapeKernel = apertureSamples.FindKernel("ComputeShapeBuffer");
+                slowGatherKernel = physicalCombine.FindKernel("ComputeSlowTiles");
                 physicalGatherKernel = physicalGather.FindKernel("KMain");
-                physicalCombine = shaders[17];
                 physicalCombineKernel = physicalCombine.FindKernel("UpsampleFastTiles");
-                temporalResolve = shaders[18];
                 temporalResolveKernel = temporalResolve.FindKernel("Resolve");
-                utilities = shaders[19];
                 utilitiesClearColorKernel = utilities.FindKernel("ClearColor");
                 utilitiesClearScalarKernel = utilities.FindKernel("ClearScalar");
                 utilitiesCopyColorMipKernel = utilities.FindKernel("CopyColorMip");
@@ -104,7 +116,6 @@ namespace UnityEngine.Rendering.Universal
                 utilitiesCopyDepthKernel = utilities.FindKernel("CopyDepth");
                 utilitiesDebugCoCKernel = utilities.FindKernel("DebugCoC");
                 utilitiesDownsampleCoCKernel = utilities.FindKernel("DownsampleCoC");
-                safeMip = shaders[20];
                 safeMipKernel = safeMip.FindKernel("KMain");
             }
         }

@@ -84,7 +84,7 @@ namespace UnityEngine.Rendering.Universal
         static void ExecutePhysicalAperture(ComputeCommandBuffer cmd, in Resources data)
         {
             var s = data.settings;
-            var cs = data.shaders.apertureShape;
+            var cs = data.shaders.apertureSamples;
             Configure(cmd, data, cs);
             int k = data.shaders.apertureShapeKernel;
             cmd.SetComputeVectorParam(cs, "_Params", new Vector4(s.apertureShape.x, 1 - s.apertureShape.y, s.apertureShape.z * Mathf.Deg2Rad, s.optics.x));
@@ -114,7 +114,7 @@ namespace UnityEngine.Rendering.Universal
             TextureHandle tiles = PhysicalTileTexture(data);
             float maxRadius = Mathf.Max(s.lens.z, s.lens.w);
             float rings = Mathf.Max(s.counts.x, s.counts.y);
-            var cs = data.shaders.slowGather;
+            var cs = data.shaders.physicalCombine;
             Configure(cmd, data, cs);
             int k = data.shaders.slowGatherKernel;
             cmd.SetComputeVectorParam(cs, "_Params", new Vector4(rings, maxRadius, s.optics.x, 0));
