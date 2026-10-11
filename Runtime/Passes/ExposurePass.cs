@@ -4,7 +4,7 @@ using UnityEngine.Rendering.RenderGraphModule;
 
 namespace UnityEngine.Rendering.Universal.Internal
 {
-    internal sealed class ExposurePass : IDisposable
+    internal sealed partial class ExposurePass : IDisposable
     {
         internal const int HistogramBins = 128;
         internal static float LensExposureScale => Mathf.Max(1e-4f, ColorUtils.lensImperfectionExposureScale);
@@ -29,7 +29,11 @@ namespace UnityEngine.Rendering.Universal.Internal
             m_ResolveHistogram = shader.FindKernel("ResolveHistogram");
             m_ResolveAverage = shader.FindKernel("ResolveAverage");
         }
-        public void Dispose() => CoreUtils.Destroy(m_Apply);
+        public void Dispose()
+        {
+            DisposeCameraStates();
+            CoreUtils.Destroy(m_Apply);
+        }
 
         internal static float FiniteClamp(float value, float fallback, float min, float max) =>
             Mathf.Clamp(float.IsNaN(value) || float.IsInfinity(value) ? fallback : value, min, max);
@@ -66,7 +70,8 @@ namespace UnityEngine.Rendering.Universal.Internal
         {
             internal TextureHandle source, previous, output, average, curve, mask;
             internal BufferHandle histogram;
-            internal ExposureHistory history;
+            internal CameraState cameraState;
+            internal int frame;
         }
         sealed class ComputePassData
         {
@@ -120,16 +125,18 @@ namespace UnityEngine.Rendering.Universal.Internal
         {
             var desc = graph.GetTextureDesc(source);
             var system = HistoryFrameRTSystem.GetOrCreate(data.camera, data.xr.multipassId);
-            var history = system.exposureHistory ?? (system.exposureHistory = new ExposureHistory(system));
-            bool valid = history.Prepare(data, new Vector2Int(desc.width, desc.height), (int)volume.mode.value * 8 + (int)volume.metering.value);
+            var state = GetCameraState(system);
+            if (ReAllocateHistoryTextureIfNeeded(system))
+                state.Invalidate();
+            bool valid = state.Prepare(data, system.historyFrameCount, (int)volume.mode.value * 8 + (int)volume.metering.value);
             var range = new Vector2(-10, 20);
-            var curve = volume.usesCurve ? history.GetCurve(volume, out range) : null;
+            var curve = volume.usesCurve ? state.GetCurve(volume, out range) : null;
             settings = PrepareSettings(volume, data, desc, valid, range);
             return new Resources
             {
-                source = source, history = history,
-                previous = graph.ImportTexture(history.Previous()), output = graph.ImportTexture(history.Current()),
-                curve = curve != null ? graph.ImportTexture(curve) : graph.defaultResources.blackTexture, mask = graph.ImportTexture(history.GetMask(volume.weightTextureMask.value)),
+                source = source, cameraState = state, frame = system.historyFrameCount,
+                previous = graph.ImportTexture(system.GetPreviousFrameRT(HistoryFrameType.Exposure)), output = graph.ImportTexture(system.GetCurrentFrameRT(HistoryFrameType.Exposure)),
+                curve = curve != null ? graph.ImportTexture(curve) : graph.defaultResources.blackTexture, mask = graph.ImportTexture(state.GetMask(volume.weightTextureMask.value)),
                 histogram = settings.histogramMode ? graph.CreateBuffer(new BufferDesc(HistogramBins, sizeof(uint)) { name = "Exposure Histogram" }) : BufferHandle.nullHandle,
                 average = !settings.histogramMode ? graph.CreateTexture(new TextureDesc(32, 32)
                 { name = "Exposure Weighted Average", colorFormat = GraphicsFormat.R32G32_SFloat, enableRandomWrite = true }) : TextureHandle.nullHandle
@@ -218,7 +225,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 cmd.SetComputeTextureParam(data.shader, data.kernel, "_ExposurePrevious", r.previous);
                 cmd.SetComputeTextureParam(data.shader, data.kernel, "_ExposureOutput", r.output);
                 cmd.DispatchCompute(data.shader, data.kernel, 1, 1, 1);
-                r.history.Commit();
+                r.cameraState.Commit(r.frame);
             });
         }
         TextureHandle RenderApply(RenderGraph graph, TextureHandle source, TextureHandle exposure, float multiplier, bool automatic)
@@ -255,7 +262,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             var volume = VolumeManager.instance.stack.GetComponent<Exposure>();
             if (volume == null || !volume.IsActive() || m_Apply == null)
             {
-                ExposureHistory.Get(data.camera, data.xr.multipassId)?.Invalidate();
+                InvalidateHistory(data);
                 return source;
             }
             var exposure = graph.defaultResources.blackTexture;
@@ -267,7 +274,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 RenderAdaptation(graph, resources, settings);
                 exposure = resources.output;
             }
-            else ExposureHistory.Get(data.camera, data.xr.multipassId)?.Invalidate();
+            else InvalidateHistory(data);
             float ev = (volume.mode.value == ExposureMode.UsePhysicalCamera ? CameraEV100(data.camera) : FiniteClamp(volume.fixedExposure.value, 0, -30, 30)) - FiniteClamp(volume.compensation.value, 0, -30, 30);
             return RenderApply(graph, source, exposure, EV100ToExposure(Mathf.Clamp(ev, -30, 30)), volume.isAutomatic);
         }

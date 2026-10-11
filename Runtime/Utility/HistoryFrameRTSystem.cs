@@ -105,7 +105,6 @@ namespace UnityEngine.Rendering.Universal
         private int m_RTActualHeight;
 
         internal VolumetricHistory volumetricHistory;
-        internal ExposureHistory exposureHistory;
 
         // Consumers discard their camera-local metadata when this buffer owner is disposed.
         internal event Action<HistoryFrameRTSystem> disposed;
@@ -305,8 +304,6 @@ namespace UnityEngine.Rendering.Universal
 
         internal void Dispose()
         {
-            exposureHistory?.Dispose();
-            exposureHistory = null;
             volumetricHistory?.Dispose();
             volumetricHistory = null;
             m_BufferedRTHandleSystem?.Dispose();
