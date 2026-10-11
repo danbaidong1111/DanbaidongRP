@@ -5,8 +5,8 @@ using UnityEngine.Experimental.Rendering;
 namespace UnityEngine.Rendering.Universal
 {
     /// <summary>
-    /// Copy from HDCameraFrameHistoryType. Uncomment your HistoryFrameType if needed.
-    /// <summary>
+    /// Render targets retained across camera frames.
+    /// </summary>
     public enum HistoryFrameType
     {
         /// <summary>Color buffer mip chain.</summary>
@@ -95,6 +95,7 @@ namespace UnityEngine.Rendering.Universal
         private int m_RTActualWidth;
         private int m_RTActualHeight;
 
+
         public Camera camera;
         public int historyFrameCount = 0;
         /// <summary>Camera name.</summary>
@@ -127,6 +128,20 @@ namespace UnityEngine.Rendering.Universal
             }
 
             return historyFrameRTSystem;
+        }
+
+        internal static void Release(Camera camera)
+        {
+            s_Cleanup.Clear();
+            foreach (var key in s_Cameras.Keys)
+                if (key.Item1 == camera)
+                    s_Cleanup.Add(key);
+            foreach (var key in s_Cleanup)
+            {
+                s_Cameras[key].Dispose();
+                s_Cameras.Remove(key);
+            }
+            s_Cleanup.Clear();
         }
 
         /// <summary>
@@ -254,7 +269,7 @@ namespace UnityEngine.Rendering.Universal
                 }
 
                 UniversalAdditionalCameraData additionalCameraData = null;
-                if (camera.cameraType == CameraType.Game || camera.cameraType == CameraType.VR)
+                if (camera.cameraType == CameraType.Game || camera.cameraType == CameraType.VR || camera.cameraType == CameraType.Reflection)
                     camera.gameObject.TryGetComponent(out additionalCameraData);
 
                 bool hasPersistentHistory = additionalCameraData != null && additionalCameraData.hasPersistentHistory;
@@ -293,6 +308,12 @@ namespace UnityEngine.Rendering.Universal
         {
             m_BufferedRTHandleSystem.AllocBuffer(id, (rts, i) => allocator(graphicsFormat, cameraName, i, rts), bufferCount);
             return m_BufferedRTHandleSystem.GetFrameRT(id, 0);
+        }
+
+        internal void ReAllocateCurrentHistoryFrameRT(HistoryFrameType id,
+            Func<RenderTextureDescriptor, string, int, RTHandleSystem, RTHandle> allocator, RenderTextureDescriptor descriptor)
+        {
+            m_BufferedRTHandleSystem.ReAllocateCurrentBuffer((int)id, (rts, i) => allocator(descriptor, name, i, rts));
         }
 
         public RTHandle AllocHistoryFrameRT(int id, string cameraName, Func<RenderTextureDescriptor, string, int, RTHandleSystem, RTHandle> allocator, RenderTextureDescriptor graphicsFormat, int bufferCount)

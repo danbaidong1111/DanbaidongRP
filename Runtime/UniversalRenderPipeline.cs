@@ -889,7 +889,7 @@ namespace UnityEngine.Rendering.Universal
                  * "Updating RTHandle needs to be done at the beginning of rendering (not during update of HDCamera which happens in batches)
                  * The reason is that RTHandle will hold data necessary to setup RenderTargets and viewports properly."
                  */
-                var historyFrameRTSystem = HistoryFrameRTSystem.GetOrCreate(camera);
+                var historyFrameRTSystem = HistoryFrameRTSystem.GetOrCreate(camera, cameraData.xr.multipassId);
                 historyFrameRTSystem.SetReferenceSize(cameraData.cameraTargetDescriptor.width, cameraData.cameraTargetDescriptor.height);
 
                 // Do NOT use cameraData after 'InitializeRenderingData'. CameraData state may diverge otherwise.
