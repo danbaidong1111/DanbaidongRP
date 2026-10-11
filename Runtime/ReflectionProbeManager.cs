@@ -22,6 +22,8 @@ namespace UnityEngine.Rendering.Universal
         Vector4[] m_BoxMin;
         Vector4[] m_ProbePosition;
         Vector4[] m_MipScaleOffset;
+        Vector4[] m_ReceiverOrder;
+        int[] m_ReceiverIndices;
 
         // There is a global max of 7 mips in Unity.
         const int k_MaxMipCount = 7;
@@ -47,6 +49,7 @@ namespace UnityEngine.Rendering.Universal
             public static readonly int BoxMax = Shader.PropertyToID("urp_ReflProbes_BoxMax");
             public static readonly int ProbePosition = Shader.PropertyToID("urp_ReflProbes_ProbePosition");
             public static readonly int MipScaleOffset = Shader.PropertyToID("urp_ReflProbes_MipScaleOffset");
+            public static readonly int ReceiverOrder = Shader.PropertyToID("urp_ReflProbes_ReceiverOrder");
             public static readonly int Count = Shader.PropertyToID("urp_ReflProbes_Count");
             public static readonly int Atlas = Shader.PropertyToID("urp_ReflProbes_Atlas");
         }
@@ -102,6 +105,8 @@ namespace UnityEngine.Rendering.Universal
             m_BoxMin = new Vector4[maxProbes];
             m_ProbePosition = new Vector4[maxProbes];
             m_MipScaleOffset = new Vector4[maxProbes * 7];
+            m_ReceiverOrder = new Vector4[maxProbes];
+            m_ReceiverIndices = new int[maxProbes];
         }
 
         public unsafe void UpdateGpuData(CommandBuffer cmd, ref CullingResults cullResults)
@@ -297,6 +302,8 @@ namespace UnityEngine.Rendering.Universal
                     }
                 }
 
+                BuildReceiverOrder(probeCount - skipCount);
+                cmd.SetGlobalVectorArray(ShaderProperties.ReceiverOrder, m_ReceiverOrder);
                 cmd.SetGlobalVectorArray(ShaderProperties.BoxMin, m_BoxMin);
                 cmd.SetGlobalVectorArray(ShaderProperties.BoxMax, m_BoxMax);
                 cmd.SetGlobalVectorArray(ShaderProperties.ProbePosition, m_ProbePosition);
@@ -306,6 +313,36 @@ namespace UnityEngine.Rendering.Universal
             }
 
             m_NeedsUpdate.Clear();
+        }
+
+        // Sort receivers separately so tracing keeps its existing probe list and fallback behavior.
+        void BuildReceiverOrder(int count)
+        {
+            for (int index = 0; index < count; ++index)
+            {
+                int rank = index;
+                while (rank > 0 && CompareReceiverProbes(index, m_ReceiverIndices[rank - 1]) < 0)
+                {
+                    m_ReceiverIndices[rank] = m_ReceiverIndices[rank - 1];
+                    --rank;
+                }
+                m_ReceiverIndices[rank] = index;
+            }
+            for (int rank = 0; rank < count; ++rank)
+            {
+                m_ReceiverOrder[m_ReceiverIndices[rank]].x = rank;
+                m_ReceiverOrder[rank].y = m_ReceiverIndices[rank];
+            }
+        }
+
+        int CompareReceiverProbes(int a, int b)
+        {
+            int importance = m_BoxMin[b].w.CompareTo(m_BoxMin[a].w);
+            if (importance != 0) return importance;
+            Vector3 sizeA = m_BoxMax[a] - m_BoxMin[a];
+            Vector3 sizeB = m_BoxMax[b] - m_BoxMin[b];
+            int volume = (sizeA.x * sizeA.y * sizeA.z).CompareTo(sizeB.x * sizeB.y * sizeB.z);
+            return volume != 0 ? volume : a.CompareTo(b);
         }
 
         float4 GetScaleOffset(int level, int dataIndex, bool includePadding, bool yflip)

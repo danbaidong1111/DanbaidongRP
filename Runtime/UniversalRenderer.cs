@@ -118,6 +118,7 @@ namespace UnityEngine.Rendering.Universal
         ColorPyramidPass m_ColorPyramidPass;
         ScreenSpaceDirectionalShadowsPass m_ScreenSpaceDirectionalShadowsPass;
         ScreenSpaceShadowScatterPass m_ScreenSpaceShadowScatterPass;
+        PlanarReflectionFilteringPass m_PlanarReflectionFilteringPass;
         ScreenSpaceReflectionPass m_ScreenSpaceReflectionPass;
         ScreenSpaceAmbientOcclusionPass m_ScreenSpaceAmbientOcclusionPass;
         ReSTIRGlobalIlluminationPass m_ReSTIRGlobalIlluminationPass;
@@ -270,6 +271,7 @@ namespace UnityEngine.Rendering.Universal
             this.stripAdditionalLightOffVariants = !PlatformAutoDetect.isXRMobile;
 #endif
 #endif
+            m_PlanarReflectionFilteringPass = new PlanarReflectionFilteringPass(runtimeShaders.planarReflectionFilteringCS);
             m_GPULights = new GPULights(runtimeShaders, RenderPassEvent.AfterRenderingGbuffer);
             m_GPULightsDataBuildSystem = new GPULightsDataBuildSystem();
 

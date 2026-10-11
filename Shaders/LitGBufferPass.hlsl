@@ -237,7 +237,10 @@ FragmentOutput LitGBufferPassFragment(Varyings input)
     MixRealtimeAndBakedGI(mainLight, inputData.normalWS, inputData.bakedGI, inputData.shadowMask);
     half3 color = GlobalIllumination(brdfData, inputData.bakedGI, surfaceData.occlusion, inputData.positionWS, inputData.normalWS, inputData.viewDirectionWS);
 
-    return BRDFDataToGbuffer(brdfData, inputData, surfaceData.smoothness, surfaceData.emission + color, surfaceData.occlusion);
+    FragmentOutput output = BRDFDataToGbuffer(brdfData, inputData, surfaceData.smoothness, surfaceData.emission + color, surfaceData.occlusion);
+    if (_ReceiveTracedReflections < 0.5)
+        output.GBuffer0.a = PackMaterialFlags(UnpackMaterialFlags(output.GBuffer0.a) | kMaterialFlagReceiveTracedReflectionsOff);
+    return output;
 }
 
 #endif

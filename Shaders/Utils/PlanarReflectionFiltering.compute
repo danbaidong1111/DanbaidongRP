@@ -1,0 +1,126 @@
+// Copyright (c) Unity Technologies. Licensed under the Unity Companion License.
+#pragma kernel Prepare
+#pragma kernel CopyReflection
+#pragma kernel DownScale
+#pragma kernel FilterPlanarReflection
+#pragma target 4.5
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+
+Texture2D<float4> _SourceColor;
+Texture2D<float> _SourceDepth;
+Texture2D<float4> _ColorPyramid;
+Texture2D<float> _DepthPyramid;
+RWTexture2D<float4> _OutputColor;
+RWTexture2D<float> _OutputDepth;
+RWTexture2D<float4> _FilteredReflection;
+SamplerState sampler_LinearClamp;
+SamplerState sampler_PointClamp;
+SamplerState sampler_TrilinearClamp;
+float4 _BaseSize, _CurrentSize, _SourceScale;
+float4 _Plane, _CameraPosition, _CaptureParams;
+float4x4 _ObliqueInverseVP, _InverseVP, _ViewProjection;
+int _SourceMip, _MaxMip;
+static const float k_ConeAngles[7] = { 0.0, 0.04, 0.12, 0.4, 0.9, 1.2, 1.2 };
+
+float DeviceDepth(float depth)
+{
+#if UNITY_REVERSED_Z
+    return depth;
+#else
+    return lerp(UNITY_NEAR_CLIP_VALUE, 1.0, depth);
+#endif
+}
+float3 WorldPosition(float2 uv, float depth, float4x4 inverseVP)
+{
+    return ComputeWorldSpacePosition(uv, DeviceDepth(depth), inverseVP);
+}
+[numthreads(8, 8, 1)]
+void CopyReflection(uint2 pixel : SV_DispatchThreadID)
+{
+    if (any(pixel >= (uint2)_BaseSize.xy)) return;
+    float2 uv = (pixel + .5) * _BaseSize.zw;
+    float4 color = _SourceColor.SampleLevel(sampler_LinearClamp, uv * _SourceScale.xy, 0);
+#ifdef UNITY_COLORSPACE_GAMMA
+    color.rgb = SRGBToLinear(color.rgb);
+#endif
+    _FilteredReflection[pixel] = AnyIsNaN(color) || AnyIsInf(color) ? 0 : clamp(color, 0, 65504);
+}
+[numthreads(8, 8, 1)]
+void Prepare(uint2 pixel : SV_DispatchThreadID)
+{
+    if (any(pixel >= (uint2)_BaseSize.xy)) return;
+    float2 uv = (pixel + .5) * _BaseSize.zw;
+    float4 color = _SourceColor.SampleLevel(sampler_LinearClamp, uv * _SourceScale.xy, 0);
+#ifdef UNITY_COLORSPACE_GAMMA
+    color.rgb = SRGBToLinear(color.rgb);
+#endif
+    color = AnyIsNaN(color) || AnyIsInf(color) ? 0 : clamp(color, 0, 65504);
+    float depth = _SourceDepth.SampleLevel(sampler_PointClamp, uv * _SourceScale.zw, 0);
+    float3 position = WorldPosition(uv, depth, _ObliqueInverseVP);
+    bool sky = abs(depth - UNITY_RAW_FAR_CLIP_VALUE) < 1e-7;
+    if (sky)
+    {
+        float3 regularFar = WorldPosition(uv, UNITY_RAW_FAR_CLIP_VALUE, _InverseVP);
+        position = regularFar;
+    }
+    float4 clip = mul(_ViewProjection, float4(position, 1));
+    float regularDepth = clip.z / clip.w;
+#if !UNITY_REVERSED_Z
+    regularDepth = (regularDepth - UNITY_NEAR_CLIP_VALUE) / (1.0 - UNITY_NEAR_CLIP_VALUE);
+#endif
+    _OutputDepth[pixel] = saturate(regularDepth);
+    _OutputColor[pixel] = color;
+    _FilteredReflection[pixel] = color;
+}
+[numthreads(8, 8, 1)]
+void DownScale(uint2 pixel : SV_DispatchThreadID)
+{
+    if (any(pixel >= (uint2)_CurrentSize.xy)) return;
+    uint2 size = max(uint2(1, 1), (uint2)_BaseSize.xy >> _SourceMip);
+    float4 color = 0;
+    float weight = 0;
+    [unroll] for (int y = -1; y <= 2; ++y)
+    [unroll] for (int x = -1; x <= 2; ++x)
+    {
+        int2 tap = int2(pixel * 2) + int2(x, y);
+        if (all(tap >= 0) && all(tap < (int2)size))
+        { color += _ColorPyramid.Load(int3(tap, _SourceMip)); weight += 1; }
+    }
+    float depth = 0;
+    [unroll] for (uint dy = 0; dy < 2; ++dy)
+    [unroll] for (uint dx = 0; dx < 2; ++dx)
+        depth += _DepthPyramid.Load(int3(min(pixel * 2 + uint2(dx, dy), size - 1), _SourceMip));
+    _OutputColor[pixel] = color / max(weight, 1);
+    _OutputDepth[pixel] = depth * .25;
+}
+[numthreads(8, 8, 1)]
+void FilterPlanarReflection(uint2 pixel : SV_DispatchThreadID)
+{
+    if (any(pixel >= (uint2)_CurrentSize.xy)) return;
+    float2 uv = (pixel + .5) * _CurrentSize.zw;
+    float depth = _DepthPyramid.SampleLevel(sampler_TrilinearClamp, uv, _SourceMip);
+    float3 position = WorldPosition(uv, depth, _InverseVP);
+    float3 origin = _CameraPosition.xyz;
+    if (_CaptureParams.y > 0)
+        origin = WorldPosition(uv, (1.0 - UNITY_RAW_FAR_CLIP_VALUE), _InverseVP);
+    float3 ray = normalize(position - origin);
+    float denominator = dot(ray, _Plane.xyz);
+    float distanceToPlane = -(dot(origin, _Plane.xyz) + _Plane.w) / denominator;
+    if (abs(denominator) < 1e-6 || distanceToPlane < 0)
+    { _FilteredReflection[pixel] = 0; return; }
+    float3 integrationPosition = origin + ray * distanceToPlane;
+    float distanceToObject = length(position - integrationPosition);
+    float coneRadius = tan(k_ConeAngles[min(_SourceMip, 6)]) * distanceToObject;
+    float pixelDistance;
+    if (_CaptureParams.y > 0)
+        pixelDistance = coneRadius / _CaptureParams.y * _CurrentSize.x;
+    else
+    {
+        float viewRadius = coneRadius * distanceToPlane / max(1e-6, distanceToPlane + distanceToObject);
+        pixelDistance = atan(viewRadius / max(1e-6, distanceToPlane)) / _CaptureParams.x * _CurrentSize.x;
+    }
+    float bias = _SourceMip > 3 ? lerp(0.0, 2.0, (float)(_MaxMip - _SourceMip) / _MaxMip) : 0;
+    float mip = clamp(log2(max(pixelDistance * .5, 1e-6)) + _SourceMip + bias, 0, _MaxMip);
+    _FilteredReflection[pixel] = _ColorPyramid.SampleLevel(sampler_TrilinearClamp, uv, mip);
+}

@@ -203,6 +203,7 @@ float4 urp_ReflProbes_BoxMax[MAX_REFLECTION_PROBES];          // w contains the 
 float4 urp_ReflProbes_BoxMin[MAX_REFLECTION_PROBES];          // w contains the importance
 float4 urp_ReflProbes_ProbePosition[MAX_REFLECTION_PROBES];   // w is positive for box projection, |w| is max mip level
 float4 urp_ReflProbes_MipScaleOffset[MAX_REFLECTION_PROBES * 7];
+float4 urp_ReflProbes_ReceiverOrder[MAX_REFLECTION_PROBES]; // x: rank by probe index; y: probe index by rank.
 #ifndef SHADER_API_GLES3
 CBUFFER_END
 #endif

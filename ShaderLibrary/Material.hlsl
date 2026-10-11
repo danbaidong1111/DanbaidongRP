@@ -18,4 +18,18 @@ void UpdateLightingHierarchyWeights(inout float hierarchyWeight, inout float wei
 }
 
 
+// Reflection textures contain unweighted radiance and a separate contribution weight.
+float3 AccumulateReflection(float4 reflection, inout float hierarchyWeight)
+{
+    UpdateLightingHierarchyWeights(hierarchyWeight, reflection.a);
+    return reflection.rgb * reflection.a;
+}
+
+float3 EvaluateTracedReflection(float4 reflection, bool receiveTracedReflections, inout float hierarchyWeight)
+{
+    if (!receiveTracedReflections)
+        return 0.0;
+    return AccumulateReflection(reflection, hierarchyWeight);
+}
+
 #endif /* DANBAIDONG_MATERIAL_INCLUDED */

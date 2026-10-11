@@ -316,6 +316,7 @@ namespace UnityEngine.Rendering.Universal
         /// <inheritdoc/>
         protected override void Dispose(bool disposing)
         {
+            PlanarReflectionSystem.Cleanup();
             if (apvIsEnabled)
             {
                 ProbeReferenceVolume.instance.Cleanup();
@@ -540,8 +541,6 @@ namespace UnityEngine.Rendering.Universal
                         //N.B.: We aren't expecting an XR camera at this stage
                         VFX.VFXManager.PrepareCamera(camera);
 #endif
-                            UpdateVolumeFramework(camera, null);
-
                             RenderSingleCameraInternal(renderContext, camera);
                         }
                     }
@@ -736,12 +735,17 @@ namespace UnityEngine.Rendering.Universal
                 return;
             }
 
-            if (camera.targetTexture.width == 0 || camera.targetTexture.height == 0 || camera.pixelWidth == 0 || camera.pixelHeight == 0)
+            RenderTexture targetTexture = camera.targetTexture;
+            bool invalidTargetSize = targetTexture != null && (targetTexture.width <= 0 || targetTexture.height <= 0);
+            if (invalidTargetSize || camera.pixelWidth <= 0 || camera.pixelHeight <= 0)
             {
-                Debug.LogWarning($"Camera '{camera.name}' has an invalid render target size (width: {camera.targetTexture.width}, height: {camera.targetTexture.height}) or pixel dimensions (width: {camera.pixelWidth}, height: {camera.pixelHeight}). Camera will be skipped.");
+                string targetDescription = targetTexture != null ? $"{targetTexture.width} x {targetTexture.height}" : "display target";
+                Debug.LogWarning($"Camera '{camera.name}' has invalid output dimensions (target: {targetDescription}, pixels: {camera.pixelWidth} x {camera.pixelHeight}). Camera will be skipped.");
                 return;
             }
 
+            PlanarReflectionSystem.RenderForCamera(context, camera);
+            UpdateVolumeFramework(camera, additionalCameraData);
             var frameData = GetRenderer(camera, additionalCameraData).frameData;
             var cameraData = CreateCameraData(frameData, camera, additionalCameraData, true);
             InitializeAdditionalCameraData(camera, additionalCameraData, true, cameraData);
@@ -831,6 +835,7 @@ namespace UnityEngine.Rendering.Universal
 
                 PreIntegratedFGD.instance.RenderInit(PreIntegratedFGD.FGDIndex.FGD_GGXAndDisneyDiffuse, cmd);
                 SkySystem.instance.UpdateCurrentSky();
+                PlanarReflectionSystem.BindGlobals(cmd, camera);
                 SetupPerCameraEnvironmentShaderConstants(cmd);// TODO: use SkySystem.instance.UpdateEnvironment();
                 //SetupPerCameraShaderConstants(cmd);
 
@@ -985,6 +990,7 @@ namespace UnityEngine.Rendering.Universal
         /// <param name="camera">Camera to render.</param>
         static void RenderCameraStack(ScriptableRenderContext context, Camera baseCamera)
         {
+            PlanarReflectionSystem.RenderForCamera(context, baseCamera);
             using var profScope = new ProfilingScope(ProfilingSampler.Get(URPProfileId.RenderCameraStack));
 
             baseCamera.TryGetComponent<UniversalAdditionalCameraData>(out var baseCameraAdditionalData);

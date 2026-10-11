@@ -21,6 +21,7 @@ Shader "Universal Render Pipeline/Lit"
 
         [ToggleOff] _SpecularHighlights("Specular Highlights", Float) = 1.0
         [ToggleOff] _EnvironmentReflections("Environment Reflections", Float) = 1.0
+        [ToggleUI] _ReceiveTracedReflections("Receive Traced Reflections", Float) = 1.0
 
         _BumpScale("Scale", Float) = 1.0
         _BumpMap("Normal Map", 2D) = "bump" {}

@@ -8,6 +8,7 @@
 
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/GPUCulledLights.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Material.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/PlanarReflections.hlsl"
 
 // DanbaidongRP GlobalIllumination only handles bakedGI(Lightmaps).
 #define USE_BAKED_GI_ONLY 1
@@ -43,12 +44,27 @@ float CalculateProbeWeight(float3 positionWS, float4 probeBoxMin, float4 probeBo
     return saturate(min(weightDir.x, min(weightDir.y, weightDir.z)));
 }
 
+float3 SampleEnvironmentProbe(uint probeIndex, float3 reflectDirWS, float perceptualRoughness)
+{
+    uint maxMip = (uint)abs(urp_ReflProbes_ProbePosition[probeIndex].w) - 1;
+    half probeMip = min(PerceptualRoughnessToMipmapLevel(perceptualRoughness), maxMip);
+    float2 uv = saturate(PackNormalOctQuadEncode(reflectDirWS) * 0.5 + 0.5);
+
+    float mip0 = floor(probeMip);
+    float mip1 = mip0 + 1;
+    float mipBlend = probeMip - mip0;
+    float4 scaleOffset0 = urp_ReflProbes_MipScaleOffset[probeIndex * 7 + (uint)mip0];
+    float4 scaleOffset1 = urp_ReflProbes_MipScaleOffset[probeIndex * 7 + (uint)mip1];
+
+    float3 irradiance0 = SAMPLE_TEXTURE2D_LOD(urp_ReflProbes_Atlas, sampler_LinearClamp, uv * scaleOffset0.xy + scaleOffset0.zw, 0.0).xyz;
+    float3 irradiance1 = SAMPLE_TEXTURE2D_LOD(urp_ReflProbes_Atlas, sampler_LinearClamp, uv * scaleOffset1.xy + scaleOffset1.zw, 0.0).xyz;
+    return lerp(irradiance0, irradiance1, mipBlend);
+}
+
 float3 EvaluateEnvProbes(PositionInputs posInput, float3 reflectDirWS, float perceptualRoughness, inout float hierarchyWeight)
 {
     float3 irradiance = 0;
     float totalWeight = 0;
-    float mip = PerceptualRoughnessToMipmapLevel(perceptualRoughness);
-
     uint lightCategory = LIGHTCATEGORY_ENV;
     uint lightStart;
     uint lightCount;
@@ -69,19 +85,7 @@ float3 EvaluateEnvProbes(PositionInputs posInput, float3 reflectDirWS, float per
             float weight = CalculateProbeWeight(posInput.positionWS, urp_ReflProbes_BoxMin[probeIndex], urp_ReflProbes_BoxMax[probeIndex]);
             weight = min(weight, 1.0f - totalWeight);
 
-            uint maxMip = (uint)abs(urp_ReflProbes_ProbePosition[probeIndex].w) - 1;
-            half probeMip = min(mip, maxMip);
-            float2 uv = saturate(PackNormalOctQuadEncode(reflectDirWS) * 0.5 + 0.5);
-
-            float mip0 = floor(probeMip);
-            float mip1 = mip0 + 1;
-            float mipBlend = probeMip - mip0;
-            float4 scaleOffset0 = urp_ReflProbes_MipScaleOffset[probeIndex * 7 + (uint)mip0];
-            float4 scaleOffset1 = urp_ReflProbes_MipScaleOffset[probeIndex * 7 + (uint)mip1];
-
-            float3 irradiance0 = SAMPLE_TEXTURE2D_LOD(urp_ReflProbes_Atlas, sampler_LinearClamp, uv * scaleOffset0.xy + scaleOffset0.zw, 0.0).xyz;
-            float3 irradiance1 = SAMPLE_TEXTURE2D_LOD(urp_ReflProbes_Atlas, sampler_LinearClamp, uv * scaleOffset1.xy + scaleOffset1.zw, 0.0).xyz;
-            irradiance += weight * lerp(irradiance0, irradiance1, mipBlend);
+            irradiance += weight * SampleEnvironmentProbe(probeIndex, reflectDirWS, perceptualRoughness);
             totalWeight += weight;
 
             v_lightListOffset++;
@@ -89,12 +93,15 @@ float3 EvaluateEnvProbes(PositionInputs posInput, float3 reflectDirWS, float per
     }
 
     // Apply the main lobe weight and update main reflection hierarchyWeight:
+    float unboundedWeight = totalWeight;
     UpdateLightingHierarchyWeights(hierarchyWeight, totalWeight);
-    // irradiance *= totalWeight; // We have applied in the loop.
+    irradiance *= totalWeight / max(unboundedWeight, 0.00001);
 
     return irradiance;
 }
 
+
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/ReflectionProbeHierarchy.hlsl"
 
 //-----------------------------------------------------------------------------
 // Evaluate SkyEnvironment
@@ -524,6 +531,22 @@ half3 SubtractDirectMainLightFromLightmap(Light mainLight, half3 normalWS, half3
 
     // 3) Pick darkest color
     return min(bakedGI, realtimeShadow);
+}
+
+half3 PlanarReflectionBRDF(BRDFData brdfData, BRDFData brdfDataClearCoat, float clearCoatMask,
+    float3 positionWS, half3 normalWS, half3 viewDirectionWS, half occlusion)
+{
+    half fresnelTerm = Pow4(1.0 - saturate(dot(normalWS, viewDirectionWS)));
+    uint renderingLayers = GetMeshRenderingLayer();
+    float4 reflection = SamplePlanarReflection(positionWS, normalWS, viewDirectionWS, brdfData.perceptualRoughness, renderingLayers);
+    half3 color = EnvironmentBRDF(brdfData, 0.0, reflection.rgb * reflection.a, fresnelTerm);
+#if defined(_CLEARCOAT) || defined(_CLEARCOATMAP)
+    float4 coatReflection = SamplePlanarReflection(positionWS, normalWS, viewDirectionWS, brdfDataClearCoat.perceptualRoughness, renderingLayers);
+    half3 coatColor = EnvironmentBRDFClearCoat(brdfDataClearCoat, clearCoatMask, coatReflection.rgb * coatReflection.a, fresnelTerm);
+    half coatFresnel = kDielectricSpec.x + kDielectricSpec.a * fresnelTerm;
+    color = color * (1.0 - coatFresnel * clearCoatMask) + coatColor;
+#endif
+    return color * occlusion;
 }
 
 half3 GlobalIllumination(BRDFData brdfData, BRDFData brdfDataClearCoat, float clearCoatMask,

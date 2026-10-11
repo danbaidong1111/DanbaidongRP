@@ -42,6 +42,7 @@
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareDepthTexture.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareAmbientOcclusionTexture.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareReflectionLightingTexture.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/PlanarReflections.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/DeclareGlobalIlluminationTexture.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/PreIntegratedFGD.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/GPUCulledLights.hlsl"
@@ -525,9 +526,10 @@ DeferredLightingOutput DeferredLit(PositionInputs posInput, ShadingData shadingD
 
     // Accumulate Indirect (Reflection probe, ScreenSpace Reflection/Refraction)
     // Reflection / Refraction hierarchy is
-    //  1. Screen Space Refraction / Reflection
-    //  2. Environment Reflection / Refraction
-    //  3. Sky Reflection / Refraction
+    //  1. Planar Reflection
+    //  2. Screen Space Refraction / Reflection
+    //  3. Environment Reflection / Refraction
+    //  4. Sky Reflection / Refraction
     bool materialUseBakedGI = (shadingData.materialFlags & kMaterialFlagUseBakedGI) != 0;
 
     float3 SHColor = SampleSH9(_AmbientProbeData, normalWS);
@@ -564,23 +566,26 @@ DeferredLightingOutput DeferredLit(PositionInputs posInput, ShadingData shadingD
     }
 
     float reflectionHierarchyWeight = 0.0; // Max: 1.0
-    
+
     #if defined(_SCREEN_SPACE_REFLECTION)
-    // Evaluate ScreenSpaceReflection.
+    bool receiveTracedReflections = (shadingData.materialFlags & kMaterialFlagReceiveTracedReflectionsOff) == 0;
+    if (receiveTracedReflections)
     {
         float4 reflectLighting = LoadSceneReflectionLighting(posInput.positionSS);
-        UpdateLightingHierarchyWeights(reflectionHierarchyWeight, reflectLighting.a);
-        indirectSpecular += specularFGD * reflectLighting.rgb * reflectLighting.a;
+        indirectSpecular += specularFGD * EvaluateTracedReflection(reflectLighting, receiveTracedReflections, reflectionHierarchyWeight);
     }
     #endif
 
-    // Evaluate Environment probes
     if (reflectionHierarchyWeight < 1.0)
     {
-        float3 envReflection = EvaluateEnvProbes(posInput, reflectDirWS, shadingData.perceptualRoughness, reflectionHierarchyWeight);
-        indirectSpecular += specularFGD * envReflection;
+        uint renderingLayers = 0xffffffffu;
+        #if defined(_LIGHT_LAYERS)
+        renderingLayers = shadingData.meshRenderingLayers;
+        #endif
+        float3 probeReflection = EvaluateReflectionProbes(posInput, normalWS, viewDirWS, reflectDirWS,
+            shadingData.perceptualRoughness, renderingLayers, reflectionHierarchyWeight);
+        indirectSpecular += specularFGD * probeReflection;
     }
-    
 
     // Evaluate SkyEnvironment
     if (reflectionHierarchyWeight < 1.0)

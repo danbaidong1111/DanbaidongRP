@@ -8,6 +8,9 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
     {
         static readonly string[] workflowModeNames = Enum.GetNames(typeof(LitGUI.WorkflowMode));
 
+        private MaterialProperty receiveTracedReflections;
+        private static readonly GUIContent receiveTracedReflectionsText = new GUIContent("Receive Traced Reflections",
+            "Use the combined screen-space and ray-traced reflection result on deferred opaque surfaces. Disable to use reflection probes and sky directly.");
         private LitGUI.LitProperties litProperties;
         private LitDetailGUI.LitProperties litDetailProperties;
 
@@ -20,6 +23,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
         public override void FindProperties(MaterialProperty[] properties)
         {
             base.FindProperties(properties);
+            receiveTracedReflections = FindProperty("_ReceiveTracedReflections", properties, false);
             litProperties = new LitGUI.LitProperties(properties);
             litDetailProperties = new LitDetailGUI.LitProperties(properties);
         }
@@ -59,6 +63,9 @@ namespace UnityEditor.Rendering.Universal.ShaderGUI
                 materialEditor.ShaderProperty(litProperties.highlights, LitGUI.Styles.highlightsText);
                 materialEditor.ShaderProperty(litProperties.reflections, LitGUI.Styles.reflectionsText);
             }
+
+            if (receiveTracedReflections != null)
+                materialEditor.ShaderProperty(receiveTracedReflections, receiveTracedReflectionsText);
 
             base.DrawAdvancedOptions(material);
         }

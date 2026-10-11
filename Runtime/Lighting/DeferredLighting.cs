@@ -80,6 +80,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             internal BufferHandle ambientProbe;
             // Sky Reflect
             internal TextureHandle reflectProbe;
+            internal TextureHandle[] planarReflections = new TextureHandle[PlanarReflectionSystem.maxProbeCount];
 
             // Lighting Buffers (SSAO, SSR, SSGI, SSShadow)
             internal TextureHandle AmbientOcclusionTexture;
@@ -135,6 +136,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
                     cmd.SetComputeBufferParam(data.deferredLightingCS, kernelIndex, "_AmbientProbeData", data.ambientProbe);
                     cmd.SetComputeTextureParam(data.deferredLightingCS, kernelIndex, "_SkyTexture", data.reflectProbe);
+                    PlanarReflectionSystem.BindComputeTextures(cmd, data.deferredLightingCS, kernelIndex, data.planarReflections);
 
                     // ScreenSpaceLighting ShaderVariables
                     cmd.SetComputeTextureParam(data.deferredLightingCS, kernelIndex, "_ScreenSpaceShadowmapTexture", data.SSShadowsTexture);
@@ -194,6 +196,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 // Sky Environment
                 passData.ambientProbe = resourceData.skyAmbientProbe;
                 passData.reflectProbe = resourceData.skyReflectionProbe;
+                PlanarReflectionSystem.ImportTextures(renderGraph, cameraData.camera, passData.planarReflections);
 
                 // Lighting Buffers (SSAO, SSR, SSGI, SSShadow)
                 passData.AmbientOcclusionTexture = resourceData.ssaoTexture;
@@ -224,6 +227,8 @@ namespace UnityEngine.Rendering.Universal.Internal
 
                 builder.UseBuffer(passData.ambientProbe, AccessFlags.Read);
                 builder.UseTexture(passData.reflectProbe, AccessFlags.Read);
+                for (int i = 0; i < passData.planarReflections.Length; ++i)
+                    builder.UseTexture(passData.planarReflections[i], AccessFlags.Read);
 
                 builder.UseTexture(passData.SSShadowsTexture, AccessFlags.Read);
                 if (passData.shadowScatterTexture.IsValid())

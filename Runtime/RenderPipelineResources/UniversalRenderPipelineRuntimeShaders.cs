@@ -20,6 +20,14 @@ namespace UnityEngine.Rendering.Universal
         public int version => m_Version;
         bool IRenderPipelineGraphicsSettings.isAvailableInPlayerBuild => true;
 
+        [SerializeField, ResourcePath("Shaders/Utils/PlanarReflectionFiltering.compute")]
+        ComputeShader m_PlanarReflectionFilteringCS;
+        public ComputeShader planarReflectionFilteringCS
+        {
+            get => m_PlanarReflectionFilteringCS;
+            set => this.SetValueAndNotify(ref m_PlanarReflectionFilteringCS, value);
+        }
+
         [SerializeField, ResourcePath("Shaders/Utils/FallbackError.shader")]
         Shader m_FallbackErrorShader;
 

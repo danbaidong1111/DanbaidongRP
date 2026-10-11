@@ -59,6 +59,7 @@
 #define kMaterialFlagSubtractiveMixedLighting 4 // The geometry uses subtractive mixed lighting
 #define kMaterialFlagSpecularSetup            8 // Lit material use specular setup instead of metallic setup
 
+#define kMaterialFlagReceiveTracedReflectionsOff 32 // The surface uses probes and sky directly.
 #define kMaterialFlagUseBakedGI               16 // The geometry uses baked GlobalIllumination, so we don't need to add env ambient to result in DefferredLighting.
 
 // Light flags.

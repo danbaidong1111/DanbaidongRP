@@ -1464,6 +1464,8 @@ namespace UnityEngine.Rendering.Universal
             else
                 RecordCustomRenderGraphPasses(renderGraph, RenderPassEvent.AfterRenderingTransparents);
 
+            m_PlanarReflectionFilteringPass?.Render(renderGraph, frameData);
+
             if (context.HasInvokeOnRenderObjectCallbacks())
                 m_OnRenderObjectCallbackPass.Render(renderGraph, resourceData.activeColorTexture, resourceData.activeDepthTexture);
 
@@ -1786,6 +1788,8 @@ namespace UnityEngine.Rendering.Universal
 
 
             RecordCustomRenderGraphPasses(renderGraph, RenderPassEvent.AfterRenderingTransparents);
+
+            m_PlanarReflectionFilteringPass?.Render(renderGraph, frameData);
 
 
             if (context.HasInvokeOnRenderObjectCallbacks())
