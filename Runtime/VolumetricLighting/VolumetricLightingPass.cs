@@ -6,7 +6,7 @@ using UnityEngine.Rendering.Universal.Internal;
 
 namespace UnityEngine.Rendering.Universal
 {
-    internal sealed class VolumetricLightingPass : IDisposable
+    internal sealed partial class VolumetricLightingPass : IDisposable
     {
         static readonly ProfilingSampler s_VoxelizationSampler = new ProfilingSampler("Voxelize Volumetric Medium");
         static readonly ProfilingSampler s_DepthSampler = new ProfilingSampler("Build Volumetric Depth");
@@ -97,7 +97,7 @@ namespace UnityEngine.Rendering.Universal
                 hash = GetLightingHash(frameData.Get<UniversalLightData>(), hash);
             data.locals = LocalVolumetricFogManager.Capture(m_Settings, data.buffer, cameraData.camera, ref hash);
             InitMaterialMaskResources(graph, data);
-            GetHistory(cameraData).Update(graph, data, cameraData, m_Settings, hash);
+            UpdateHistory(graph, GetHistoryRTSystem(cameraData), data, cameraData, m_Settings, hash);
             data.lightingKernel = data.temporal ? m_Lighting : m_LightingNoHistory;
             InitVolumeTextures(graph, data);
 
@@ -437,11 +437,10 @@ namespace UnityEngine.Rendering.Universal
             }
         }
 
-        static VolumetricHistory GetHistory(UniversalCameraData cameraData)
+        static HistoryFrameRTSystem GetHistoryRTSystem(UniversalCameraData cameraData)
         {
             int eye = cameraData.xr.enabled && !cameraData.xr.singlePassEnabled ? cameraData.xr.multipassId : 0;
-            var system = HistoryFrameRTSystem.GetOrCreate(cameraData.camera, eye);
-            return system.volumetricHistory ?? (system.volumetricHistory = new VolumetricHistory(system));
+            return HistoryFrameRTSystem.GetOrCreate(cameraData.camera, eye);
         }
 
         public TextureHandle Render(RenderGraph graph, ContextContainer frameData)
@@ -449,7 +448,7 @@ namespace UnityEngine.Rendering.Universal
             var fog = frameData.Get<FogRenderingData>();
             if (!fog.active || !fog.volumetric)
             {
-                GetHistory(frameData.Get<UniversalCameraData>()).Disable();
+                ResetHistory(GetHistoryRTSystem(frameData.Get<UniversalCameraData>()));
                 return TextureHandle.nullHandle;
             }
             m_Settings = fog.settings;
@@ -465,6 +464,7 @@ namespace UnityEngine.Rendering.Universal
 
         public void Dispose()
         {
+            DisposeCameraStates();
             foreach (var texture in m_ExternalTextures.Values) texture.Release();
             m_ExternalTextures.Clear();
         }
