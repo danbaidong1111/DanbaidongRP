@@ -1,0 +1,81 @@
+Pass
+{
+    $splice(PassName)
+    Tags { $splice(LightMode) }
+    $splice(RenderState)
+    HLSLPROGRAM
+    $splice(PassPragmas)
+    $splice(PassKeywords)
+    $splice(GraphKeywords)
+    $splice(GraphDefines)
+    $splice(PreGraphIncludes)
+    $splice(PassStructs)
+    $splice(GraphProperties)
+    $splice(GraphIncludes)
+    $splice(GraphFunctions)
+    $splice(GraphPixel)
+
+    SurfaceDescriptionInputs BuildFogVolumeInputs(FogVolumeVaryings input)
+    {
+        SurfaceDescriptionInputs output = (SurfaceDescriptionInputs)0;
+        float3 uvw = float3(input.positionCS.xy / max(_FogLocalMaskSize.xy, 1), _FogLocalSlice);
+        float3 positionOS = uvw - 0.5;
+        float3 positionWS = mul(_FogLocalVolumeToWorld, float4(positionOS, 1)).xyz;
+        float time = _FogLocalTime;
+        #if defined(SHADERGRAPH_PREVIEW)
+            uvw = float3(input.uv, 0.5);
+            positionOS = uvw - 0.5;
+            positionWS = positionOS;
+            time = _TimeParameters.x;
+        #endif
+        float3 normalWS = TransformObjectToWorldNormal(float3(0, 0, 1));
+        float3 tangentWS = TransformObjectToWorldDir(float3(1, 0, 0));
+        float3 bitangentWS = normalize(cross(normalWS, tangentWS)) * GetOddNegativeScale();
+        float3 viewWS = SafeNormalize(GetCameraPositionWS() - positionWS);
+        $SurfaceDescriptionInputs.WorldSpacePosition: output.WorldSpacePosition = positionWS;
+        $SurfaceDescriptionInputs.AbsoluteWorldSpacePosition: output.AbsoluteWorldSpacePosition = positionWS;
+        $SurfaceDescriptionInputs.ObjectSpacePosition: output.ObjectSpacePosition = positionOS;
+        $SurfaceDescriptionInputs.ViewSpacePosition: output.ViewSpacePosition = TransformWorldToView(positionWS);
+        $SurfaceDescriptionInputs.TangentSpacePosition: output.TangentSpacePosition = positionOS;
+        $SurfaceDescriptionInputs.WorldSpacePositionPredisplacement: output.WorldSpacePositionPredisplacement = positionWS;
+        $SurfaceDescriptionInputs.AbsoluteWorldSpacePositionPredisplacement: output.AbsoluteWorldSpacePositionPredisplacement = positionWS;
+        $SurfaceDescriptionInputs.ObjectSpacePositionPredisplacement: output.ObjectSpacePositionPredisplacement = positionOS;
+        $SurfaceDescriptionInputs.ViewSpacePositionPredisplacement: output.ViewSpacePositionPredisplacement = TransformWorldToView(positionWS);
+        $SurfaceDescriptionInputs.TangentSpacePositionPredisplacement: output.TangentSpacePositionPredisplacement = positionOS;
+        $SurfaceDescriptionInputs.WorldSpaceNormal: output.WorldSpaceNormal = normalWS;
+        $SurfaceDescriptionInputs.ObjectSpaceNormal: output.ObjectSpaceNormal = float3(0, 0, 1);
+        $SurfaceDescriptionInputs.ViewSpaceNormal: output.ViewSpaceNormal = TransformWorldToViewDir(normalWS);
+        $SurfaceDescriptionInputs.TangentSpaceNormal: output.TangentSpaceNormal = float3(0, 0, 1);
+        $SurfaceDescriptionInputs.WorldSpaceTangent: output.WorldSpaceTangent = tangentWS;
+        $SurfaceDescriptionInputs.ObjectSpaceTangent: output.ObjectSpaceTangent = float3(1, 0, 0);
+        $SurfaceDescriptionInputs.ViewSpaceTangent: output.ViewSpaceTangent = TransformWorldToViewDir(tangentWS);
+        $SurfaceDescriptionInputs.TangentSpaceTangent: output.TangentSpaceTangent = float3(1, 0, 0);
+        $SurfaceDescriptionInputs.WorldSpaceBiTangent: output.WorldSpaceBiTangent = bitangentWS;
+        $SurfaceDescriptionInputs.ObjectSpaceBiTangent: output.ObjectSpaceBiTangent = float3(0, 1, 0);
+        $SurfaceDescriptionInputs.ViewSpaceBiTangent: output.ViewSpaceBiTangent = TransformWorldToViewDir(bitangentWS);
+        $SurfaceDescriptionInputs.TangentSpaceBiTangent: output.TangentSpaceBiTangent = float3(0, 1, 0);
+        $SurfaceDescriptionInputs.WorldSpaceViewDirection: output.WorldSpaceViewDirection = viewWS;
+        $SurfaceDescriptionInputs.ObjectSpaceViewDirection: output.ObjectSpaceViewDirection = TransformWorldToObjectDir(viewWS);
+        $SurfaceDescriptionInputs.ViewSpaceViewDirection: output.ViewSpaceViewDirection = TransformWorldToViewDir(viewWS);
+        $SurfaceDescriptionInputs.TangentSpaceViewDirection: output.TangentSpaceViewDirection = mul(float3x3(tangentWS, bitangentWS, normalWS), viewWS);
+        $SurfaceDescriptionInputs.uv0: output.uv0 = float4(uvw, 0);
+        $SurfaceDescriptionInputs.uv1: output.uv1 = float4(uvw, 0);
+        $SurfaceDescriptionInputs.uv2: output.uv2 = float4(uvw, 0);
+        $SurfaceDescriptionInputs.uv3: output.uv3 = float4(uvw, 0);
+        $SurfaceDescriptionInputs.ScreenPosition: output.ScreenPosition = float4(uvw.xy, 0, 1);
+        $SurfaceDescriptionInputs.NDCPosition: output.NDCPosition = uvw.xy;
+        $SurfaceDescriptionInputs.PixelPosition: output.PixelPosition = input.positionCS.xy;
+        $SurfaceDescriptionInputs.VertexColor: output.VertexColor = 1;
+        $SurfaceDescriptionInputs.FaceSign: output.FaceSign = 1;
+        $SurfaceDescriptionInputs.TimeParameters: output.TimeParameters = float3(time, sin(time), cos(time));
+        return output;
+    }
+
+    float4 FogVolumeFragment(FogVolumeVaryings input) : SV_Target
+    {
+        SurfaceDescription surface = SurfaceDescriptionFunction(BuildFogVolumeInputs(input));
+        return float4(max(0, surface.FogVolumeAlbedo), max(0, surface.FogVolumeDensity));
+    }
+    $splice(PostGraphIncludes)
+    ENDHLSL
+}
