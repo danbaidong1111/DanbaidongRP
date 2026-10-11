@@ -162,11 +162,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                         lightFlags |= (int)LightFlag.SubtractiveMixedLighting;
                     int shadowLightIndex = m_AdditionalLightsShadowCasterPass != null ? m_AdditionalLightsShadowCasterPass.GetShadowLightIndexFromLightIndex(visLightIndex) : -1;
 
-                    if (m_LightCookieManager != null)
-                    {
-                        int cookieLightIndex = m_LightCookieManager.GetLightCookieShaderDataIndex(visLightIndex);
-                        gpuLightsData.cookieLightIndex = cookieLightIndex;
-                    }
+                    // The current camera's atlas mapping becomes available during graph execution.
+                    gpuLightsData.cookieLightIndex = -1;
 
                     gpuLightsData.lightPosWS = lightPos;
                     gpuLightsData.lightColor = lightColor;
@@ -187,6 +184,20 @@ namespace UnityEngine.Rendering.Universal.Internal
 
                     m_GPULightsData[visLightIndex - dirlightCount] = gpuLightsData;
                 }
+            }
+        }
+
+        internal void RefreshCookieIndices(UniversalLightData lightData)
+        {
+            var visibleLights = lightData.visibleLights;
+            for (int visibleIndex = 0; visibleIndex < visibleLights.Length; ++visibleIndex)
+            {
+                if (visibleLights[visibleIndex].lightType == LightType.Directional) continue;
+                int index = visibleIndex - lightData.directionalLightsCount;
+                var light = m_GPULightsData[index];
+                light.cookieLightIndex = m_LightCookieManager != null
+                    ? m_LightCookieManager.GetLightCookieShaderDataIndex(visibleIndex) : -1;
+                m_GPULightsData[index] = light;
             }
         }
 

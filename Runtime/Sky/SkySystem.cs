@@ -237,15 +237,10 @@ namespace UnityEngine.Rendering.Universal
 
         private void InitializeBlackCubemapArray(int cubemapCount = 1)
         {
-            if (m_BlackCubmapRT == null)
+            if (m_BlackCubmapRT == null || (m_BlackCubmapRT.rt == null && m_BlackCubmapRT.externalTexture == null))
             {
-                m_BlackCubmapRT = RTHandles.Alloc(1, 1,
-                    colorFormat: GraphicsFormat.R8G8B8A8_SRGB,
-                    dimension: TextureDimension.Cube,
-                    useMipMap: true,
-                    autoGenerateMips: false,
-                    filterMode: FilterMode.Trilinear,
-                    name: "BlackCubemapArray");
+                m_BlackCubmapRT?.Release();
+                m_BlackCubmapRT = RTHandles.Alloc(CoreUtils.blackCubeTexture);
             }
         }
 
@@ -257,6 +252,7 @@ namespace UnityEngine.Rendering.Universal
 
         internal RTHandle GetSkyCubemap()
         {
+            InitializeBlackCubemapArray();
             if (IsValid() && m_SkyboxCubemapRT != null)
             {
                 return m_SkyboxCubemapRT;
@@ -269,6 +265,7 @@ namespace UnityEngine.Rendering.Universal
 
         internal RTHandle GetReflectionTexture()
         {
+            InitializeBlackCubemapArray();
             if (IsValid() && m_SkyboxBSDFCubemapRT != null)
             {
                 return m_SkyboxBSDFCubemapRT;

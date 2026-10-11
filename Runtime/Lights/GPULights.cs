@@ -765,11 +765,14 @@ namespace UnityEngine.Rendering.Universal.Internal
         {
             internal GPULightsDataBuildSystem gpuLightsDataBuildSystem;
             internal GPULightsOutPassData outData;
+            internal UniversalLightData lightData;
         }
 
         static void ResolveGPULightsData(ComputeCommandBuffer cmd, GlobalSyncPassData data)
         {
             var outData = data.outData;
+            // Setup Forward Lights has resolved this camera's atlas before the buffer upload.
+            data.gpuLightsDataBuildSystem.RefreshCookieIndices(data.lightData);
             cmd.SetBufferData(outData.GPULightsData, data.gpuLightsDataBuildSystem.gpuLightsData, 0, 0, data.gpuLightsDataBuildSystem.lightsCount);
             cmd.SetBufferData(outData.directionalLightsData, data.gpuLightsDataBuildSystem.directionalLightsData, 0, 0, data.gpuLightsDataBuildSystem.directionalLightCount);
 
@@ -799,6 +802,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 var outData = frameData.Get<GPULightsOutPassData>();
                 passData.gpuLightsDataBuildSystem = m_GPULightsDataBuildSystem;
                 passData.outData = outData;
+                passData.lightData = frameData.Get<UniversalLightData>();
 
                 builder.UseBuffer(outData.GPULightsData, AccessFlags.Write);
                 builder.UseBuffer(outData.directionalLightsData, AccessFlags.Write);

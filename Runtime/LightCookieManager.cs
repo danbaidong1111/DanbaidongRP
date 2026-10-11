@@ -318,7 +318,8 @@ namespace UnityEngine.Rendering.Universal
         // -1 on invalid/disabled cookie.
         public int GetLightCookieShaderDataIndex(int visibleLightIndex)
         {
-            if (!isInitialized())
+            if (!isInitialized() || visibleLightIndex < 0 || m_VisibleLightIndexToShaderDataIndex == null
+                || visibleLightIndex >= m_VisibleLightIndexToShaderDataIndex.Length)
                 return -1;
 
             return m_VisibleLightIndexToShaderDataIndex[visibleLightIndex];

@@ -399,6 +399,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 passData.forwardLights = this;
 
                 builder.AllowPassCulling(false);
+                builder.AllowGlobalStateModification(true);
 
                 builder.SetRenderFunc((SetupLightPassData data, UnsafeGraphContext rgContext) =>
                 {
