@@ -2046,6 +2046,8 @@ namespace UnityEngine.Rendering.Universal
                 }
             }
 
+            currentSource = m_ExposurePass.Render(renderGraph, frameData, currentSource);
+
             // Depth of Field
 
             if (useDepthOfField && m_DepthOfField.mode.value == DepthOfFieldMode.Bokeh)

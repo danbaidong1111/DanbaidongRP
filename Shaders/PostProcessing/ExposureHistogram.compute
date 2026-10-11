@@ -1,0 +1,184 @@
+// Copyright (c) Unity Technologies. Licensed under the Unity Companion License.
+#pragma kernel ClearHistogram
+#pragma kernel BuildHistogram SOURCE_2D HISTOGRAM_PASS
+#pragma kernel BuildHistogramArray SOURCE_ARRAY HISTOGRAM_PASS
+#pragma kernel MeterAverage SOURCE_2D
+#pragma kernel MeterAverageArray SOURCE_ARRAY
+#pragma kernel ResolveHistogram
+#pragma kernel ResolveAverage
+#pragma target 4.5
+
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+
+Texture2D<float4> _ExposureSource;
+Texture2DArray<float4> _ExposureSourceArray;
+Texture2D<float> _ExposureWeightMask;
+Texture2D<float4> _ExposureCurveTexture;
+Texture2D<float2> _ExposurePrevious;
+RWTexture2D<float2> _ExposureAverage;
+RWTexture2D<float2> _ExposureOutput;
+RWStructuredBuffer<uint> _ExposureHistogram;
+SamplerState sampler_LinearClamp;
+float4 _ExposureSourceScale, _ExposureMeterSize;
+float _ExposureWeightScale;
+float4 _ExposureParams; // EV100 minimum, maximum, compensation, calibration constant
+float4 _ExposurePercentiles; // lower percentile, upper percentile, histogram EV range
+float4 _ExposureAdaptation; // light-to-dark speed, dark-to-light speed, delta time, history valid
+float4 _ExposureCurveParams; // domain minimum, domain maximum, enabled, lens exposure scale
+float4 _ExposureMask;
+float4 _ExposureMaskLimits;
+uint _ExposureMetering, _ExposureViews;
+#define HISTOGRAM_BINS 128
+#define METER_SIZE 1024.0
+
+groupshared float2 gs_meter[256];
+groupshared uint gs_histogram[HISTOGRAM_BINS];
+
+float WeightSample(float2 pixel, float luminance)
+{
+    float diagonal = .5 * (_ExposureMeterSize.x + _ExposureMeterSize.y);
+    float distance = length(_ExposureMeterSize.xy * .5 - pixel);
+    if (_ExposureMetering == 1) return 1.0 - saturate(distance / diagonal);
+    if (_ExposureMetering == 2) return 1.0 - saturate(distance - .075 * diagonal);
+    if (_ExposureMetering == 3) return saturate(_ExposureWeightMask.SampleLevel(sampler_LinearClamp, pixel * _ExposureMeterSize.zw, 0));
+    if (_ExposureMetering == 4)
+    {
+        float radius = max(_ExposureMask.z, _ExposureMask.w);
+        float dist = length((_ExposureMask.xy - pixel) * radius / _ExposureMask.zw);
+        return luminance > _ExposureMaskLimits.y && luminance < _ExposureMaskLimits.z
+            ? saturate(1.0 - pow(dist / radius, _ExposureMaskLimits.x)) : 0;
+    }
+    return 1;
+}
+float2 Meter(uint2 pixel)
+{
+    float2 uv = (pixel + .5) * _ExposureMeterSize.zw * _ExposureSourceScale.xy;
+#ifdef SOURCE_ARRAY
+    uint2 eyePixel = pixel;
+#ifdef HISTOGRAM_PASS
+    eyePixel >>= 1;
+#endif
+    float3 color = _ExposureSourceArray.SampleLevel(sampler_LinearClamp, float3(uv, (eyePixel.x + eyePixel.y) % max(1u, _ExposureViews)), 0).rgb;
+#else
+    float3 color = _ExposureSource.SampleLevel(sampler_LinearClamp, uv, 0).rgb;
+#endif
+#ifdef UNITY_COLORSPACE_GAMMA
+    color = SRGBToLinear(color);
+#endif
+    if (AnyIsNaN(color) || AnyIsInf(color)) return 0;
+    float luminance = max(0, Luminance(color));
+#ifdef HISTOGRAM_PASS
+    float ev = log2(max(luminance, 1e-32) * 100.0 / _ExposureParams.w);
+#else
+    float ev = log2(max(luminance, 1e-4) * 100.0 / _ExposureParams.w);
+#endif
+    return float2(ev, WeightSample(pixel, luminance));
+}
+[numthreads(HISTOGRAM_BINS, 1, 1)]
+void ClearHistogram(uint id : SV_GroupIndex) { _ExposureHistogram[id] = 0; }
+
+void BuildHistogramImpl(uint2 group, uint2 thread, uint index)
+{
+    if (index < HISTOGRAM_BINS) gs_histogram[index] = 0;
+    GroupMemoryBarrierWithGroupSync();
+    uint2 pixel = (group * uint2(16, 8) + thread) * 2;
+    if (all(pixel < (uint2)_ExposureMeterSize.xy))
+    {
+        float2 metered = Meter(pixel);
+        uint bin = (uint)(saturate((metered.x - _ExposurePercentiles.z) / (_ExposurePercentiles.w - _ExposurePercentiles.z)) * (HISTOGRAM_BINS - 1));
+        InterlockedAdd(gs_histogram[bin], (uint)(metered.y * _ExposureWeightScale));
+    }
+    GroupMemoryBarrierWithGroupSync();
+    if (index < HISTOGRAM_BINS) InterlockedAdd(_ExposureHistogram[index], gs_histogram[index]);
+}
+[numthreads(16, 8, 1)]
+void BuildHistogram(uint2 group : SV_GroupID, uint2 thread : SV_GroupThreadID, uint index : SV_GroupIndex) { BuildHistogramImpl(group, thread, index); }
+[numthreads(16, 8, 1)]
+void BuildHistogramArray(uint2 group : SV_GroupID, uint2 thread : SV_GroupThreadID, uint index : SV_GroupIndex) { BuildHistogramImpl(group, thread, index); }
+
+void MeterAverageImpl(uint2 group, uint2 thread, uint index)
+{
+    uint2 pixel = (group * 16 + thread) * 2;
+    float2 sum = 0;
+    [unroll] for (uint y = 0; y < 2; ++y)
+    [unroll] for (uint x = 0; x < 2; ++x)
+    {
+        float2 sample = Meter(pixel + uint2(x, y));
+        sum += float2(sample.x * sample.y, sample.y);
+    }
+    gs_meter[index] = sum;
+    GroupMemoryBarrierWithGroupSync();
+    [unroll] for (uint stride = 128; stride > 0; stride >>= 1)
+    {
+        if (index < stride) gs_meter[index] += gs_meter[index + stride];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (index == 0) _ExposureAverage[group] = gs_meter[0];
+}
+[numthreads(16, 16, 1)]
+void MeterAverage(uint2 group : SV_GroupID, uint2 thread : SV_GroupThreadID, uint index : SV_GroupIndex) { MeterAverageImpl(group, thread, index); }
+[numthreads(16, 16, 1)]
+void MeterAverageArray(uint2 group : SV_GroupID, uint2 thread : SV_GroupThreadID, uint index : SV_GroupIndex) { MeterAverageImpl(group, thread, index); }
+
+void Resolve(float measured, float weight)
+{
+    float2 previous = _ExposurePrevious[uint2(0, 0)];
+    bool valid = _ExposureAdaptation.w > .5 && !IsNaN(previous.y) && !IsInf(previous.y) && previous.x > 0;
+    float ev = measured;
+    float2 limits = _ExposureParams.xy;
+    if (_ExposureCurveParams.z > .5)
+    {
+        float u = saturate((ev - _ExposureCurveParams.x) / max(.001, _ExposureCurveParams.y - _ExposureCurveParams.x));
+        float3 curve = _ExposureCurveTexture.SampleLevel(sampler_LinearClamp, float2(u, .5), 0).rgb;
+        ev = curve.r;
+        limits = float2(min(curve.g, curve.b), max(curve.g, curve.b));
+    }
+    ev -= _ExposureParams.z;
+    if (weight <= 0) ev = valid ? previous.y : clamp(0.0, limits.x, limits.y);
+    if (valid)
+    {
+        float speed = ev > previous.y ? _ExposureAdaptation.y : _ExposureAdaptation.x;
+        ev = lerp(previous.y, ev, 1.0 - exp2(-_ExposureAdaptation.z * speed));
+    }
+    ev = clamp(ev, limits.x, limits.y);
+    _ExposureOutput[uint2(0, 0)] = float2(rcp(_ExposureCurveParams.w * exp2(ev)), ev);
+}
+[numthreads(128, 1, 1)]
+void ResolveHistogram(uint index : SV_GroupIndex)
+{
+    gs_histogram[index] = _ExposureHistogram[index];
+    GroupMemoryBarrierWithGroupSync();
+    if (index != 0) return;
+    float total = 0;
+    for (uint bin = 0; bin < HISTOGRAM_BINS; ++bin) total += gs_histogram[bin];
+    float lower = total * _ExposurePercentiles.x, upper = total * _ExposurePercentiles.y;
+    float cumulative = 0, weight = 0, weightedEV = 0;
+    for (uint i = 0; i < HISTOGRAM_BINS; ++i)
+    {
+        float count = gs_histogram[i];
+        float included = max(0, min(cumulative + count, upper) - max(cumulative, lower));
+        weightedEV += included * lerp(_ExposurePercentiles.z, _ExposurePercentiles.w, i / (float)(HISTOGRAM_BINS - 1));
+        weight += included;
+        cumulative += count;
+    }
+    Resolve(weightedEV / max(weight, 1e-6), weight);
+}
+[numthreads(256, 1, 1)]
+void ResolveAverage(uint index : SV_GroupIndex)
+{
+    float2 sum = 0;
+    [unroll] for (uint i = 0; i < 4; ++i)
+    {
+        uint pixel = index * 4 + i;
+        sum += _ExposureAverage[uint2(pixel % 32, pixel / 32)];
+    }
+    gs_meter[index] = sum;
+    GroupMemoryBarrierWithGroupSync();
+    [unroll] for (uint stride = 128; stride > 0; stride >>= 1)
+    {
+        if (index < stride) gs_meter[index] += gs_meter[index + stride];
+        GroupMemoryBarrierWithGroupSync();
+    }
+    if (index == 0) Resolve(gs_meter[0].x / max(gs_meter[0].y, 1e-6), gs_meter[0].y);
+}

@@ -574,6 +574,9 @@ namespace UnityEngine.Rendering.Universal
             set => m_VolumeTrigger = value;
         }
 
+        /// <summary>World-space target followed by procedural exposure metering.</summary>
+        public Transform exposureTarget;
+
         /// <summary>
         /// Returns the selected mode for Volume Frame Updates.
         /// </summary>

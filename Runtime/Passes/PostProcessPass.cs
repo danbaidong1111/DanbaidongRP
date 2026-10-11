@@ -50,6 +50,7 @@ namespace UnityEngine.Rendering.Universal
         // Builtin effects settings
         DepthOfField m_DepthOfField;
         readonly DepthOfFieldPass m_AdvancedDepthOfField;
+        readonly ExposurePass m_ExposurePass;
         MotionBlur m_MotionBlur;
         ScreenSpaceLensFlare m_LensFlareScreenSpace;
         PaniniProjection m_PaniniProjection;
@@ -133,6 +134,7 @@ namespace UnityEngine.Rendering.Universal
             m_Data = data;
             m_Materials = new MaterialLibrary(data);
             m_AdvancedDepthOfField = new DepthOfFieldPass(data.shaders.depthOfFieldCS);
+            m_ExposurePass = new ExposurePass(data.shaders.exposureHistogramCS, data.shaders.exposureApplyPS);
 
             // Bloom pyramid shader ids - can't use a simple stackalloc in the bloom function as we
             // unfortunately need to allocate strings
@@ -245,6 +247,7 @@ namespace UnityEngine.Rendering.Universal
             m_ScalingSetupTarget?.Release();
             m_UpscaledTarget?.Release();
             m_AdvancedDepthOfField.Dispose();
+            m_ExposurePass.Dispose();
             m_FullCoCTexture?.Release();
             m_HalfCoCTexture?.Release();
             m_PingTexture?.Release();

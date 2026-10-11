@@ -71,6 +71,8 @@ namespace UnityEngine.Rendering.Universal
         ReSTIRGIMoments,
         /// <summary>Phase-independent volumetric lighting feedback.</summary>
         VolumetricLighting,
+        /// <summary>Exposure multiplier and EV100.</summary>
+        Exposure,
         /// <summary>Depth of field temporal surfaces.</summary>
         DepthOfFieldCoC,
         DepthOfFieldColor,
@@ -103,6 +105,7 @@ namespace UnityEngine.Rendering.Universal
         private int m_RTActualHeight;
 
         internal VolumetricHistory volumetricHistory;
+        internal ExposureHistory exposureHistory;
         internal DepthOfFieldHistory depthOfFieldHistory;
 
         public Camera camera;
@@ -302,6 +305,8 @@ namespace UnityEngine.Rendering.Universal
         {
             depthOfFieldHistory?.Reset();
             depthOfFieldHistory = null;
+            exposureHistory?.Dispose();
+            exposureHistory = null;
             volumetricHistory?.Dispose();
             volumetricHistory = null;
             m_BufferedRTHandleSystem?.Dispose();

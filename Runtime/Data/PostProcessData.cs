@@ -100,6 +100,11 @@ namespace UnityEngine.Rendering.Universal
             })]
             public ComputeShader[] depthOfFieldCS;
 
+            [Reload("Shaders/PostProcessing/ExposureHistogram.compute")]
+            public ComputeShader exposureHistogramCS;
+            [Reload("Shaders/PostProcessing/ExposureApply.shader")]
+            public Shader exposureApplyPS;
+
             /// <summary>
             /// The Motion Blur Post Processing shader.
             /// </summary>

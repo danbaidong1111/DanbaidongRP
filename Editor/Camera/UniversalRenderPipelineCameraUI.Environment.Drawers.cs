@@ -133,6 +133,7 @@ namespace UnityEditor.Rendering.Universal
                         p.volumeTrigger.objectReferenceValue = newValue;
                 }
                 EditorGUI.EndProperty();
+                EditorGUILayout.PropertyField(p.exposureTarget, EditorGUIUtility.TrTextContent("Exposure Target", "World-space target followed by procedural exposure metering."));
             }
         }
     }

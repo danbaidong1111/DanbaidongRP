@@ -29,6 +29,7 @@ namespace UnityEditor.Rendering.Universal
         public SerializedProperty cameraType { get; }
         public SerializedProperty cameras { get; set; }
         public SerializedProperty volumeTrigger { get; }
+        internal SerializedProperty exposureTarget { get; }
         public SerializedProperty volumeFrameworkUpdateMode { get; }
         public SerializedProperty renderPostProcessing { get; }
         public SerializedProperty antialiasingQuality { get; }
@@ -96,6 +97,7 @@ namespace UnityEditor.Rendering.Universal
             renderer = serializedAdditionalDataObject.FindProperty("m_RendererIndex");
             volumeLayerMask = serializedAdditionalDataObject.FindProperty("m_VolumeLayerMask");
             volumeTrigger = serializedAdditionalDataObject.FindProperty("m_VolumeTrigger");
+            exposureTarget = serializedAdditionalDataObject.FindProperty("exposureTarget");
             volumeFrameworkUpdateMode = serializedAdditionalDataObject.FindProperty("m_VolumeFrameworkUpdateModeOption");
             renderPostProcessing = serializedAdditionalDataObject.FindProperty("m_RenderPostProcessing");
             antialiasingQuality = serializedAdditionalDataObject.FindProperty("m_AntialiasingQuality");
