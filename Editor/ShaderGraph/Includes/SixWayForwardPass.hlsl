@@ -1,3 +1,5 @@
+#include "Packages/com.unity.render-pipelines.danbaidong/Editor/ShaderGraph/Includes/AtmosphericFog.hlsl"
+
 void InitializeInputData(Varyings input, bool frontFace, out InputData inputData)
 {
     inputData = (InputData)0;
@@ -109,7 +111,11 @@ void frag(
 
 
     half4 color = UniversalFragmentSixWay(inputData, surfaceData);
-    color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    #if defined(_SURFACE_TYPE_TRANSPARENT)
+    color.rgb = _FogEnabled > 0.5 ? ApplyShaderGraphAtmosphericFog(color.rgb, color.a, unpacked.positionCS) : MixFog(color.rgb, inputData.fogCoord);
+    #else
+    if (_FogEnabled < 0.5) color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    #endif
 
     color.a = OutputAlpha(color.a, isTransparent);
 

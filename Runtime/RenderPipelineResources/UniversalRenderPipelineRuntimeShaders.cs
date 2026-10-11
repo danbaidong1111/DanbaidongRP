@@ -28,6 +28,37 @@ namespace UnityEngine.Rendering.Universal
             set => this.SetValueAndNotify(ref m_PlanarReflectionFilteringCS, value);
         }
 
+        [SerializeField, ResourcePath("Shaders/Fog/AtmosphericFog.shader")]
+        private Shader m_AtmosphericFogPS;
+        public Shader atmosphericFogPS
+        {
+            get => m_AtmosphericFogPS;
+            set => this.SetValueAndNotify(ref m_AtmosphericFogPS, value);
+        }
+        [SerializeField, ResourcePath("Shaders/VolumetricLighting/VolumetricLighting.compute")]
+        private ComputeShader m_VolumetricFogCS;
+        public ComputeShader volumetricFogCS
+        {
+            get => m_VolumetricFogCS;
+            set => this.SetValueAndNotify(ref m_VolumetricFogCS, value);
+        }
+
+        [SerializeField, ResourcePath("Shaders/VolumetricLighting/VolumeVoxelization.compute")]
+        private ComputeShader m_VolumeVoxelizationCS;
+        public ComputeShader volumeVoxelizationCS
+        {
+            get => m_VolumeVoxelizationCS;
+            set => this.SetValueAndNotify(ref m_VolumeVoxelizationCS, value);
+        }
+
+        [SerializeField, ResourcePath("Shaders/VolumetricLighting/VolumetricLightingFiltering.compute")]
+        private ComputeShader m_VolumetricLightingFilteringCS;
+        public ComputeShader volumetricLightingFilteringCS
+        {
+            get => m_VolumetricLightingFilteringCS;
+            set => this.SetValueAndNotify(ref m_VolumetricLightingFilteringCS, value);
+        }
+
         [SerializeField, ResourcePath("Shaders/Utils/FallbackError.shader")]
         Shader m_FallbackErrorShader;
 

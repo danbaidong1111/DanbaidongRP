@@ -77,6 +77,10 @@ namespace UnityEditor.Rendering.Universal
             public static readonly GUIContent BaseContribution = EditorGUIUtility.TrTextContent("Base Light", "Sets the contribution of the Base Light.");
             public static readonly GUIContent RimContribution = EditorGUIUtility.TrTextContent("Rim Light", "Sets the contribution of the Rim Light.");
             public static readonly GUIContent OutlineContribution = EditorGUIUtility.TrTextContent("Outline Light", "Sets the contribution of the Outline Light.");
+            public static readonly GUIContent Volumetrics = EditorGUIUtility.TrTextContent("Volumetrics");
+            public static readonly GUIContent VolumetricDimmer = EditorGUIUtility.TrTextContent("Intensity Multiplier", "Scales this light's contribution to volumetric fog independently of surface lighting.");
+            public static readonly GUIContent VolumetricShadowDimmer = EditorGUIUtility.TrTextContent("Shadow Dimmer", "Controls the opacity of this light's shadows in volumetric fog.");
+            public static readonly GUIContent VolumetricLightRadius = EditorGUIUtility.TrTextContent("Light Radius", "Emitter radius in metres. Reduces bright scattering spikes close to the light source.");
         }
     }
 }

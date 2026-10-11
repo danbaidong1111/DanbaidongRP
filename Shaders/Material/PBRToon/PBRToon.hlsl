@@ -1,6 +1,8 @@
 #ifndef PBR_TOON_INCLUDED
 #define PBR_TOON_INCLUDED
 
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/PlanarReflections.hlsl"
+
 // These Flag encoded to GBuffer0.a
 #define kToonFlagHairShadow     1 // Hair Shadow mask
 #define kToonFlagEyelash        2 // Eyelash
@@ -137,6 +139,14 @@ void EvaluateIndirectDiffuse(inout IndirectLighting lighting, float3 diffuseColo
     float3 SHColor = SampleSH9(_AmbientProbeData, SHNormal);
     SHColor = lerp(SHColor, selfEnvColor.rgb, envColorLerp);  
     lighting.diffuse += diffuseFGD * SHColor * diffuseColor;
+}
+
+void EvaluateIndirectSpecular_Planar(inout IndirectLighting lighting, float3 positionWS, float3 normalWS,
+    float perceptualRoughness, float3 specularFGD, uint renderingLayers, inout float reflectionHierarchyWeight)
+{
+    float4 reflection = SamplePlanarReflection(positionWS, normalWS, perceptualRoughness, renderingLayers);
+    UpdateLightingHierarchyWeights(reflectionHierarchyWeight, reflection.a);
+    lighting.specular += specularFGD * reflection.rgb * reflection.a;
 }
 
 void EvaluateIndirectSpecular_Cubemap(inout IndirectLighting lighting, TEXTURECUBE_PARAM(textureName, samplerName), float3 reflectDirWS, float perceptualRoughness, float3 specularFGD, 

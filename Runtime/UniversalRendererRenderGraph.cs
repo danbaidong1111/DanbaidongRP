@@ -936,6 +936,7 @@ namespace UnityEngine.Rendering.Universal
 #endif
         private void OnBeforeDanbaidongRPRendering(RenderGraph renderGraph)
         {
+            m_AtmosphericFogPass?.ResetGlobals(renderGraph);
             UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
             UniversalRenderingData renderingData = frameData.Get<UniversalRenderingData>();
             UniversalCameraData cameraData = frameData.Get<UniversalCameraData>();
@@ -1744,6 +1745,22 @@ namespace UnityEngine.Rendering.Universal
 
             RecordCustomRenderGraphPasses(renderGraph, RenderPassEvent.AfterRenderingSkybox);
 
+            // ColorPyramid
+            {
+                TextureHandle activeColor = resourceData.activeColorTexture;
+                TextureHandle cameraColorPyramidTexture;
+                m_ColorPyramidPass.Render(renderGraph, frameData, in activeColor, out cameraColorPyramidTexture, out colorPyramidHistoryMipCount);
+                resourceData.cameraColorPyramidTexture = cameraColorPyramidTexture;
+            }
+
+            if (m_AtmosphericFogPass != null)
+            {
+                m_AtmosphericFogPass.Setup(renderGraph, frameData, m_VolumetricLightingPass != null && m_VolumetricLightingPass.isAvailable);
+                TextureHandle volumetricLighting = m_VolumetricLightingPass != null
+                    ? m_VolumetricLightingPass.Render(renderGraph, frameData) : TextureHandle.nullHandle;
+                m_AtmosphericFogPass.Render(renderGraph, frameData, volumetricLighting);
+            }
+
             if (copySchedules.color == ColorCopySchedule.AfterSkybox)
             {
                 TextureHandle activeColor = resourceData.activeColorTexture;
@@ -1751,14 +1768,6 @@ namespace UnityEngine.Rendering.Universal
                 TextureHandle cameraOpaqueTexture;
                 m_CopyColorPass.Render(renderGraph, frameData, out cameraOpaqueTexture, in activeColor, downsamplingMethod);
                 resourceData.cameraOpaqueTexture = cameraOpaqueTexture;
-            }
-
-            // ColorPyramid
-            {
-                TextureHandle activeColor = resourceData.activeColorTexture;
-                TextureHandle cameraColorPyramidTexture;
-                m_ColorPyramidPass.Render(renderGraph, frameData, in activeColor, out cameraColorPyramidTexture, out colorPyramidHistoryMipCount);
-                resourceData.cameraColorPyramidTexture = cameraColorPyramidTexture;
             }
 
             RecordCustomRenderGraphPasses(renderGraph, RenderPassEvent.BeforeRenderingTransparents);

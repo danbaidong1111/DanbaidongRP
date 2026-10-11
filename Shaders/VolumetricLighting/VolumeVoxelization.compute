@@ -1,0 +1,85 @@
+#pragma kernel VoxelizeFog
+#pragma kernel VoxelizeLocalFog
+#pragma target 5.0
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/VolumetricLightingCommon.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/GeometricTools.hlsl"
+RWTexture3D<float4> _FogMedium;
+float4x4 _FogLocalWorldToVolume;
+float4 _FogLocalAlbedoDensity, _FogLocalTiling, _FogLocalOffset, _FogLocalPositiveFade, _FogLocalNegativeFade;
+float4 _FogLocalDistanceFade, _FogLocalShapeNoise, _FogLocalVelocity, _FogLocalOptions;
+Texture3D<float4> _FogLocalMask;
+
+float FogNoise(float3 p)
+{
+    // Smooth, deterministic density modulation in world space.
+    return 0.5 + 0.5 * sin(p.x + sin(p.z * 0.73)) * sin(p.y * 1.13 + sin(p.x * 0.83));
+}
+
+[numthreads(8,8,1)]
+void VoxelizeFog(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= (uint3)_FogGrid.xyz)) return;
+    float2 uv = (id.xy + 0.5) / _FogGrid.xy;
+    float centerSlice = saturate((id.z + 0.5) / FogIntervalCount());
+    float centerDepth = FogSliceDepth(centerSlice);
+    float3 centerWS = FogWorldPosition(uv, centerDepth);
+    float3 ray = normalize(centerWS - _FogCameraPosition.xyz + 1e-8);
+    if (_FogCameraPosition.w > 0.5) ray = _FogCameraForward.xyz;
+    float rayDistance = _FogDepthEncoding.w > 0.5 ? centerDepth : centerDepth / max(0.001, dot(ray, _FogCameraForward.xyz));
+    float3 rayOrigin = _FogCameraPosition.xyz;
+    if (_FogCameraPosition.w > 0.5) rayOrigin = centerWS - ray * centerDepth;
+    float rayStart = FogRayStartDistance(rayOrigin, ray);
+    rayDistance -= rayStart;
+    float extinction = FogDensityAtHeight(centerWS.y, _FogDensity) * step(_FogDensity.w, rayDistance);
+    extinction += FogDensityAtHeight(centerWS.y, _FogGround) * step(_FogGround.w, rayDistance);
+    extinction = min(extinction, 100);
+    float3 scattering = extinction * _FogAlbedo.rgb;
+    if (rayDistance < 0.0)
+    {
+        extinction = 0.0;
+        scattering = 0.0;
+    }
+    _FogMedium[FogStorageIndex(id)] = float4(min(scattering, 60000), min(extinction, 100));
+}
+
+[numthreads(8,8,1)]
+void VoxelizeLocalFog(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id >= (uint3)_FogGrid.xyz)) return;
+    float2 uv = (id.xy + 0.5) / _FogGrid.xy;
+    float depth = FogSliceDepth(saturate((id.z + 0.5) / FogIntervalCount()));
+    float3 p = FogWorldPosition(uv, depth);
+    float3 local = mul(_FogLocalWorldToVolume, float4(p, 1)).xyz;
+    if (any(abs(local) > 0.5) || (_FogLocalShapeNoise.x > 0.5 && length(local) > 0.5)) return;
+    float3 ray = normalize(p - _FogCameraPosition.xyz + 1e-8);
+    if (_FogCameraPosition.w > 0.5) ray = _FogCameraForward.xyz;
+    float3 origin = _FogCameraPosition.w > 0.5 ? p - ray * depth : _FogCameraPosition.xyz;
+    if (length(p - origin) < FogRayStartDistance(origin, ray)) return;
+    float fade = ComputeVolumeFadeFactor(local + 0.5, _FogDepthEncoding.w > 0.5 ? depth : length(p - origin),
+        _FogLocalPositiveFade.xyz, _FogLocalNegativeFade.xyz, _FogLocalOptions.y > 0.5,
+        _FogLocalDistanceFade.x, _FogLocalDistanceFade.y, _FogLocalOptions.z > 0.5, _FogLocalOptions.x == 2);
+    if (_FogLocalShapeNoise.x > 0.5)
+        fade *= saturate((0.5 - length(local)) * min(_FogLocalPositiveFade.x, min(_FogLocalPositiveFade.y, _FogLocalPositiveFade.z)));
+    float4 mask = 1;
+    if (_FogLocalOptions.w > 0.5)
+    {
+        mask = _FogLocalMask.SampleLevel(sampler_LinearRepeat, (local + 0.5) * _FogLocalTiling.xyz + _FogLocalOffset.xyz, 0);
+        if (_FogLocalOptions.w > 1.5) mask.rgb = 1;
+    }
+    mask = max(0, mask);
+    float noise = FogNoise((p + _FogLocalVelocity.xyz * _FogScatter.w) * _FogLocalShapeNoise.z);
+    float extinction = _FogLocalAlbedoDensity.a * mask.a * lerp(1, noise, _FogLocalShapeNoise.y);
+    float4 medium = float4(extinction * _FogLocalAlbedoDensity.rgb * mask.rgb, extinction);
+    uint3 storage = FogStorageIndex(id);
+    float4 previous = _FogMedium[storage];
+    int blend = (int)_FogLocalOptions.x;
+    float4 source = medium * fade;
+    source.rgb = saturate(source.rgb);
+    float4 result = previous + source;
+    if (blend == 1) result = source;
+    if (blend == 2) result = previous * lerp(1, medium, fade);
+    if (blend == 3) result = min(previous, source);
+    if (blend == 4) result = max(previous, source);
+    _FogMedium[storage] = clamp(result, 0, float4(60000, 60000, 60000, 100));
+}
+

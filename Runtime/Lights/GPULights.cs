@@ -275,6 +275,11 @@ namespace UnityEngine.Rendering.Universal.Internal
         public float outlineContribution;
         public float __unused2__;
 
+        public float volumetricDimmer;
+        public float volumetricShadowDimmer;
+        public float volumetricLightRadius;
+        public float volumetricPadding;
+
     };
 
     [GenerateHLSL(PackingRules.Exact, false)]
@@ -297,6 +302,10 @@ namespace UnityEngine.Rendering.Universal.Internal
         public float lightDimmer;       //TODO: make it used
         public float diffuseDimmer;     //TODO: make it used
         public float specularDimmer;    //TODO: make it used
+
+        public float volumetricDimmer;
+        public float volumetricShadowDimmer;
+        public Vector2 volumetricPadding;
     };
 
     [GenerateHLSL(PackingRules.Exact, false)]

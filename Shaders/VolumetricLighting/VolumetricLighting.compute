@@ -1,0 +1,395 @@
+#pragma kernel VolumetricLighting
+#pragma kernel VolumetricLightingNoHistory FOG_NO_REPROJECTION
+#pragma kernel BuildMaxDepth
+#pragma kernel DilateMaxDepth
+#pragma target 5.0
+#pragma multi_compile _ FOG_DEPTH_ARRAY
+#pragma multi_compile _ _ADDITIONAL_LIGHT_SHADOWS
+#pragma multi_compile _ PROBE_VOLUMES_L1 PROBE_VOLUMES_L2
+#pragma multi_compile _ _LIGHT_COOKIES
+#define _MAIN_LIGHT_SHADOWS_CASCADE
+#define _SURFACE_TYPE_TRANSPARENT
+#define _GPU_LIGHTS_CLUSTER
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Core.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/CommonMaterial.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/GeometricTools.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/RealtimeLights.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/VolumetricLightingCommon.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/GPUCulledLights.hlsl"
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/SphericalHarmonics.hlsl"
+#if defined(PROBE_VOLUMES_L1) || defined(PROBE_VOLUMES_L2)
+#include "Packages/com.unity.render-pipelines.core/Runtime/Lighting/ProbeVolume/ProbeVolume.hlsl"
+#endif
+
+RWTexture3D<float4> _FogIntegralWrite;
+Texture3D<float4> _FogMedium;
+#if !defined(FOG_NO_REPROJECTION)
+RWTexture3D<float4> _FogFeedback;
+#endif
+StructuredBuffer<float> _FogAmbientProbe;
+StructuredBuffer<uint> _FogCoarseLightList;
+float4 _FogLighting; // ambient intensity, light intensity, shadows, directional only
+float4 _FogShadowFlags; // directional map availability, punctual map availability, unused
+float4x4 _FogDepthInvViewProjection;
+float4 _FogSceneDepthSize;
+#if defined(FOG_DEPTH_ARRAY)
+Texture2DArray<float> _FogSceneDepth;
+#else
+Texture2D<float> _FogSceneDepth;
+#endif
+RWTexture2DArray<float> _FogMaxDepth;
+Texture2DArray<float> _FogMaxDepthRead;
+RWTexture2DArray<float> _FogDilatedDepth;
+float _FogDepthCulling;
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/VolumetricLightingIntegration.hlsl"
+
+float FogGeometryDepth(uint2 pixel)
+{
+#if defined(FOG_DEPTH_ARRAY)
+    float depth = _FogSceneDepth.Load(int4(pixel, _FogViewIndex, 0));
+#else
+    float depth = _FogSceneDepth.Load(int3(pixel, 0));
+#endif
+    if (abs(depth - UNITY_RAW_FAR_CLIP_VALUE) < 1e-6) return FLT_MAX;
+#if !UNITY_REVERSED_Z
+    depth = lerp(UNITY_NEAR_CLIP_VALUE, 1.0, depth);
+#endif
+    float2 uv = (pixel + 0.5) * _FogSceneDepthSize.zw;
+    float3 surface = ComputeWorldSpacePosition(uv, depth, _FogDepthInvViewProjection);
+    return max(0, dot(surface - _FogCameraPosition.xyz, _FogCameraForward.xyz));
+}
+
+[numthreads(8,8,1)]
+void BuildMaxDepth(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xy >= (uint2)_FogGrid.xy)) return;
+    float2 scale = _FogSceneDepthSize.xy / _FogGrid.xy;
+    int2 lo = max(0, int2(floor(id.xy * scale)) - 1);
+    int2 hi = min(int2(_FogSceneDepthSize.xy) - 1, int2(ceil((id.xy + 1) * scale)) + 1);
+    float maximum = 0;
+    for (int y = lo.y; y <= hi.y; ++y)
+    for (int x = lo.x; x <= hi.x; ++x)
+        maximum = max(maximum, FogGeometryDepth(uint2(x, y)));
+    _FogMaxDepth[uint3(id.xy, _FogViewIndex)] = maximum;
+}
+
+[numthreads(8,8,1)]
+void DilateMaxDepth(uint3 id : SV_DispatchThreadID)
+{
+    if (any(id.xy >= (uint2)_FogGrid.xy)) return;
+    // Cover temporal jitter, the spatial filter, and the final reconstruction footprint.
+    float maximum = 0;
+    for (int y = -2; y <= 2; ++y)
+    for (int x = -2; x <= 2; ++x)
+    {
+        int2 p = clamp(int2(id.xy) + int2(x, y), 0, int2(_FogGrid.xy) - 1);
+        maximum = max(maximum, _FogMaxDepthRead.Load(int4(p, _FogViewIndex, 0)));
+    }
+    _FogDilatedDepth[uint3(id.xy, _FogViewIndex)] = maximum;
+}
+
+struct FogRay
+{
+    float2 uv, sampleUV;
+    float3 origin, direction, centerDirection, centerOrigin;
+    float scale, centerScale, start, geometry, maximum;
+};
+
+FogRay CreateFogRay(uint2 pixel)
+{
+    FogRay r;
+    r.uv = (pixel + 0.5) / _FogGrid.xy;
+    r.sampleUV = r.uv + (_FogHistoryParams.w > 0 ? FogSampleOffset2D((uint)_FogGrid.w) / _FogGrid.xy : 0);
+    r.centerOrigin = FogWorldPosition(r.uv, 0);
+    r.centerDirection = normalize(FogWorldPosition(r.uv, _FogVolume.z) - r.centerOrigin);
+    r.origin = FogWorldPosition(r.sampleUV, 0);
+    r.direction = normalize(FogWorldPosition(r.sampleUV, _FogVolume.z) - r.origin);
+    float forward = max(0.001, dot(r.direction, _FogCameraForward.xyz));
+    r.scale = _FogDepthEncoding.w > 0.5 ? 1 : rcp(forward);
+    r.centerScale = _FogDepthEncoding.w > 0.5 ? 1 : rcp(max(0.001, dot(r.centerDirection, _FogCameraForward.xyz)));
+    r.start = max(_FogVolume.y / forward, FogRayStartDistance(r.origin, r.direction));
+    uint2 depthPixel = min(uint2(saturate(r.sampleUV) * _FogSceneDepthSize.xy), uint2(_FogSceneDepthSize.xy) - 1);
+    r.geometry = FogGeometryDepth(depthPixel) / forward;
+    float maximum = _FogMaxDepthRead.Load(int4(pixel, _FogViewIndex, 0));
+    r.maximum = _FogDepthCulling > 0.5 ? maximum / forward : FLT_MAX;
+    return r;
+}
+
+void PhysicalFogInterval(FogRay ray, uint slice, out float begin, out float end)
+{
+    begin = max(ray.start, FogSliceDepth(slice / _FogGrid.z));
+    end = max(ray.start, FogSliceDepth((slice + 1.0) / _FogGrid.z));
+    if (ray.geometry >= begin && ray.geometry <= end)
+        end = max(begin * 1.0001, ray.geometry);
+}
+
+float3 FogAmbient(float3 direction)
+{
+    float g = clamp(_FogScatter.x, -0.999, 0.999);
+    float3 zh;
+    GetCornetteShanksPhaseFunction(zh, g);
+    float3 bands = zh * float3(sqrt(4 * PI), sqrt(4 * PI / 3), sqrt(4 * PI / 5));
+    if (abs(g) < 1e-5) bands = float3(1, 0, 0);
+    // The environment buffer stores cosine-convolved polynomial coefficients.
+    bands *= float3(1, 1.5, 4);
+    float x = direction.x, y = direction.y, z = direction.z;
+    float basis[9] = { 1, y, z, x, x*y, y*z, 3*z*z-1, x*z, x*x-y*y };
+    float3 result = 0;
+    for (uint i = 0; i < 9; ++i)
+    {
+        float weight = basis[i] * bands[i == 0 ? 0 : i < 4 ? 1 : 2];
+        result += float3(_FogAmbientProbe[i], _FogAmbientProbe[i + 9], _FogAmbientProbe[i + 18]) * weight;
+    }
+    return max(0, result) * _FogAdvanced.z;
+}
+
+float FogDirectionalShadow(float3 position, float strength)
+{
+    half4 parameters = GetMainLightShadowParams();
+    parameters.x = strength;
+    return SampleShadowmapArray(TEXTURE2D_ARRAY_ARGS(_DirectionalLightsShadowmapTexture, sampler_LinearClampCompare),
+        TransformWorldToShadowCoord(position), GetMainLightShadowSamplingData(), parameters, false);
+}
+
+float3 FogMainCookie(float3 position)
+{
+#if defined(_LIGHT_COOKIES)
+    if (!IsMainLightCookieEnabled()) return 1;
+    float2 uv = ComputeLightCookieUVDirectional(_MainLightWorldToLight, position, float4(1,1,0,0), URP_TEXTURE_WRAP_MODE_NONE);
+    float4 color = SAMPLE_TEXTURE2D_LOD(_MainLightCookieTexture, sampler_MainLightCookieTexture, uv, 0);
+    return IsMainLightCookieTextureRGBFormat() ? color.rgb : IsMainLightCookieTextureAlphaFormat() ? color.aaa : color.rrr;
+#else
+    return 1;
+#endif
+}
+
+float FogPunctualShadow(int index, float3 position, float3 direction, float strength)
+{
+#if defined(ADDITIONAL_LIGHT_CALCULATE_SHADOWS)
+    half4 parameters = GetAdditionalLightShadowParams(index);
+    parameters.x = strength;
+    int slice = (int)parameters.w;
+    if (slice < 0) return 1;
+    if (parameters.z > 0.5) slice += (int)CubeMapFaceID(-direction);
+    #if USE_STRUCTURED_BUFFER_FOR_LIGHT_DATA
+    float4 coordinate = mul(_AdditionalLightsWorldToShadow_SSBO[slice], float4(position, 1));
+    #else
+    float4 coordinate = mul(_AdditionalLightsWorldToShadow[slice], float4(position, 1));
+    #endif
+    return SampleShadowmap(TEXTURE2D_ARGS(_AdditionalLightsShadowmapTexture, sampler_LinearClampCompare),
+        coordinate, GetAdditionalLightShadowSamplingData(index), parameters, true);
+#else
+    return 1;
+#endif
+}
+
+float4 EvaluateFogCell(uint3 id, FogRay rayInfo, float t0, float t1)
+{
+    float2 uv = rayInfo.uv, sampleUV = rayInfo.sampleUV;
+    float3 ray = rayInfo.direction, origin = rayInfo.origin, centerRay = rayInfo.centerDirection;
+    float centerDepth = FogSliceDepth(saturate((id.z + 0.5) / FogIntervalCount()));
+    float3 centerWS = rayInfo.centerOrigin + centerRay * (centerDepth * rayInfo.centerScale);
+    float4 medium = _FogMedium[FogStorageIndex(id)];
+    float extinction = medium.a;
+    float3 scattering = medium.rgb;
+    float jitter = _FogOptions.y > 0.5
+        ? PhysicalFogSampleOffset(id.xy, (uint)_FogGrid.w, _FogHistoryParams.w > 0)
+        : FogSampleOffset(id, _FogHistoryParams.w > 0 ? (uint)_FogGrid.w : 0);
+    float dt = max(1e-6, t1 - t0);
+    float integral = FogSegmentIntegral(extinction, dt);
+    float sampleDistance = t0 + FogSampleMedium(jitter, extinction, dt);
+    float3 p = origin + ray * sampleDistance;
+    float3 phaseFree = 0, complete = 0, phaseFallback = 0, phaseFallbackWeight = 0;
+    for (uint d = 0; d < _DirectionalLightCount; d++)
+    {
+        DirectionalLightData light = g_DirectionalLightDatas[d];
+        float shadow = 1;
+        if (d == 0 && _FogLighting.z > 0.5 && _FogShadowFlags.x > 0.5) shadow = FogDirectionalShadow(p, light.volumetricShadowDimmer);
+        float3 energy = light.lightColor * (shadow * light.volumetricDimmer * _FogLighting.y * integral);
+#if defined(_LIGHT_COOKIES)
+        if (d == 0) energy *= FogMainCookie(p);
+#endif
+        float3 phaseWeight = light.lightColor * light.volumetricDimmer;
+        phaseFallbackWeight += phaseWeight;
+        phaseFallback += phaseWeight * FogPhase(dot(centerRay, light.lightDirection), _FogScatter.x);
+        phaseFree += energy;
+        complete += energy * FogPhase(dot(centerRay, light.lightDirection), _FogScatter.x);
+    }
+    if (_FogLighting.w < 0.5)
+    {
+        PositionInputs posInput = (PositionInputs)0;
+        posInput.positionSS = uv * g_screenSize.xy;
+        posInput.linearDepth = dot(centerWS - _FogCameraPosition.xyz, _FogCameraForward.xyz);
+        posInput.positionWS = p;
+        uint2 tileCount = ((uint2)g_screenSize.xy + TILE_SIZE_BIG_TILE - 1) / TILE_SIZE_BIG_TILE;
+        uint2 tile = min((uint2)(sampleUV * g_screenSize.xy) / TILE_SIZE_BIG_TILE, max(1u, tileCount) - 1);
+        uint start = (tile.y * tileCount.x + tile.x) * MAX_NR_BIG_TILE_LIGHTS_PLUS_ONE;
+        bool allLights = _FogShadowFlags.w > 0.5;
+        uint count = allLights ? _EnvLightIndexShift : min(_FogCoarseLightList[start], MAX_NR_BIG_TILE_LIGHTS_PLUS_ONE - 1);
+        for (uint index = 0; index < count; index++)
+        {
+            uint lightIndex = allLights ? index : _FogCoarseLightList[start + index + 1];
+            if (lightIndex >= _EnvLightIndexShift) continue;
+            GPULightData light = FetchLight(lightIndex);
+            if (light.volumetricDimmer <= 0) continue;
+            float3 originToLight = origin - light.lightPosWS;
+            float projection = dot(originToLight, ray);
+            float rangeSquared = rcp(max(1e-8, light.lightAttenuation.x));
+            float discriminant = projection * projection - dot(originToLight, originToLight) + rangeSquared;
+            if (discriminant <= 0) continue;
+            float root = sqrt(discriminant);
+            float entry = max(t0, -projection - root), intervalEnd = min(t1, -projection + root);
+            if (intervalEnd <= entry) continue;
+            if (light.lightAttenuation.z > 0)
+            {
+                float3 axis = -light.lightDirection;
+                float cosine = saturate(-light.lightAttenuation.w / light.lightAttenuation.z);
+                float3 q0 = origin + ray * entry - light.lightPosWS;
+                float3 q1 = origin + ray * intervalEnd - light.lightPosWS;
+                float a0 = dot(q0, axis), a1 = dot(q1, axis);
+                bool inside0 = a0 >= 0 && a0*a0 >= cosine*cosine * dot(q0,q0);
+                bool inside1 = a1 >= 0 && a1*a1 >= cosine*cosine * dot(q1,q1);
+                if (!(inside0 && inside1))
+                {
+                    float3 tangent = normalize(cross(abs(axis.z) < 0.999 ? float3(0,0,1) : float3(0,1,0), axis));
+                    float scale = cosine / sqrt(max(1e-6, 1 - cosine*cosine));
+                    float coneEntry, coneExit;
+                    if (!IntersectRayCone(origin, ray, light.lightPosWS, axis, tangent * scale,
+                        cross(axis, tangent) * scale, entry, intervalEnd, coneEntry, coneExit)) continue;
+                    entry = coneEntry; intervalEnd = coneExit;
+                }
+            }
+            float lightT, rcpPdf;
+            FogSamplePunctual(jitter, light.lightPosWS, light.volumetricLightRadius, origin, ray, entry, intervalEnd, lightT, rcpPdf);
+            float3 lightSample = origin + ray * lightT;
+            float3 toLight = light.lightPosWS - lightSample;
+            float actualDistance2 = max(dot(toLight, toLight), 1e-4);
+            float distanceSquared = max(actualDistance2 + light.volumetricLightRadius * light.volumetricLightRadius, 1e-4);
+            float3 direction = toLight * rsqrt(actualDistance2);
+            float attenuation = DistanceAttenuation(actualDistance2, light.lightAttenuation.xy) * actualDistance2 / distanceSquared
+                * AngleAttenuation(light.lightDirection, direction, light.lightAttenuation.zw);
+            float shadow = (_FogLighting.z > 0.5 && _FogShadowFlags.y > 0.5 && light.shadowType != 0 && light.shadowLightIndex >= 0)
+                ? FogPunctualShadow(light.shadowLightIndex, lightSample, direction, light.volumetricShadowDimmer) : 1;
+            float3 phaseDirection = normalize(light.lightPosWS - centerWS + 1e-8);
+            float centerDistance2 = dot(light.lightPosWS - centerWS, light.lightPosWS - centerWS) + light.volumetricLightRadius * light.volumetricLightRadius;
+            float3 phaseWeight = light.lightColor * light.volumetricDimmer
+                * DistanceAttenuation(max(1e-4, centerDistance2), light.lightAttenuation.xy)
+                * AngleAttenuation(light.lightDirection, phaseDirection, light.lightAttenuation.zw);
+            phaseFallbackWeight += phaseWeight;
+            phaseFallback += phaseWeight * FogPhase(dot(centerRay, phaseDirection), _FogScatter.x);
+            float weight = exp(-min(80, extinction * (lightT - t0))) * rcpPdf;
+            float3 energy = light.lightColor * (attenuation * shadow * light.volumetricDimmer * _FogLighting.y * weight);
+#if defined(_LIGHT_COOKIES)
+            if (light.cookieLightIndex >= 0) energy *= SampleAdditionalLightCookie(light.cookieLightIndex, lightSample);
+#endif
+            phaseFree += energy;
+            complete += energy * FogPhase(dot(centerRay, phaseDirection), _FogScatter.x);
+        }
+    }
+    float3 ambient = FogAmbient(centerRay) + _FogColor.rgb * _FogLighting.x;
+#if defined(PROBE_VOLUMES_L1) || defined(PROBE_VOLUMES_L2)
+    APVResources apv = FillAPVResources();
+    float3 probeUVW;
+    float3 probePosition = AddNoiseToSamplingPosition(p, sampleUV * g_screenSize.xy, 1) - _APVWorldOffset;
+    if (_EnableProbeVolumes != 0 && TryToGetPoolUVW(apv, probePosition, 0, 0, probeUVW))
+    {
+        float3 probe = SAMPLE_TEXTURE3D_LOD(apv.L0_L1Rx, s_linear_clamp_sampler, probeUVW, 0).rgb;
+        if (!AnyIsNaN(probe) && !AnyIsInf(probe))
+        {
+            float3 probeEnergy = max(0, probe) * (PI * sqrt(4 * PI) * integral * _FogAdvanced.z);
+            phaseFree += probeEnergy;
+            complete += probeEnergy * INV_FOUR_PI;
+            phaseFallbackWeight += probeEnergy;
+            phaseFallback += probeEnergy * INV_FOUR_PI;
+            ambient = _FogColor.rgb * _FogLighting.x;
+        }
+    }
+#endif
+    // Dividing by the homogeneous transmittance integral is the normalized
+    // RGBD logarithm. This keeps the feedback independent of cell length and phase.
+    float4 normalized = float4(phaseFree / max(1e-8, integral), extinction);
+    float4 accumulated = FogTemporalBlend(normalized, centerWS);
+#if !defined(FOG_NO_REPROJECTION)
+    _FogFeedback[FogStorageIndex(id)] = min(max(0, accumulated), 60000);
+#endif
+    float3 fallback = phaseFallback / max(phaseFallbackWeight, 1e-8);
+    float3 phase = float3(phaseFree.r > 1e-8 ? complete.r / phaseFree.r : fallback.r,
+        phaseFree.g > 1e-8 ? complete.g / phaseFree.g : fallback.g,
+        phaseFree.b > 1e-8 ? complete.b / phaseFree.b : fallback.b);
+    if (_FogOptions.y > 0.5)
+    {
+        float phaseConstant = abs(_FogScatter.x) < 1e-5 ? INV_FOUR_PI
+            : CornetteShanksPhasePartConstant(clamp(_FogScatter.x, -0.999, 0.999));
+        phase = phaseConstant * float3(SafeDiv(complete.r / phaseConstant, phaseFree.r),
+            SafeDiv(complete.g / phaseConstant, phaseFree.g), SafeDiv(complete.b / phaseConstant, phaseFree.b));
+        // Ambient illumination uses the current medium, while direct-light history
+        // carries its blended extinction into the integration pass.
+        ambient *= integral / max(1e-8, FogSegmentIntegral(accumulated.a, dt));
+    }
+    return float4(min(scattering * (accumulated.rgb * phase + ambient), 60000), accumulated.a);
+}
+
+void IntegrateVolumetricLighting(uint3 id)
+{
+    if (any(id.xy >= (uint2)_FogGrid.xy)) return;
+    FogRay ray = CreateFogRay(id.xy);
+    bool physical = _FogOptions.y > 0.5;
+    float3 radiance = 0;
+    float opticalDepth = 0;
+    float transmittance = 1;
+    uint count = (uint)FogIntervalCount();
+    if (!physical) _FogIntegralWrite[FogStorageIndex(uint3(id.xy, 0))] = 0;
+    for (uint slice = 0; slice < count; ++slice)
+    {
+        uint3 cell = uint3(id.xy, slice);
+        float begin = FogSliceDepth(slice / FogIntervalCount()) * ray.scale;
+        float end = FogSliceDepth((slice + 1.0) / FogIntervalCount()) * ray.scale;
+        if (physical) PhysicalFogInterval(ray, slice, begin, end);
+        float length = max(0, end - begin);
+        if (begin * 0.99 > ray.maximum)
+        {
+            // Clear history outside visible geometry so a newly revealed cell starts cleanly.
+            float4 accumulated = physical
+                ? max(0, LinearizeRGBD(float4(radiance, opticalDepth)))
+                : min(60000, LinearizeRGBD(float4(min(radiance, 60000), -log(max(transmittance, 1e-35)))));
+            for (uint z = slice; z < count; ++z)
+            {
+#if !defined(FOG_NO_REPROJECTION)
+                _FogFeedback[FogStorageIndex(uint3(id.xy, z))] = 0;
+#endif
+                _FogIntegralWrite[FogStorageIndex(uint3(id.xy, physical ? z : z + 1))] = accumulated;
+            }
+            break;
+        }
+        if (length <= 0)
+        {
+#if !defined(FOG_NO_REPROJECTION)
+            _FogFeedback[FogStorageIndex(cell)] = 0;
+#endif
+            _FogIntegralWrite[FogStorageIndex(cell)] = 0;
+            continue;
+        }
+        float4 medium = EvaluateFogCell(cell, ray, begin, end);
+        // Match the RGBA16F precision of the VBuffer intermediates.
+        medium = f16tof32(f32tof16(medium));
+        if (physical)
+        {
+            _FogIntegralWrite[FogStorageIndex(cell)] = IntegratePhysicalFogCell(medium, length, radiance, opticalDepth);
+        }
+        else
+        {
+            // Toon integration uses the center ray and stores values at slice boundaries.
+            length = (FogSliceDepth((slice + 1.0) / count) - FogSliceDepth((float)slice / count)) * ray.centerScale;
+            _FogIntegralWrite[FogStorageIndex(uint3(id.xy, slice + 1))] = IntegrateToonFogCell(medium, length, radiance, transmittance);
+        }
+    }
+#if !defined(FOG_NO_REPROJECTION)
+    if (!physical) _FogFeedback[FogStorageIndex(uint3(id.xy, count))] = 0;
+#endif
+}
+
+[numthreads(8,8,1)]
+void VolumetricLighting(uint3 id : SV_DispatchThreadID) { IntegrateVolumetricLighting(id); }
+
+[numthreads(8,8,1)]
+void VolumetricLightingNoHistory(uint3 id : SV_DispatchThreadID) { IntegrateVolumetricLighting(id); }

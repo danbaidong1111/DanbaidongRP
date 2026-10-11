@@ -143,7 +143,7 @@ void UnlitPassFragment(
 #else
     half fogFactor = input.fogCoord;
 #endif
-    finalColor.rgb = MixFog(finalColor.rgb, fogFactor);
+    finalColor.rgb = _FogEnabled > 0.5 ? ApplyDanbaidongTransparentFog(finalColor.rgb, finalColor.a, input.positionCS, _Blend) : MixFog(finalColor.rgb, fogFactor);
     finalColor.a = OutputAlpha(finalColor.a, IsSurfaceTypeTransparent(_Surface));
 
     outColor = finalColor;

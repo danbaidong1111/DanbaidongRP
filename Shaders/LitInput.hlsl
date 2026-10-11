@@ -31,6 +31,7 @@ half _DetailAlbedoMapScale;
 half _DetailNormalMapScale;
 half _Surface;
 half _ReceiveTracedReflections;
+    half _Blend;
 UNITY_TEXTURE_STREAMING_DEBUG_VARS;
 CBUFFER_END
 

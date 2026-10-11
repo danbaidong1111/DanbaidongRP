@@ -513,6 +513,8 @@ Shader "DanbaidongRP/PBRToon/Eye"
                 // Indirect Specular
                 float3 reflectDirWS = reflect(-viewDirWS, normalWS);
                 float reflectionHierarchyWeight = 0.0; // Max: 1.0
+                EvaluateIndirectSpecular_Planar(indirectLighting, positionWS, normalWS, perceptualRoughness,
+                    specularFGD, GetMeshRenderingLayer(), reflectionHierarchyWeight);
 
                 #if defined(_INDIR_CUBEMAP)
                 EvaluateIndirectSpecular_Cubemap(indirectLighting, TEXTURECUBE_ARGS(_IndirSpecCubemap, sampler_LinearRepeat), 

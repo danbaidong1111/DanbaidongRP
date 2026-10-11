@@ -157,7 +157,7 @@ half4 fragParticleUnlit(VaryingsParticle input) : SV_Target
         finalColor.rgb *= aoFactor.directAmbientOcclusion;
     #endif
 
-    finalColor.rgb = MixFog(finalColor.rgb, inputData.fogCoord);
+    finalColor.rgb = _FogEnabled > 0.5 ? ApplyDanbaidongTransparentFog(finalColor.rgb, finalColor.a, input.clipPos, _Blend) : MixFog(finalColor.rgb, inputData.fogCoord);
     finalColor.a = OutputAlpha(finalColor.a, IsSurfaceTypeTransparent(_Surface));
 
     return finalColor;

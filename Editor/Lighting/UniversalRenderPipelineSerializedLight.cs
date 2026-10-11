@@ -39,6 +39,9 @@ namespace UnityEditor.Rendering.Universal
         public SerializedProperty baseContributionProp { get; }
         public SerializedProperty rimContributionProp { get; }
         public SerializedProperty outlineContributionProp { get; }
+        public SerializedProperty volumetricDimmer { get; }
+        public SerializedProperty volumetricShadowDimmer { get; }
+        public SerializedProperty volumetricLightRadius { get; }
 
         /// <summary>Method that updates the <see cref="SerializedObject"/> of the Light and the Additional Light Data</summary>
         public void Update()
@@ -89,6 +92,9 @@ namespace UnityEditor.Rendering.Universal
             baseContributionProp = serializedAdditionalDataObject.FindProperty("m_BaseContribution");
             rimContributionProp = serializedAdditionalDataObject.FindProperty("m_RimContribution");
             outlineContributionProp = serializedAdditionalDataObject.FindProperty("m_OutlineContribution");
+            volumetricDimmer = serializedAdditionalDataObject.FindProperty("m_VolumetricDimmer");
+            volumetricShadowDimmer = serializedAdditionalDataObject.FindProperty("m_VolumetricShadowDimmer");
+            volumetricLightRadius = serializedAdditionalDataObject.FindProperty("m_VolumetricLightRadius");
 
             settings.ApplyModifiedProperties();
         }

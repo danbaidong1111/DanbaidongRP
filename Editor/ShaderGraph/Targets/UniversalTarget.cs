@@ -949,9 +949,11 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                 pass.keywords.Add(CoreKeywordDescriptors.SurfaceTypeTransparent);
                 pass.keywords.Add(CoreKeywordDescriptors.AlphaPremultiplyOn);
                 pass.keywords.Add(CoreKeywordDescriptors.AlphaModulateOn);
+                pass.defines.Add(CoreKeywordDescriptors.AtmosphericFogMaterialBlend, 1);
             }
             else
             {
+                pass.defines.Add(CoreKeywordDescriptors.AtmosphericFogBlend, (int)target.alphaMode);
                 // setup target control via define
                 if (target.surfaceType == SurfaceType.Transparent)
                 {
@@ -1646,6 +1648,17 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
             { Pragma.Fragment("frag") },
         };
 
+        // Lit graph passes use the same GPU lighting resources as the pipeline's material shaders.
+        public static readonly PragmaCollection ForwardLit = new PragmaCollection
+        {
+            { Pragma.Target(ShaderModel.Target45) },
+            { Pragma.MultiCompileInstancing },
+            { Pragma.MultiCompileFog },
+            { Pragma.InstancingOptions(InstancingOptions.RenderingLayer) },
+            { Pragma.Vertex("vert") },
+            { Pragma.Fragment("frag") },
+        };
+
         public static readonly PragmaCollection _2DDefault = new PragmaCollection
         {
             { Pragma.Target(ShaderModel.Target20) },
@@ -1848,6 +1861,29 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
     #region KeywordDescriptors
     static class CoreKeywordDescriptors
     {
+        public static readonly KeywordDescriptor AtmosphericFogMaterialBlend = new KeywordDescriptor
+        {
+            displayName = "Atmospheric Fog Material Blend",
+            referenceName = "_DBD_FOG_MATERIAL_BLEND",
+            type = KeywordType.Boolean,
+            definition = KeywordDefinition.Predefined
+        };
+
+        public static readonly KeywordDescriptor AtmosphericFogBlend = new KeywordDescriptor
+        {
+            displayName = "Atmospheric Fog Blend",
+            referenceName = "_DBD_FOG_BLEND",
+            type = KeywordType.Enum,
+            definition = KeywordDefinition.Predefined,
+            entries = new[]
+            {
+                new KeywordEntry { displayName = "Alpha", referenceName = "ALPHA" },
+                new KeywordEntry { displayName = "Premultiply", referenceName = "PREMULTIPLY" },
+                new KeywordEntry { displayName = "Additive", referenceName = "ADDITIVE" },
+                new KeywordEntry { displayName = "Multiply", referenceName = "MULTIPLY" }
+            }
+        };
+
         public static readonly KeywordDescriptor StaticLightmap = new KeywordDescriptor()
         {
             displayName = "Static Lightmap",

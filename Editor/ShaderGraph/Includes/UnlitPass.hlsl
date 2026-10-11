@@ -1,5 +1,6 @@
 
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Unlit.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/Editor/ShaderGraph/Includes/AtmosphericFog.hlsl"
 
 void InitializeInputData(Varyings input, out InputData inputData)
 {
@@ -87,6 +88,9 @@ void frag(
         finalColor.rgb *= aoFactor.directAmbientOcclusion;
     #endif
 
+    #if defined(_SURFACE_TYPE_TRANSPARENT)
+    finalColor.rgb = ApplyShaderGraphAtmosphericFog(finalColor.rgb, finalColor.a, unpacked.positionCS);
+    #endif
     outColor = finalColor;
 
 #ifdef _WRITE_RENDERING_LAYERS

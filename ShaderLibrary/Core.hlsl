@@ -220,5 +220,7 @@ struct VertexNormalInputs
 
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/ShaderVariablesFunctions.hlsl"
 #include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Deprecated.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/AtmosphericFog.hlsl"
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/AtmosphericFogTransparent.hlsl"
 
 #endif

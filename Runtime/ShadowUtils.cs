@@ -758,7 +758,23 @@ namespace UnityEngine.Rendering.Universal
             if (lightType == LightType.Directional)
                 return false;
 
-            return lightShadows != LightShadows.None && shadowStrength > 0.0f;
+            if (lightShadows == LightShadows.None)
+                return false;
+            if (shadowStrength > 0.0f)
+                return true;
+
+            var fog = VolumeManager.instance.stack?.GetComponent<AtmosphericFog>();
+            return RequiresVolumetricShadow(lightData.visibleLights[i].light, fog);
+        }
+
+        internal static bool RequiresVolumetricShadow(Light light, AtmosphericFog fog)
+        {
+            if (light == null || light.shadows == LightShadows.None || fog == null || !fog.IsActive()
+                || !fog.volumetric.value || !fog.shadows.value || fog.lightIntensity.value <= 0
+                || (fog.directionalOnly.value && light.type != LightType.Directional))
+                return false;
+            return !light.TryGetComponent<UniversalAdditionalLightData>(out var additional)
+                || (additional.volumetricDimmer > 0 && additional.volumetricShadowDimmer > 0);
         }
 
         internal static int GetPunctualLightShadowSlicesCount(in LightType lightType)

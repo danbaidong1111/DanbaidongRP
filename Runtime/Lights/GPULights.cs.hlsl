@@ -90,6 +90,9 @@ struct DirectionalLightData
     float lightDimmer;
     float diffuseDimmer;
     float specularDimmer;
+    float volumetricDimmer;
+    float volumetricShadowDimmer;
+    float2 volumetricPadding;
 };
 
 // Generated from UnityEngine.Rendering.Universal.Internal.GPULightData
@@ -112,6 +115,10 @@ struct GPULightData
     float rimContribution;
     float outlineContribution;
     float __unused2__;
+    float volumetricDimmer;
+    float volumetricShadowDimmer;
+    float volumetricLightRadius;
+    float volumetricPadding;
 };
 
 // Generated from UnityEngine.Rendering.Universal.Internal.LightVolumeData

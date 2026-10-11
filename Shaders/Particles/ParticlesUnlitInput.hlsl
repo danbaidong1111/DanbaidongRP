@@ -16,6 +16,7 @@ CBUFFER_START(UnityPerMaterial)
     half _DistortionStrengthScaled;
     half _DistortionBlend;
     half _Surface;
+    half _Blend;
 CBUFFER_END
 
 #include_with_pragmas "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/Particles.hlsl"

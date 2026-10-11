@@ -134,7 +134,7 @@ half4 ParticlesLitFragment(VaryingsParticle input) : SV_Target
     SETUP_DEBUG_TEXTURE_DATA_FOR_TEX(inputData, input.texcoord, _BaseMap);
 
     half4 color = UniversalFragmentPBR(inputData, surfaceData);
-    color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    color.rgb = _FogEnabled > 0.5 ? ApplyDanbaidongTransparentFog(color.rgb, color.a, input.clipPos, _Blend) : MixFog(color.rgb, inputData.fogCoord);
     color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent(_Surface));
 
     return color;

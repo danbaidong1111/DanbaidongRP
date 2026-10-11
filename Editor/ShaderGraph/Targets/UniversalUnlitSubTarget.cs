@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Assertions;
 using UnityEditor.ShaderGraph;
+using UnityEditor.ShaderGraph.Internal;
 using UnityEditor.ShaderGraph.Legacy;
 using static UnityEditor.Rendering.Universal.ShaderGraph.SubShaderUtils;
 using static Unity.Rendering.Universal.ShaderUtils;
@@ -89,7 +90,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
             {
                 collector.AddFloatProperty(Property.CastShadows, target.castShadows ? 1.0f : 0.0f);
                 collector.AddFloatProperty(Property.SurfaceType, (float)target.surfaceType);
-                collector.AddFloatProperty(Property.BlendMode, (float)target.alphaMode);
+                collector.AddFloatProperty(Property.BlendMode, (float)target.alphaMode, HLSLDeclaration.UnityPerMaterial);
                 collector.AddFloatProperty(Property.AlphaClip, target.alphaClip ? 1.0f : 0.0f);
                 collector.AddFloatProperty(Property.SrcBlend, 1.0f);    // always set by material inspector
                 collector.AddFloatProperty(Property.DstBlend, 0.0f);    // always set by material inspector

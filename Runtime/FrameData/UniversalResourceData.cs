@@ -406,6 +406,13 @@ namespace UnityEngine.Rendering.Universal
         }
         private TextureHandle _skyReflectionProbe;
 
+        internal BufferHandle skyAmbientRawProbe
+        {
+            get => CheckAndGetBufferHandle(ref _skyAmbientRawProbe);
+            set => CheckAndSetBufferHandle(ref _skyAmbientRawProbe, value);
+        }
+        private BufferHandle _skyAmbientRawProbe;
+
         // Spatio Temporal Blue Noise
         internal TextureHandle blueNoise128R
         {
@@ -468,6 +475,7 @@ namespace UnityEngine.Rendering.Universal
             _stpDebugView = TextureHandle.nullHandle;
             _skyAmbientProbe = BufferHandle.nullHandle;
             _skyReflectionProbe = TextureHandle.nullHandle;
+            _skyAmbientRawProbe = BufferHandle.nullHandle;
             _blueNoise128R = TextureHandle.nullHandle;
             _blueNoise128RG = TextureHandle.nullHandle;
             _blueNoiseUnitVec3Cosine = TextureHandle.nullHandle;

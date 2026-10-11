@@ -118,7 +118,9 @@ namespace UnityEngine.Rendering.Universal
         ColorPyramidPass m_ColorPyramidPass;
         ScreenSpaceDirectionalShadowsPass m_ScreenSpaceDirectionalShadowsPass;
         ScreenSpaceShadowScatterPass m_ScreenSpaceShadowScatterPass;
+        AtmosphericFogPass m_AtmosphericFogPass;
         PlanarReflectionFilteringPass m_PlanarReflectionFilteringPass;
+        VolumetricLightingPass m_VolumetricLightingPass;
         ScreenSpaceReflectionPass m_ScreenSpaceReflectionPass;
         ScreenSpaceAmbientOcclusionPass m_ScreenSpaceAmbientOcclusionPass;
         ReSTIRGlobalIlluminationPass m_ReSTIRGlobalIlluminationPass;
@@ -348,6 +350,9 @@ namespace UnityEngine.Rendering.Universal
 
                 m_ScreenSpaceDirectionalShadowsPass = new ScreenSpaceDirectionalShadowsPass(RenderPassEvent.AfterRenderingShadows, runtimeShaders.screenSpaceDirectionalShadowsCS, runtimeShaders.screenSpaceShadowDenoiserCS);
                 m_ScreenSpaceShadowScatterPass = new ScreenSpaceShadowScatterPass(RenderPassEvent.AfterRenderingShadows, runtimeShaders.screenSpaceShadowScaterPS);
+                m_AtmosphericFogPass = new AtmosphericFogPass(runtimeShaders.atmosphericFogPS);
+                m_VolumetricLightingPass = new VolumetricLightingPass(runtimeShaders.volumetricFogCS, runtimeShaders.volumeVoxelizationCS,
+                    runtimeShaders.volumetricLightingFilteringCS, m_LightCookieManager);
                 m_ScreenSpaceReflectionPass = new ScreenSpaceReflectionPass(RenderPassEvent.BeforeRenderingDeferredLights, runtimeShaders.screenSpaceReflectionsCS);
                 m_ScreenSpaceAmbientOcclusionPass = new ScreenSpaceAmbientOcclusionPass(RenderPassEvent.BeforeRenderingDeferredLights, runtimeShaders.screenSpaceXeGTAOCS, runtimeShaders.screenSpaceAODenoiserCS, runtimeShaders.rayTracingAmbientOcclusion);
                 m_ReSTIRGlobalIlluminationPass = new ReSTIRGlobalIlluminationPass(RenderPassEvent.BeforeRenderingDeferredLights,
@@ -453,6 +458,8 @@ namespace UnityEngine.Rendering.Universal
             m_PostProcessPasses.Dispose();
 
             m_ScreenSpaceShadowScatterPass?.Cleanup();
+            m_AtmosphericFogPass?.Dispose();
+            m_VolumetricLightingPass?.Dispose();
             m_ReSTIRGlobalIlluminationPass?.Dispose();
 
             m_FinalBlitPass?.Dispose();

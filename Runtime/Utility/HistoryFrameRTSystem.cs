@@ -69,6 +69,8 @@ namespace UnityEngine.Rendering.Universal
         ReSTIRGIDenoised,
         /// <summary>ReSTIR GI luminance moments and history length.</summary>
         ReSTIRGIMoments,
+        /// <summary>Phase-independent volumetric lighting feedback.</summary>
+        VolumetricLighting,
         ///// <summary>Path-traced Albedo AOV.</summary>
         //AlbedoAOV,
         ///// <summary>Path-traced Normal AOV.</summary>
@@ -95,6 +97,7 @@ namespace UnityEngine.Rendering.Universal
         private int m_RTActualWidth;
         private int m_RTActualHeight;
 
+        internal VolumetricHistory volumetricHistory;
 
         public Camera camera;
         public int historyFrameCount = 0;
@@ -291,6 +294,8 @@ namespace UnityEngine.Rendering.Universal
 
         internal void Dispose()
         {
+            volumetricHistory?.Dispose();
+            volumetricHistory = null;
             m_BufferedRTHandleSystem?.Dispose();
             m_BufferedRTHandleSystem = null;
         }

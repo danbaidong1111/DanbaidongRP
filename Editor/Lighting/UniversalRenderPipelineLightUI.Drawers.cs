@@ -24,7 +24,8 @@ namespace UnityEditor.Rendering.Universal
             Contribution = 1 << 3,
             Rendering = 1 << 4,
             Shadows = 1 << 5,
-            LightCookie = 1 << 6
+            LightCookie = 1 << 6,
+            Volumetrics = 1 << 7
         }
 
         static PiecewiseLightUnitSlider k_DirectionalLightUnitSlider;
@@ -83,6 +84,12 @@ namespace UnityEditor.Rendering.Universal
             CED.Conditional(
                 (serializedLight, editor) => serializedLight.settings.light.type != LightType.Directional,
                 CED.FoldoutGroup(LightUI.Styles.contributionsHeader, Expandable.Contribution, k_ExpandedState, DrawContributionsContent)),
+            CED.Conditional(
+                (serializedLight, editor) => !serializedLight.settings.isCompletelyBaked &&
+                    (serializedLight.settings.light.type == LightType.Directional ||
+                     serializedLight.settings.light.type == LightType.Point ||
+                     serializedLight.settings.light.type == LightType.Spot),
+                CED.FoldoutGroup(Styles.Volumetrics, Expandable.Volumetrics, k_ExpandedState, DrawVolumetricContent)),
             CED.FoldoutGroup(LightUI.Styles.renderingHeader,
                 Expandable.Rendering,
                 k_ExpandedState,
@@ -385,6 +392,14 @@ namespace UnityEditor.Rendering.Universal
             EditorGUILayout.Slider(serializedLight.baseContributionProp, 0f, 1f, Styles.BaseContribution);
             EditorGUILayout.Slider(serializedLight.rimContributionProp, 0f, 1f, Styles.RimContribution);
             EditorGUILayout.Slider(serializedLight.outlineContributionProp, 0f, 1f, Styles.OutlineContribution);
+        }
+
+        static void DrawVolumetricContent(UniversalRenderPipelineSerializedLight serializedLight, Editor owner)
+        {
+            EditorGUILayout.PropertyField(serializedLight.volumetricDimmer, Styles.VolumetricDimmer);
+            EditorGUILayout.Slider(serializedLight.volumetricShadowDimmer, 0f, 1f, Styles.VolumetricShadowDimmer);
+            if (!serializedLight.settings.lightType.hasMultipleDifferentValues && serializedLight.settings.light.type != LightType.Directional)
+                EditorGUILayout.PropertyField(serializedLight.volumetricLightRadius, Styles.VolumetricLightRadius);
         }
 
         static void DrawRenderingContent(UniversalRenderPipelineSerializedLight serializedLight, Editor owner)

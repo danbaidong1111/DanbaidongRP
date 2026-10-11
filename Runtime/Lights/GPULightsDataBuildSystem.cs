@@ -143,6 +143,8 @@ namespace UnityEngine.Rendering.Universal.Internal
                     directionalLightData.lightDimmer = 1;
                     directionalLightData.diffuseDimmer = 1;
                     directionalLightData.specularDimmer = 1;
+                    directionalLightData.volumetricDimmer = Mathf.Max(0f, additionalLightData.volumetricDimmer);
+                    directionalLightData.volumetricShadowDimmer = Mathf.Clamp01(additionalLightData.volumetricShadowDimmer);
 
 
                     m_DirectionalLightsData[visLightIndex] = directionalLightData;
@@ -181,6 +183,9 @@ namespace UnityEngine.Rendering.Universal.Internal
                     gpuLightsData.baseContribution = additionalLightData.baseContribution;
                     gpuLightsData.rimContribution = additionalLightData.rimContribution;
                     gpuLightsData.outlineContribution = additionalLightData.outlineContribution;
+                    gpuLightsData.volumetricDimmer = Mathf.Max(0f, additionalLightData.volumetricDimmer);
+                    gpuLightsData.volumetricShadowDimmer = Mathf.Clamp01(additionalLightData.volumetricShadowDimmer);
+                    gpuLightsData.volumetricLightRadius = Mathf.Max(0f, additionalLightData.volumetricLightRadius);
 
                     m_GPULightsData[visLightIndex - dirlightCount] = gpuLightsData;
                 }

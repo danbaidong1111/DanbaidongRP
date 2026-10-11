@@ -1,6 +1,7 @@
 ﻿using System;
 using UnityEngine;
 using UnityEditor.ShaderGraph;
+using UnityEditor.ShaderGraph.Internal;
 using UnityEngine.UIElements;
 using UnityEngine.Assertions;
 using UnityEngine.Rendering;
@@ -147,7 +148,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
 
                 // setup properties using the defaults
                 collector.AddFloatProperty(Property.SurfaceType, (float)target.surfaceType);
-                collector.AddFloatProperty(Property.BlendMode, (float)target.alphaMode);
+                collector.AddFloatProperty(Property.BlendMode, (float)target.alphaMode, HLSLDeclaration.UnityPerMaterial);
                 collector.AddFloatProperty(Property.AlphaClip, target.alphaClip ? 1.0f : 0.0f);
                 collector.AddFloatProperty(Property.SrcBlend, 1.0f);    // always set by material inspector, ok to have incorrect values here
                 collector.AddFloatProperty(Property.DstBlend, 0.0f);    // always set by material inspector, ok to have incorrect values here
@@ -213,7 +214,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                     passes = new PassCollection()
                 };
 
-                result.passes.Add(SixWayPasses.ForwardOnly(target,  CoreBlockMasks.Vertex, SixWayBlockMasks.FragmentLit, CorePragmas.Forward, SixWayKeywords.Forward, useColorAbsorption));
+                result.passes.Add(SixWayPasses.ForwardOnly(target,  CoreBlockMasks.Vertex, SixWayBlockMasks.FragmentLit, CorePragmas.ForwardLit, SixWayKeywords.Forward, useColorAbsorption));
 
                 // cull the shadowcaster pass if we know it will never be used
                 if (target.castShadows || target.allowMaterialOverride)

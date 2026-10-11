@@ -514,7 +514,7 @@ Shader "DanbaidongRP/Helpers/CharacterEyelashOutter"
                 resultColor += emissResult;
 
 
-                return float4(resultColor, alpha);
+                return float4(ApplyDanbaidongTransparentFog(resultColor, alpha, i.positionHCS), alpha);
             }
             ENDHLSL
 

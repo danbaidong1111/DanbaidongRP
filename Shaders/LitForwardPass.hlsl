@@ -256,7 +256,7 @@ void LitPassFragment(
     InitializeBakedGIData(input, inputData);
 
     half4 color = UniversalFragmentPBR(inputData, surfaceData);
-    color.rgb = MixFog(color.rgb, inputData.fogCoord);
+    color.rgb = _FogEnabled > 0.5 ? ApplyDanbaidongTransparentFog(color.rgb, color.a, input.positionCS, _Blend) : MixFog(color.rgb, inputData.fogCoord);
     color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent(_Surface));
 
     outColor = color;

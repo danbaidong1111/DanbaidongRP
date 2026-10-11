@@ -213,6 +213,31 @@ namespace UnityEngine.Rendering.Universal
             set { m_ShapeRadius = value; }
         }
 
+        [SerializeField, Min(0f)] float m_VolumetricDimmer = 1f;
+        [SerializeField, Range(0f, 1f)] float m_VolumetricShadowDimmer = 1f;
+        [SerializeField, Min(0f)] float m_VolumetricLightRadius;
+
+        /// <summary>Multiplier for this light's scattering in volumetric fog.</summary>
+        public float volumetricDimmer
+        {
+            get => m_VolumetricDimmer;
+            set => m_VolumetricDimmer = Mathf.Max(0f, value);
+        }
+
+        /// <summary>Opacity of this light's shadows within volumetric fog.</summary>
+        public float volumetricShadowDimmer
+        {
+            get => m_VolumetricShadowDimmer;
+            set => m_VolumetricShadowDimmer = Mathf.Clamp01(value);
+        }
+
+        /// <summary>Emitter radius in metres used to stabilize scattering near punctual lights.</summary>
+        public float volumetricLightRadius
+        {
+            get => m_VolumetricLightRadius;
+            set => m_VolumetricLightRadius = Mathf.Max(0f, value);
+        }
+
         // Light contributions
         /// <summary>
         /// Base Light contribution.

@@ -512,6 +512,8 @@ Shader "DanbaidongRP/PBRToon/Transparent"
                 // Indirect Specular
                 float3 reflectDirWS = reflect(-viewDirWS, normalWS);
                 float reflectionHierarchyWeight = 0.0; // Max: 1.0
+                EvaluateIndirectSpecular_Planar(indirectLighting, positionWS, normalWS, perceptualRoughness,
+                    specularFGD, GetMeshRenderingLayer(), reflectionHierarchyWeight);
 
                 #if defined(_INDIR_CUBEMAP)
                 EvaluateIndirectSpecular_Cubemap(indirectLighting, TEXTURECUBE_ARGS(_IndirSpecCubemap, sampler_LinearRepeat), 
@@ -530,7 +532,7 @@ Shader "DanbaidongRP/PBRToon/Transparent"
                 resultColor += emissResult;
 
 
-                return float4(resultColor, _AlphaBackface);
+                return float4(ApplyDanbaidongTransparentFog(resultColor, _AlphaBackface, i.positionHCS), _AlphaBackface);
             }
             ENDHLSL
 
@@ -936,6 +938,8 @@ Shader "DanbaidongRP/PBRToon/Transparent"
                 // Indirect Specular
                 float3 reflectDirWS = reflect(-viewDirWS, normalWS);
                 float reflectionHierarchyWeight = 0.0; // Max: 1.0
+                EvaluateIndirectSpecular_Planar(indirectLighting, positionWS, normalWS, perceptualRoughness,
+                    specularFGD, GetMeshRenderingLayer(), reflectionHierarchyWeight);
 
                 #if defined(_INDIR_CUBEMAP)
                 EvaluateIndirectSpecular_Cubemap(indirectLighting, TEXTURECUBE_ARGS(_IndirSpecCubemap, sampler_LinearRepeat), 
@@ -954,7 +958,7 @@ Shader "DanbaidongRP/PBRToon/Transparent"
                 resultColor += emissResult;
 
 
-                return float4(resultColor, alpha);
+                return float4(ApplyDanbaidongTransparentFog(resultColor, alpha, i.positionHCS), alpha);
             }
             ENDHLSL
 

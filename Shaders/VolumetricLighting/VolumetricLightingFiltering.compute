@@ -1,0 +1,45 @@
+#pragma kernel FilterFog
+#pragma target 5.0
+#include "Packages/com.unity.render-pipelines.danbaidong/ShaderLibrary/VolumetricLightingCommon.hlsl"
+Texture3D<float4> _FogFilterRead;
+RWTexture3D<float4> _FogFilterWrite;
+
+#define FILTER_WIDTH 10
+#define FILTER_SAMPLES (FILTER_WIDTH * FILTER_WIDTH)
+groupshared float gs_R[FILTER_SAMPLES];
+groupshared float gs_G[FILTER_SAMPLES];
+groupshared float gs_B[FILTER_SAMPLES];
+groupshared float gs_A[FILTER_SAMPLES];
+
+[numthreads(8,8,1)]
+void FilterFog(uint3 id : SV_DispatchThreadID, uint3 group : SV_GroupID,
+    uint3 thread : SV_GroupThreadID, uint index : SV_GroupIndex)
+{
+    // Share the 10x10 footprint of each 8x8 tile, including its one-cell border.
+    for (uint cacheIndex = index; cacheIndex < FILTER_SAMPLES; cacheIndex += 64)
+    {
+        int2 p = int2(group.xy * 8) + int2(cacheIndex % FILTER_WIDTH, cacheIndex / FILTER_WIDTH) - 1;
+        p = clamp(p, 0, int2(_FogGrid.xy) - 1);
+        float4 value = _FogFilterRead[FogStorageIndex(uint3(p, min(id.z, (uint)_FogGrid.z - 1)))];
+        gs_R[cacheIndex] = value.r;
+        gs_G[cacheIndex] = value.g;
+        gs_B[cacheIndex] = value.b;
+        gs_A[cacheIndex] = value.a;
+    }
+    // Edge threads must participate before discarding pixels outside the viewport.
+    GroupMemoryBarrierWithGroupSync();
+    if (any(id >= (uint3)_FogGrid.xyz)) return;
+    float4 sum = 0;
+    float total = 0;
+    [unroll]
+    for (int y = -1; y <= 1; ++y)
+    [unroll]
+    for (int x = -1; x <= 1; ++x)
+    {
+        uint cacheIndex = (thread.y + y + 1) * FILTER_WIDTH + thread.x + x + 1;
+        float weight = exp(-(x*x + y*y));
+        sum += float4(gs_R[cacheIndex], gs_G[cacheIndex], gs_B[cacheIndex], gs_A[cacheIndex]) * weight;
+        total += weight;
+    }
+    _FogFilterWrite[FogStorageIndex(id)] = sum / total;
+}

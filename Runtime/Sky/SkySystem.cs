@@ -40,6 +40,7 @@ namespace UnityEngine.Rendering.Universal
 
         RTHandle m_BlackCubmapRT;
         GraphicsBuffer m_BlackAmbientProbeBuffer;
+        GraphicsBuffer m_BlackAmbientRawProbeBuffer;
 
         // SkyUpdate
         private SkySettings m_SkySettings;
@@ -284,6 +285,24 @@ namespace UnityEngine.Rendering.Universal
             }
 
             return m_BlackAmbientProbeBuffer;
+        }
+
+        // Nine polynomial coefficients per colour channel, including the clamped-cosine band factors.
+        internal GraphicsBuffer GetAmbientRawProbeBuffer()
+        {
+            if (IsValid() && m_AmbientProbeResult != null && m_AmbientProbeResult.IsValid())
+                return m_AmbientProbeResult;
+
+            if (m_BlackAmbientRawProbeBuffer == null || !m_BlackAmbientRawProbeBuffer.IsValid())
+            {
+                m_BlackAmbientRawProbeBuffer?.Release();
+                m_BlackAmbientRawProbeBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Structured, 27, sizeof(float))
+                {
+                    name = "BlackAmbientRawProbe"
+                };
+                m_BlackAmbientRawProbeBuffer.SetData(new float[27]);
+            }
+            return m_BlackAmbientRawProbeBuffer;
         }
 
         private class RenderSkyToCubemapPassData
@@ -604,6 +623,7 @@ namespace UnityEngine.Rendering.Universal
             UniversalResourceData resourceData = frameData.Get<UniversalResourceData>();
             resourceData.skyAmbientProbe = renderGraph.ImportBuffer(GetDiffuseAmbientProbeBuffer(), bufferName: "skyAmbientProbe");
             resourceData.skyReflectionProbe = renderGraph.ImportTexture(GetReflectionTexture());
+            resourceData.skyAmbientRawProbe = renderGraph.ImportBuffer(GetAmbientRawProbeBuffer(), bufferName: "skyAmbientRawProbe");
         }
 
         /// <summary>
@@ -655,6 +675,8 @@ namespace UnityEngine.Rendering.Universal
 
             if (m_BlackAmbientProbeBuffer != null)
                 m_BlackAmbientProbeBuffer.Release();
+            if (m_BlackAmbientRawProbeBuffer != null)
+                m_BlackAmbientRawProbeBuffer.Release();
             if (m_AmbientProbeResult != null)
                 m_AmbientProbeResult.Release();
             if (m_DiffuseAmbientProbeBuffer != null)

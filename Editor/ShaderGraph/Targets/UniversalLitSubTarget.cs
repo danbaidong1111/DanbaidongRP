@@ -3,6 +3,7 @@ using System.Linq;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor.ShaderGraph;
+using UnityEditor.ShaderGraph.Internal;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 using UnityEditor.ShaderGraph.Legacy;
@@ -175,7 +176,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
 
                 // setup properties using the defaults
                 collector.AddFloatProperty(Property.SurfaceType, (float)target.surfaceType);
-                collector.AddFloatProperty(Property.BlendMode, (float)target.alphaMode);
+                collector.AddFloatProperty(Property.BlendMode, (float)target.alphaMode, HLSLDeclaration.UnityPerMaterial);
                 collector.AddFloatProperty(Property.AlphaClip, target.alphaClip ? 1.0f : 0.0f);
                 collector.AddFloatProperty(Property.BlendModePreserveSpecular, blendModePreserveSpecular ? 1.0f : 0.0f);
                 collector.AddFloatProperty(Property.SrcBlend, 1.0f);    // always set by material inspector, ok to have incorrect values here
@@ -342,9 +343,9 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
                 };
 
                 if (complexLit)
-                    result.passes.Add(LitPasses.ForwardOnly(target, workflowMode, complexLit, blendModePreserveSpecular, CoreBlockMasks.Vertex, LitBlockMasks.FragmentComplexLit, CorePragmas.Forward, LitKeywords.Forward));
+                    result.passes.Add(LitPasses.ForwardOnly(target, workflowMode, complexLit, blendModePreserveSpecular, CoreBlockMasks.Vertex, LitBlockMasks.FragmentComplexLit, CorePragmas.ForwardLit, LitKeywords.Forward));
                 else
-                    result.passes.Add(LitPasses.Forward(target, workflowMode, blendModePreserveSpecular, CorePragmas.Forward, LitKeywords.Forward));
+                    result.passes.Add(LitPasses.Forward(target, workflowMode, blendModePreserveSpecular, CorePragmas.ForwardLit, LitKeywords.Forward));
 
                 // ForwardOnly ComplexLit fills GBuffer too for potential custom usage of the GBuffer.
                 result.passes.Add(LitPasses.GBuffer(target, workflowMode, blendModePreserveSpecular));
@@ -427,7 +428,7 @@ namespace UnityEditor.Rendering.Universal.ShaderGraph
 
                     // Conditional State
                     renderStates = CoreRenderStates.UberSwitchedRenderState(target, blendModePreserveSpecular),
-                    pragmas = pragmas ?? CorePragmas.Forward,     // NOTE: SM 2.0 only GL
+                    pragmas = pragmas ?? CorePragmas.ForwardLit,
                     defines = new DefineCollection() { CoreDefines.UseFragmentFog },
                     keywords = new KeywordCollection() { keywords },
                     includes = LitIncludes.Forward,
